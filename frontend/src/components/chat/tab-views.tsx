@@ -672,9 +672,21 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<'chat' | 'participants'>('chat');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
 
   return (
-    <div className="relative flex h-full flex-col bg-white text-ink">
+    <div className={cn(
+      "relative flex flex-col bg-white text-ink transition-all duration-500",
+      isFullscreen ? "fixed inset-0 z-[100] h-screen w-screen" : "h-full w-full"
+    )}>
       {/* Header */}
       <div className="flex h-16 items-center justify-between px-6 border-b border-black/5 relative z-20 bg-white/80 backdrop-blur-md">
         <div className="flex items-center gap-4">
@@ -711,7 +723,7 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
         {/* Main Content Area */}
         <div className="flex flex-1 flex-col p-6 min-w-0 bg-slate-50/30">
           {/* Main Participant Grid */}
-          <div className="flex-1 relative rounded-[32px] overflow-hidden bg-purple-soft/50 border border-purple/10 shadow-xl">
+          <div className="flex-1 relative rounded-[32px] overflow-hidden bg-purple-soft/50 border-4 border-purple shadow-xl shadow-purple/10">
             <img
               src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=1200"
               className="w-full h-full object-cover"
@@ -759,14 +771,14 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
         {/* Right Sidebar - Chat */}
         {isChatOpen && (
           <div className="w-80 border-l border-black/5 flex flex-col bg-white animate-in slide-in-from-right duration-300">
-            <div className="p-4 border-b border-black/5 flex items-center justify-between">
+            <div className="p-4 border-b border-purple/20 flex items-center justify-between">
               <h3 className="font-bold text-sm text-ink">Chat</h3>
               <button onClick={() => setIsChatOpen(false)} className="p-1.5 hover:bg-black/5 rounded-lg text-ink-soft">
                 <X className="size-4" />
               </button>
             </div>
 
-            <div className="p-4 border-b border-black/5">
+            <div className="p-4 border-b border-purple/20">
               <div className="flex bg-purple-soft/50 rounded-xl p-1">
                 <button
                   onClick={() => setActiveTab('chat')}
@@ -842,7 +854,7 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
               )}
             </div>
 
-            <div className="p-4 mt-auto border-t border-black/5">
+            <div className="p-4 mt-auto border-t border-purple/20">
               {activeTab === 'chat' && (
                 <div className="relative">
                   <Paperclip className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-ink-soft cursor-pointer hover:text-purple" />
@@ -886,8 +898,8 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
             <MonitorUp className="size-5" />
           </button>
 
-          <div className="w-10 h-10 flex items-center justify-center bg-black rounded-full shadow-lg cursor-pointer hover:scale-110 transition-transform mx-2">
-            <Phone className="size-5 text-white rotate-[135deg]" onClick={onBack} />
+          <div className="size-14 flex items-center justify-center bg-red-500 rounded-full shadow-lg shadow-red-500/40 cursor-pointer hover:scale-110 active:scale-95 transition-all mx-2 group">
+            <Phone className="size-6 text-white rotate-[135deg]" onClick={onBack} />
           </div>
 
           <button className="size-12 rounded-full bg-purple/10 text-purple flex items-center justify-center hover:bg-purple/20 transition-all">
@@ -902,7 +914,13 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
           >
             <Smile className="size-5" />
           </button>
-          <button className="size-12 rounded-full bg-purple/10 text-purple flex items-center justify-center hover:bg-purple/20 transition-all">
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className={cn(
+              "size-12 rounded-full flex items-center justify-center transition-all",
+              isFullscreen ? "bg-purple text-white shadow-bubble shadow-purple/20" : "bg-purple/10 text-purple hover:bg-purple/20"
+            )}
+          >
             <Maximize2 className="size-5" />
           </button>
         </div>
