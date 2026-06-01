@@ -1428,6 +1428,45 @@ export const uploadAvatar = async (file: File) => {
     return handleResponse(res);
 };
 
+export const uploadBackground = async (file: File) => {
+    const token = localStorage.getItem('access_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${BASE_URL}/profile/background`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    return handleResponse(res);
+};
+
+// ─── Profile: Management ───────────────────────────────────────────────────────
+
+export const getMyProfile = async () => {
+    const res = await fetch(`${BASE_URL}/profile/me`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const updateProfile = async (data: any) => {
+    const res = await fetch(`${BASE_URL}/profile/me`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
+export const setupProfile = async (data: any) => {
+    const res = await fetch(`${BASE_URL}/profile/setup`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
 // ─── Workspace: Shared With Me ────────────────────────────────────────────────
 
 export const getSharedWithMeFiles = async () => {

@@ -84,8 +84,8 @@ function Login() {
                 className="w-full max-w-md"
             >
                 <div className="bg-card/80 backdrop-blur-xl p-8 rounded-[2.5rem] border border-border shadow-glow text-center">
-                    <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-bubble">
-                        <Sparkles className="h-7 w-7" />
+                    <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-bubble border border-border">
+                        <img src="/favicon.svg" alt="Bubblespace" className="h-8 w-8 object-contain" />
                     </div>
                     <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
                         Welcome back
@@ -163,7 +163,7 @@ function Login() {
                                 fill="#FBBC05"
                             />
                             <path
-                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                                 fill="#EA4335"
                             />
                         </svg>

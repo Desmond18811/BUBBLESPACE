@@ -28,6 +28,7 @@ import {
   ScreenShare,
   Smile,
   Volume2,
+  Briefcase,
   ChevronLeft,
   ArrowLeft,
   Paperclip,
@@ -38,10 +39,14 @@ import {
   MicOff,
   MonitorUp,
   ChevronRight,
+  Moon,
+  Sun,
   Settings,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { updateProfile, uploadAvatar, uploadBackground } from '@/lib/api'
+import { toast } from 'sonner'
 import {
   friends,
   archivedChats,
@@ -436,7 +441,13 @@ export function ArchiveView() {
 
 /* ---------------- Profile ---------------- */
 
-export function ProfileView({ onEdit }: { onEdit: () => void }) {
+export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void }) {
+  const stats = [
+    { label: 'Chats', value: user?.postsCount || 0 }, // Assuming postsCount or similar for stats
+    { label: 'Following', value: user?.followingCount || 0 },
+    { label: 'Files', value: user?.sharedResources?.length || 0 },
+  ]
+
   return (
     <div className="flex h-full flex-col">
       <ViewHeader title="Profile" subtitle="Manage your account" />
@@ -444,23 +455,23 @@ export function ProfileView({ onEdit }: { onEdit: () => void }) {
         <div className="mx-auto max-w-2xl">
           <div className="flex flex-col items-center rounded-3xl bg-purple-soft/50 p-6 text-center sm:p-8">
             <Image
-              src={profile.avatar || '/placeholder.svg'}
-              alt={profile.name}
+              src={user?.avatar || '/placeholder.svg'}
+              alt={user?.full_name || 'User'}
               width={112}
               height={112}
               className="size-28 rounded-3xl object-cover"
             />
             <h2 className="mt-4 text-[22px] font-bold text-ink">
-              {profile.name}
+              {user?.full_name}
             </h2>
-            <p className="text-[14px] text-purple">{profile.handle}</p>
-            <p className="mt-1 text-[14px] text-ink-soft">{profile.role}</p>
+            <p className="text-[14px] text-purple">@{user?.username}</p>
+            <p className="mt-1 text-[14px] text-ink-soft">{user?.org_role || user?.role}</p>
             <p className="mt-3 max-w-md text-[14px] leading-relaxed text-ink-soft">
-              {profile.bio}
+              {user?.bio || 'No bio yet.'}
             </p>
 
             <div className="mt-5 flex w-full max-w-sm items-center justify-around rounded-2xl bg-white py-4">
-              {profile.stats.map((s) => (
+              {stats.map((s) => (
                 <div key={s.label} className="text-center">
                   <p className="text-[20px] font-bold text-ink">{s.value}</p>
                   <p className="text-[12px] text-ink-soft">{s.label}</p>
@@ -484,16 +495,22 @@ export function ProfileView({ onEdit }: { onEdit: () => void }) {
             </p>
             <div className="flex items-center gap-3">
               <Mail className="size-[20px] text-purple" />
-              <span className="text-[14px] text-ink">{profile.email}</span>
+              <span className="text-[14px] text-ink">{user?.email || 'N/A'}</span>
             </div>
             <div className="flex items-center gap-3">
               <Phone className="size-[20px] text-purple" />
-              <span className="text-[14px] text-ink">{profile.phone}</span>
+              <span className="text-[14px] text-ink">{user?.phone_number || 'N/A'}</span>
             </div>
             <div className="flex items-center gap-3">
               <MapPin className="size-[20px] text-purple" />
-              <span className="text-[14px] text-ink">{profile.location}</span>
+              <span className="text-[14px] text-ink">{user?.location?.city ? `${user.location.city}, ${user.location.country}` : 'N/A'}</span>
             </div>
+            {user?.organization && (
+              <div className="flex items-center gap-3">
+                <Briefcase className="size-[20px] text-purple" />
+                <span className="text-[14px] text-ink">{user.organization} ({user.org_role})</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -535,33 +552,107 @@ function Field({
 }
 
 export function EditView({
+  user,
+  setUser,
   bgType,
   setBgType,
 }: {
+  user: any
+  setUser: (u: any) => void
   bgType: string
   setBgType: (t: string) => void
 }) {
+  const [loading, setLoading] = useState(false)
+  const [formData, setFormData] = useState({
+    full_name: user?.full_name || '',
+    username: user?.username || '',
+    org_role: user?.org_role || '',
+    org_industry: user?.org_industry || '',
+    org_size: user?.org_size || '',
+    bio: user?.bio || '',
+    email: user?.email || '',
+    phone_number: user?.phone_number || '',
+    organization: user?.organization || '',
+    blog: user?.blog || '',
+    status_message: user?.status_message || '',
+    city: user?.location?.city || '',
+    country: user?.location?.country || '',
+  })
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const payload = {
+        ...formData,
+        location: {
+          city: formData.city,
+          country: formData.country
+        }
+      }
+      const res = await updateProfile(payload)
+      setUser(res.data)
+      toast.success('Profile updated successfully!')
+    } catch (err: any) {
+      toast.error(err.message || 'Update failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const res = await uploadAvatar(file)
+      setUser(res.data.user)
+      toast.success('Avatar updated!')
+    } catch (err: any) {
+      toast.error('Avatar upload failed')
+    }
+  }
+
+  const handleBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const res = await uploadBackground(file)
+      setUser(res.data.user)
+      setBgType('custom')
+      toast.success('Custom background set!')
+    } catch (err: any) {
+      toast.error('Background upload failed')
+    }
+  }
+
+  const handleBgSelect = async (type: string) => {
+    setBgType(type)
+    try {
+      const res = await updateProfile({ app_background: type })
+      setUser(res.data)
+    } catch (err) {
+      toast.error('Failed to update background preference')
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <ViewHeader title="Edit profile" subtitle="Update your information" />
       <div className="flex-1 overflow-y-auto p-6 sm:p-8">
-        <form className="mx-auto max-w-xl space-y-5">
+        <form onSubmit={handleUpdate} className="mx-auto max-w-xl space-y-5">
           <div className="flex items-center gap-4">
             <div className="relative">
               <Image
-                src={profile.avatar || '/placeholder.svg'}
-                alt={profile.name}
+                src={user?.avatar || '/placeholder.svg'}
+                alt={user?.full_name || 'User'}
                 width={80}
                 height={80}
                 className="size-20 rounded-3xl object-cover"
               />
-              <button
-                type="button"
-                aria-label="Change photo"
-                className="absolute -bottom-1 -right-1 flex size-8 items-center justify-center rounded-full bg-purple text-white"
-              >
+              <label className="absolute -bottom-1 -right-1 flex size-8 cursor-pointer items-center justify-center rounded-full bg-purple text-white">
                 <Camera className="size-4" />
-              </button>
+                <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
+              </label>
             </div>
             <div>
               <p className="text-[15px] font-semibold text-ink">
@@ -573,21 +664,158 @@ export function EditView({
             </div>
           </div>
 
-          <Field label="Full name" defaultValue={profile.name} />
-          <Field label="Username" defaultValue={profile.handle} />
-          <Field label="Role" defaultValue={profile.role} />
-          <Field label="Bio" defaultValue={profile.bio} textarea />
-          <Field label="Email" defaultValue={profile.email} />
-          <Field label="Phone" defaultValue={profile.phone} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Full name</span>
+              <input
+                type="text"
+                value={formData.full_name}
+                onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Username</span>
+              <input
+                type="text"
+                value={formData.username}
+                onChange={e => setFormData({ ...formData, username: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Organization</span>
+              <input
+                type="text"
+                value={formData.organization}
+                onChange={e => setFormData({ ...formData, organization: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Role</span>
+              <input
+                type="text"
+                value={formData.org_role}
+                onChange={e => setFormData({ ...formData, org_role: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Email</span>
+              <input
+                disabled
+                type="email"
+                value={formData.email}
+                className="w-full rounded-2xl bg-purple-soft/50 px-4 py-3 text-[14px] text-ink-soft cursor-not-allowed outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Phone</span>
+              <input
+                type="text"
+                value={formData.phone_number}
+                onChange={e => setFormData({ ...formData, phone_number: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+              />
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Bio</span>
+            <textarea
+              rows={3}
+              value={formData.bio}
+              onChange={e => setFormData({ ...formData, bio: e.target.value })}
+              className="w-full resize-none rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+              placeholder="Tell us about yourself..."
+            />
+          </label>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Industry</span>
+              <input
+                type="text"
+                value={formData.org_industry}
+                onChange={e => setFormData({ ...formData, org_industry: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+                placeholder="e.g. Technology"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Company Size</span>
+              <select
+                value={formData.org_size}
+                onChange={e => setFormData({ ...formData, org_size: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40 appearance-none"
+              >
+                <option value="">Select size</option>
+                {['solo', '2-10', '11-50', '51-200', '201-500', '500+'].map(size => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">City</span>
+              <input
+                type="text"
+                value={formData.city}
+                onChange={e => setFormData({ ...formData, city: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Country</span>
+              <input
+                type="text"
+                value={formData.country}
+                onChange={e => setFormData({ ...formData, country: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Website/Blog</span>
+              <input
+                type="url"
+                value={formData.blog}
+                onChange={e => setFormData({ ...formData, blog: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+                placeholder="https://..."
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Status Message</span>
+              <input
+                type="text"
+                value={formData.status_message}
+                onChange={e => setFormData({ ...formData, status_message: e.target.value })}
+                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+                placeholder="What's on your mind?"
+              />
+            </label>
+          </div>
 
           <div className="pt-2">
             <span className="mb-3 block text-[13px] font-medium text-ink-soft">
               App Background
             </span>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <button
                 type="button"
-                onClick={() => setBgType('bubbles')}
+                onClick={() => handleBgSelect('bubbles')}
                 className={cn(
                   'flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
                   bgType === 'bubbles'
@@ -598,15 +826,12 @@ export function EditView({
                 <div className="size-10 rounded-full bg-purple/10 flex items-center justify-center">
                   <Sparkles className="size-5 text-purple" />
                 </div>
-                <div className="text-center">
-                  <p className="text-[14px] font-bold text-ink">Modern</p>
-                  <p className="text-[11px] text-ink-soft italic">Liquid Bubbles</p>
-                </div>
+                <span className="text-[12px] font-bold text-ink">Bubbles</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setBgType('light')}
+                onClick={() => handleBgSelect('light')}
                 className={cn(
                   'flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
                   bgType === 'light'
@@ -614,18 +839,15 @@ export function EditView({
                     : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
                 )}
               >
-                <div className="relative size-12 overflow-hidden rounded-xl bg-white ring-1 ring-black/5">
-                  <img src="/themes/light.png" alt="Light" className="size-full object-cover" />
+                <div className="size-12 overflow-hidden rounded-lg shadow-sm border border-black/5">
+                  <Image src="/themes/light.png" alt="Light" className="w-full h-full object-cover" />
                 </div>
-                <div className="text-center">
-                  <p className="text-[14px] font-bold text-ink">Light</p>
-                  <p className="text-[11px] text-ink-soft">Day Mode</p>
-                </div>
+                <span className="text-[12px] font-bold text-ink">Light</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setBgType('dark')}
+                onClick={() => handleBgSelect('dark')}
                 className={cn(
                   'flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
                   bgType === 'dark'
@@ -633,30 +855,41 @@ export function EditView({
                     : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
                 )}
               >
-                <div className="relative size-12 overflow-hidden rounded-xl bg-app-dark ring-1 ring-white/10">
-                  <img src="/themes/dark.png" alt="Dark" className="size-full object-cover" />
+                <div className="size-12 overflow-hidden rounded-lg shadow-sm border border-black/5">
+                  <Image src="/themes/dark.png" alt="Dark" className="w-full h-full object-cover" />
                 </div>
-                <div className="text-center">
-                  <p className="text-[14px] font-bold text-ink">Dark</p>
-                  <p className="text-[11px] text-ink-soft text-purple-light">Night Mode</p>
-                </div>
+                <span className="text-[12px] font-bold text-ink">Dark</span>
               </button>
+
+              <div className="relative group/custom">
+                <button
+                  type="button"
+                  className={cn(
+                    'w-full flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
+                    bgType === 'custom'
+                      ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
+                      : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+                  )}
+                >
+                  <label className="cursor-pointer flex flex-col items-center gap-3 w-full">
+                    <div className="size-10 rounded-full bg-purple flex items-center justify-center text-white">
+                      <Camera className="size-5" />
+                    </div>
+                    <span className="text-[12px] font-bold text-ink">Custom</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={handleBackgroundUpload} />
+                  </label>
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 pt-5">
+          <div className="pt-4">
             <button
-              type="button"
-              className="flex items-center gap-2 rounded-xl bg-purple px-5 py-2.5 text-[14px] font-medium text-white transition-opacity hover:opacity-90"
+              type="submit"
+              disabled={loading}
+              className="w-full h-14 bg-purple text-white font-bold rounded-2xl shadow-lg shadow-purple/20 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
             >
-              <Check className="size-4" />
-              Save changes
-            </button>
-            <button
-              type="button"
-              className="rounded-xl bg-purple-soft px-5 py-2.5 text-[14px] font-medium text-ink transition-colors hover:bg-purple-light"
-            >
-              Cancel
+              {loading ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>

@@ -6,7 +6,7 @@ import { ChatList } from '@/components/chat/chat-list'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { cn } from '@/lib/utils'
-import { Plus } from 'lucide-react'
+import { Plus, Loader2 } from 'lucide-react'
 import { conversations } from '@/lib/chat-data'
 import {
   FriendsView,
@@ -16,6 +16,8 @@ import {
   CallsView,
   MeetingView,
 } from '@/components/chat/tab-views'
+import { SetupProfileView } from '@/components/chat/setup-profile-view'
+import { getMyProfile } from '@/lib/api'
 
 export function Dashboard({
   bgType,
@@ -29,7 +31,31 @@ export function Dashboard({
   const [activeChatId, setActiveChatId] = useState('design')
   const navigate = useNavigate();
   const [showInfo, setShowInfo] = useState(true)
+  const [user, setUser] = useState<any>(null)
+  const [loadingProfile, setLoadingProfile] = useState(true)
   const conversation = conversations[activeChatId]
+
+  React.useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await getMyProfile()
+        setUser(res.data)
+        if (res.data.app_background && res.data.app_background !== 'custom') {
+          setBgType(res.data.app_background)
+        }
+      } catch (err: any) {
+        console.error('Failed to fetch profile:', err)
+        if (err.message?.includes('401')) {
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("refresh_token");
+          navigate({ to: "/login" });
+        }
+      } finally {
+        setLoadingProfile(false)
+      }
+    }
+    fetchProfile()
+  }, [setBgType])
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -51,10 +77,29 @@ export function Dashboard({
     navigate({ to: "/login" });
   };
 
+  if (loadingProfile) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-canvas">
+        <Loader2 className="h-10 w-10 animate-spin text-purple" />
+      </div>
+    )
+  }
+
+  if (user && !user.onboardingComplete) {
+    return <SetupProfileView user={user} onComplete={(updated) => setUser(updated)} />
+  }
+
   return (
     <div className="relative z-10 flex h-[min(960px,92vh)] w-full max-w-[1760px] items-stretch gap-5 2xl:h-[min(1080px,88vh)] font-poppins">
       {/* App container */}
-      <div className="flex flex-1 gap-1 rounded-[36px] bg-app-dark p-3 shadow-2xl transition-all duration-500 overflow-hidden">
+      <div className="flex flex-1 gap-1 rounded-[36px] bg-app-dark p-3 shadow-2xl transition-all duration-500 overflow-hidden"
+        style={{
+          backgroundImage: user?.app_background === 'custom' && user?.custom_background
+            ? `url(${user.custom_background})`
+            : 'none',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}>
         <NavSidebar activeTab={activeTab} onSelect={setActiveTab} onLogout={handleLogout} />
 
         <div className="flex flex-1 overflow-hidden rounded-[26px] bg-white relative">
@@ -76,8 +121,8 @@ export function Dashboard({
               <div className="h-full">
                 {activeTab === 'friends' && <FriendsView />}
                 {activeTab === 'archive' && <ArchiveView />}
-                {activeTab === 'profile' && <ProfileView onEdit={() => setActiveTab('edit')} />}
-                {activeTab === 'edit' && <EditView bgType={bgType} setBgType={setBgType} />}
+                {activeTab === 'profile' && <ProfileView user={user} onEdit={() => setActiveTab('edit')} />}
+                {activeTab === 'edit' && <EditView user={user} setUser={setUser} bgType={bgType} setBgType={setBgType} />}
                 {activeTab === 'calls' && (
                   isInMeeting ? (
                     <MeetingView onBack={() => setIsInMeeting(false)} />

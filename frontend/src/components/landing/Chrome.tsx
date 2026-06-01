@@ -1,5 +1,6 @@
 import { motion, useScroll, useTransform } from "motion/react";
 import { Link } from "@tanstack/react-router";
+import { BubblespaceLogo } from "../logo";
 
 export function Nav() {
     const { scrollY } = useScroll();
@@ -17,10 +18,7 @@ export function Nav() {
         >
             <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
                 <a href="#" className="flex items-center gap-2">
-                    <span className="relative inline-block h-8 w-8">
-                        <span className="absolute inset-0 rounded-full bg-gradient-primary shadow-bubble" />
-                        <span className="absolute left-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-primary-foreground/70" />
-                    </span>
+                    <BubblespaceLogo className="size-8" />
                     <span className="font-display text-lg font-bold tracking-tight text-foreground">
                         Bubblespace
                     </span>
@@ -47,9 +45,7 @@ export function Footer() {
         <footer className="border-t border-border bg-card/40 py-12">
             <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-6 sm:flex-row">
                 <div className="flex items-center gap-2">
-                    <span className="relative inline-block h-7 w-7">
-                        <span className="absolute inset-0 rounded-full bg-gradient-primary" />
-                    </span>
+                    <BubblespaceLogo className="size-7" />
                     <span className="font-display font-bold text-foreground">Bubblespace</span>
                 </div>
                 <nav className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
