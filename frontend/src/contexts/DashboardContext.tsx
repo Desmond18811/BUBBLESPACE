@@ -2,11 +2,19 @@ import React, { createContext, useContext } from 'react'
 
 interface DashboardContextType {
     user: any
-    onMessage: (targetUser: any) => void
+    onMessage: (targetUser: any, showWorkCard?: boolean) => void
     isNarrow: boolean
     setUser: (u: any) => void
     bgType: string
     setBgType: (t: string) => void
+    showInfo: boolean
+    setShowInfo: React.Dispatch<React.SetStateAction<boolean>> | ((val: boolean) => void)
+    activeChatId: string | null
+    setActiveChatId: (id: string | null) => void
+    activeChat: any
+    setActiveChat: (chat: any) => void
+    messages: any[]
+    setMessages: React.Dispatch<React.SetStateAction<any[]>>
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined)

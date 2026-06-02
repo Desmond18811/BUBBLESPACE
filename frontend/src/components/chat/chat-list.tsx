@@ -139,8 +139,8 @@ export function ChatList({
   const handleContactClick = async (contact: any) => {
     try {
       const res = await accessOrCreateChat(contact._id || contact.id)
-      const chat = res.data?.conversation || res.data || res
-      onSelect(chat._id || chat.id, chat)
+      const chat = res?.conversation || res?.data?.conversation || res?.data || res
+      onSelect(chat.id || chat._id, chat)
       refreshChats()
     } catch (err) {
       toast.error('Failed to start chat')

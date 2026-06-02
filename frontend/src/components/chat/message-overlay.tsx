@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Send, Paperclip, Smile, Phone, Video, MoreVertical, Check, CheckCheck, Edit2, Trash2, Copy, Pin, MoreHorizontal } from 'lucide-react'
+import { X, Send, Paperclip, Smile, Phone, Video, Check, CheckCheck, Edit2, Trash2, Copy, MoreHorizontal, Briefcase, AtSign, Info, User, MapPin, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import {
@@ -21,7 +21,7 @@ interface MessageOverlayProps {
     user: any            // the logged-in user
     targetUser: any      // the user we are messaging
     onClose: () => void
-    workCardInfo?: boolean  // show work profile card on right side
+    workCardInfo?: boolean  // show work profile card as floating glass card
 }
 
 interface Msg {
@@ -36,6 +36,102 @@ interface Msg {
     readBy?: string[]
 }
 
+// ── Liquid Glass Contact Card (floats outside the chat container) ──────────
+function LiquidGlassContactCard({ user, onClose, onExpand }: { user: any; onClose: () => void; onExpand?: () => void }) {
+    const infoRows = [
+        { icon: Briefcase, label: 'Organization', value: user.organization || user.company || 'No organization' },
+        { icon: AtSign, label: 'Username', value: user.username ? `@${user.username}` : '@unknown' },
+        { icon: User, label: 'Role', value: user.org_role || user.role || 'Member' },
+        ...(user.location?.city ? [{ icon: MapPin, label: 'Location', value: `${user.location.city}, ${user.location.country || ''}` }] : []),
+        ...(user.bio ? [{ icon: Info, label: 'Bio', value: user.bio }] : []),
+    ]
+
+    return (
+        <div
+            className="animate-in slide-in-from-right duration-300"
+            style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.45) 100%)',
+                backdropFilter: 'blur(40px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+                border: '1px solid rgba(255,255,255,0.75)',
+                boxShadow: '0 8px 40px -8px rgba(108,92,231,0.18), 0 2px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
+                borderRadius: '28px',
+            }}
+        >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-2">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-purple/70">Contact Info</span>
+                <button
+                    onClick={onClose}
+                    className="flex size-7 items-center justify-center rounded-xl transition-all hover:bg-black/8"
+                    style={{ background: 'rgba(0,0,0,0.05)' }}
+                >
+                    <X className="size-3.5 text-black/50" />
+                </button>
+            </div>
+
+            {/* Avatar + Name */}
+            <div className="px-5 pb-4 flex flex-col items-center text-center">
+                <div className="relative mb-3">
+                    <ChatAvatar
+                        src={user.avatar}
+                        name={user.full_name || user.username}
+                        className="size-16 rounded-2xl shadow-lg"
+                    />
+                    {user.isOnline !== undefined && (
+                        <span className={cn(
+                            'absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2',
+                            user.isOnline ? 'bg-green-500' : 'bg-gray-300',
+                        )} style={{ borderColor: 'rgba(255,255,255,0.8)' }} />
+                    )}
+                </div>
+                <h3 className="font-bold text-[15px] text-ink leading-tight">{user.full_name || user.username}</h3>
+                <p className="text-[12px] font-medium text-purple mt-0.5">{user.org_role || user.role || 'Team Member'}</p>
+                {user.status_message && (
+                    <p className="text-[11px] text-ink-soft mt-1 italic px-2">"{user.status_message}"</p>
+                )}
+            </div>
+
+            {/* Divider */}
+            <div className="mx-5 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(108,92,231,0.15), transparent)' }} />
+
+            {/* Info rows */}
+            <div className="px-5 py-4 space-y-3">
+                {infoRows.map(({ icon: Icon, label, value }) => (
+                    <div key={label} className="flex items-start gap-3">
+                        <div className="size-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                            style={{ background: 'rgba(108,92,231,0.08)' }}>
+                            <Icon className="size-3.5 text-purple" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[13px] font-semibold text-ink truncate">{value}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-soft/70">{label}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Action buttons */}
+            <div className="px-5 pb-5 flex gap-2">
+                <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
+                    style={{ background: 'rgba(108,92,231,0.1)' }}>
+                    <Phone className="size-3.5" /> Call
+                </button>
+                <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
+                    style={{ background: 'rgba(108,92,231,0.1)' }}>
+                    <Video className="size-3.5" /> Video
+                </button>
+                {onExpand && (
+                    <button onClick={onExpand} className="flex size-10 items-center justify-center rounded-xl transition-all hover:bg-purple hover:text-white text-purple"
+                        style={{ background: 'rgba(108,92,231,0.1)' }}>
+                        <ExternalLink className="size-3.5" />
+                    </button>
+                )}
+            </div>
+        </div>
+    )
+}
+
 export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false }: MessageOverlayProps) {
     const [chatId, setChatId] = useState<string | null>(null)
     const [messages, setMessages] = useState<Msg[]>([])
@@ -47,6 +143,7 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
     const [contextMenu, setContextMenu] = useState<{ msgId: string; x: number; y: number } | null>(null)
     const [reactionPicker, setReactionPicker] = useState<string | null>(null)
     const [typing, setTyping] = useState(false)
+    const [showContactCard, setShowContactCard] = useState(workCardInfo)
     const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
     const socket = getSocket()
@@ -207,18 +304,45 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-end pointer-events-none">
-            {/* Backdrop blur */}
-            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm pointer-events-auto" onClick={onClose} />
+        /* Full viewport overlay — backdrop closes on click */
+        <div className="fixed inset-0 z-50 pointer-events-none">
+            {/* Backdrop */}
+            <div
+                className="absolute inset-0 bg-black/20 backdrop-blur-[2px] pointer-events-auto"
+                onClick={onClose}
+            />
 
-            {/* Panel */}
-            <div className="relative pointer-events-auto flex h-[85vh] w-full max-w-[900px] overflow-hidden rounded-t-3xl bg-white shadow-2xl shadow-black/20 mx-auto md:mx-6 md:mb-6 md:rounded-3xl md:h-[78vh]"
+            {/* Layout: chat panel + glass info card, anchored to bottom-right */}
+            <div className="absolute bottom-6 right-6 flex items-end gap-4 pointer-events-auto"
                 onClick={e => { setContextMenu(null); setReactionPicker(null); e.stopPropagation() }}
             >
-                {/* Chat Column */}
-                <div className="flex flex-1 flex-col min-w-0">
+                {/* Floating contact card — liquid glass, slides in from right */}
+                {showContactCard && (
+                    <div className="w-64 mb-2 animate-in slide-in-from-right duration-300">
+                        <LiquidGlassContactCard
+                            user={targetUser}
+                            onClose={() => setShowContactCard(false)}
+                        />
+                    </div>
+                )}
+
+                {/* Chat Panel */}
+                <div
+                    className="flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300"
+                    style={{
+                        width: 380,
+                        height: 560,
+                        background: 'linear-gradient(160deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.88) 100%)',
+                        backdropFilter: 'blur(40px) saturate(180%)',
+                        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+                        border: '1px solid rgba(255,255,255,0.8)',
+                        boxShadow: '0 24px 80px -16px rgba(108,92,231,0.22), 0 8px 32px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.95)',
+                        borderRadius: '28px',
+                    }}
+                >
                     {/* Header */}
-                    <div className="flex items-center gap-3 border-b border-black/5 px-5 py-4">
+                    <div className="flex items-center gap-3 px-5 py-4"
+                        style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
                         <div className="relative">
                             <ChatAvatar
                                 src={targetUser.avatar}
@@ -230,35 +354,50 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                             )}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-black truncate">{targetUser.full_name || targetUser.username}</p>
-                            <p className="text-xs text-black/40">
+                            <p className="font-semibold text-black truncate text-[14px]">{targetUser.full_name || targetUser.username}</p>
+                            <p className="text-[11px] text-black/40">
                                 {typing ? <span className="text-purple animate-pulse">typing…</span> : targetUser.isOnline ? 'Online' : 'Offline'}
                             </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <button className="flex size-9 items-center justify-center rounded-xl bg-purple/10 text-purple hover:bg-purple/20 transition-all">
-                                <Phone className="size-4" />
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                onClick={() => setShowContactCard(v => !v)}
+                                title="View contact info"
+                                className={cn(
+                                    "flex size-8 items-center justify-center rounded-xl transition-all",
+                                    showContactCard ? "bg-purple text-white" : "text-purple hover:bg-purple/10"
+                                )}
+                                style={{ background: showContactCard ? undefined : 'rgba(108,92,231,0.08)' }}
+                            >
+                                <User className="size-3.5" />
                             </button>
-                            <button className="flex size-9 items-center justify-center rounded-xl bg-purple/10 text-purple hover:bg-purple/20 transition-all">
-                                <Video className="size-4" />
+                            <button className="flex size-8 items-center justify-center rounded-xl text-purple transition-all hover:bg-purple/10"
+                                style={{ background: 'rgba(108,92,231,0.08)' }}>
+                                <Phone className="size-3.5" />
                             </button>
-                            <button onClick={onClose} className="flex size-9 items-center justify-center rounded-xl bg-black/5 text-black/50 hover:bg-black/10 transition-all">
-                                <X className="size-4" />
+                            <button className="flex size-8 items-center justify-center rounded-xl text-purple transition-all hover:bg-purple/10"
+                                style={{ background: 'rgba(108,92,231,0.08)' }}>
+                                <Video className="size-3.5" />
+                            </button>
+                            <button onClick={onClose}
+                                className="flex size-8 items-center justify-center rounded-xl transition-all hover:bg-black/8"
+                                style={{ background: 'rgba(0,0,0,0.05)' }}>
+                                <X className="size-3.5 text-black/50" />
                             </button>
                         </div>
                     </div>
 
                     {/* Messages */}
-                    <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
                         {loading ? (
                             <div className="flex h-full items-center justify-center">
                                 <div className="size-6 animate-spin rounded-full border-2 border-purple border-t-transparent" />
                             </div>
                         ) : messages.length === 0 ? (
                             <div className="flex h-full flex-col items-center justify-center text-center">
-                                <ChatAvatar src={targetUser.avatar} name={targetUser.full_name || targetUser.username} className="size-16 mb-3 rounded-2xl" />
-                                <p className="font-semibold text-black">{targetUser.full_name || targetUser.username}</p>
-                                <p className="text-sm text-black/40 mt-1">Start the conversation!</p>
+                                <ChatAvatar src={targetUser.avatar} name={targetUser.full_name || targetUser.username} className="size-14 mb-3 rounded-2xl" />
+                                <p className="font-semibold text-black text-[13px]">{targetUser.full_name || targetUser.username}</p>
+                                <p className="text-xs text-black/40 mt-1">Start the conversation!</p>
                             </div>
                         ) : (
                             messages.map(msg => {
@@ -268,7 +407,7 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                                         {!own && (
                                             <ChatAvatar src={msg.sender?.avatar} name={msg.sender?.full_name || msg.sender?.username || 'User'} className="size-7 rounded-lg mt-1 shrink-0" />
                                         )}
-                                        <div className={cn("relative max-w-[70%]")}>
+                                        <div className={cn("relative max-w-[75%]")}>
                                             {editingId === msg._id ? (
                                                 <div className="flex gap-2">
                                                     <input
@@ -284,12 +423,18 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                                             ) : (
                                                 <div
                                                     className={cn(
-                                                        "relative px-4 py-2.5 rounded-2xl text-sm leading-relaxed cursor-default select-text",
+                                                        "relative px-3.5 py-2 rounded-2xl text-[13px] leading-relaxed cursor-default select-text",
                                                         own
-                                                            ? "bg-purple text-white rounded-tr-sm"
-                                                            : "bg-black/5 text-black rounded-tl-sm",
+                                                            ? "text-white rounded-tr-sm"
+                                                            : "text-black rounded-tl-sm",
                                                         msg.isDeleted && "opacity-50 italic"
                                                     )}
+                                                    style={own ? {
+                                                        background: 'linear-gradient(135deg, #6c5ce7 0%, #8b7cf8 100%)',
+                                                        boxShadow: '0 4px 12px rgba(108,92,231,0.25)',
+                                                    } : {
+                                                        background: 'rgba(0,0,0,0.06)',
+                                                    }}
                                                     onContextMenu={e => {
                                                         e.preventDefault()
                                                         if (!msg.isDeleted) setContextMenu({ msgId: msg._id, x: e.clientX, y: e.clientY })
@@ -302,7 +447,7 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                                                     {(msg.reactions?.length ?? 0) > 0 && (
                                                         <div className="mt-1 flex flex-wrap gap-1">
                                                             {msg.reactions!.map(r => (
-                                                                <span key={r.emoji} className="flex items-center gap-0.5 rounded-full bg-white/10 px-1.5 py-0.5 text-xs">
+                                                                <span key={r.emoji} className="flex items-center gap-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
                                                                     {r.emoji} {r.users.length}
                                                                 </span>
                                                             ))}
@@ -355,64 +500,33 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                     </div>
 
                     {/* Input */}
-                    <div className="border-t border-black/5 px-4 py-3">
-                        <div className="flex items-center gap-3 rounded-2xl bg-black/3 px-4 py-2.5">
+                    <div className="px-4 py-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                        <div className="flex items-center gap-2 rounded-2xl px-4 py-2.5"
+                            style={{ background: 'rgba(0,0,0,0.04)' }}>
                             <button className="text-black/40 hover:text-purple transition-colors shrink-0">
-                                <Paperclip className="size-5" />
+                                <Paperclip className="size-4" />
                             </button>
                             <input
-                                className="flex-1 bg-transparent text-sm text-black placeholder:text-black/30 focus:outline-none"
+                                className="flex-1 bg-transparent text-[13px] text-black placeholder:text-black/30 focus:outline-none"
                                 placeholder={`Message ${targetUser.full_name || targetUser.username}…`}
                                 value={input}
                                 onChange={e => handleInputChange(e.target.value)}
                                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
                             />
                             <button className="text-black/40 hover:text-purple transition-colors shrink-0">
-                                <Smile className="size-5" />
+                                <Smile className="size-4" />
                             </button>
                             <button
                                 onClick={handleSend}
                                 disabled={!input.trim() || sending}
-                                className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-purple text-white transition-all hover:bg-purple/90 disabled:opacity-40"
+                                className="flex size-8 shrink-0 items-center justify-center rounded-xl text-white transition-all hover:opacity-90 disabled:opacity-40"
+                                style={{ background: 'linear-gradient(135deg, #6c5ce7, #8b7cf8)' }}
                             >
-                                <Send className="size-4" />
+                                <Send className="size-3.5" />
                             </button>
                         </div>
                     </div>
                 </div>
-
-                {/* Work profile sidebar */}
-                {workCardInfo && (
-                    <div className="hidden lg:flex w-72 flex-col border-l border-black/5 bg-black/1.5 p-6">
-                        <div className="flex flex-col items-center text-center mb-6">
-                            <ChatAvatar src={targetUser.avatar} name={targetUser.full_name || targetUser.username} className="size-20 rounded-2xl mb-4 shadow-xl shadow-black/10" />
-                            <h3 className="font-bold text-lg text-black">{targetUser.full_name}</h3>
-                            <p className="text-sm text-purple font-medium mt-0.5">{targetUser.org_role || targetUser.role || 'Team Member'}</p>
-                            {targetUser.organization && (
-                                <p className="text-xs text-black/40 mt-1">{targetUser.organization}</p>
-                            )}
-                        </div>
-                        {targetUser.bio && (
-                            <div className="mb-4">
-                                <p className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-1">Bio</p>
-                                <p className="text-sm text-black/70 leading-relaxed">{targetUser.bio}</p>
-                            </div>
-                        )}
-                        {targetUser.status_message && (
-                            <div className="rounded-xl bg-purple/5 px-3 py-2.5 text-sm text-black/60 italic">
-                                "{targetUser.status_message}"
-                            </div>
-                        )}
-                        <div className="mt-4 space-y-2">
-                            {targetUser.isOnline !== undefined && (
-                                <div className="flex items-center gap-2 text-sm">
-                                    <div className={cn("size-2 rounded-full", targetUser.isOnline ? "bg-green-500" : "bg-black/20")} />
-                                    <span className="text-black/50">{targetUser.isOnline ? 'Online now' : 'Offline'}</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Right-click context menu */}

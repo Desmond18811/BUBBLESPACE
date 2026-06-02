@@ -3,10 +3,8 @@ import {
   Phone,
   MoreVertical,
   UserPlus,
-  Heart,
   MessageCircle,
   Video,
-  Monitor,
   Sparkles,
   Archive,
   ArchiveRestore,
@@ -18,16 +16,11 @@ import {
   X,
   Mic,
   VideoOff,
-  Calendar,
-  History,
-  Play,
   Maximize2,
-  ScreenShare,
   Smile,
   Volume2,
   Briefcase,
   ChevronLeft,
-  ArrowLeft,
   Paperclip,
   Send,
   Users,
@@ -36,16 +29,16 @@ import {
   MicOff,
   MonitorUp,
   ChevronRight,
-  Moon,
-  Sun,
-  Settings,
   Search,
   Loader2,
+  FileText,
+  Zap,
+  ClipboardList,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useDashboard } from '@/contexts/DashboardContext'
 import { useNavigate } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { updateProfile, uploadAvatar, uploadBackground, searchUsers, getMyContacts, addContact, getSuggestions, removeContact as removeContactApi, blockUser } from '@/lib/api'
@@ -58,9 +51,12 @@ import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationB
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { useSocket } from '@/contexts/AppContext'
+import { MessageOverlay } from '@/components/chat/message-overlay'
+import { ZegoMeetingModal } from '@/components/chat/ZegoMeetingModal'
 
 // Next.js Image polyfill for Vite
 const Image = ({ src, alt, className, ...rest }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string; alt?: string; width?: number; height?: number }) => <img src={src} alt={alt} className={className} {...rest} />
+
 
 function ViewHeader({ title, subtitle, action, isNarrow = false }: { title: string, subtitle?: string, action?: React.ReactNode, isNarrow?: boolean }) {
   return (
@@ -194,6 +190,7 @@ function CallOverlay({
 }
 
 export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
+  const { startCall } = useSocket()
   const [contacts, setContacts] = useState<any[]>([])
   const [suggestions, setSuggestions] = useState<any[]>([])
   const [loadingContacts, setLoadingContacts] = useState(true)
@@ -417,7 +414,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                       </button>
                       <button
                         className="flex size-7 items-center justify-center rounded-lg border border-black/5 text-black/30 hover:text-purple hover:border-purple/20 transition-all"
-                        onClick={() => setActiveCall({ friend: contact, type: 'voice' })}
+                        onClick={() => startCall && startCall(contact._id || contact.id, contact.full_name || contact.username, contact.avatar, 'voice')}
                       >
                         <Phone className="size-3" />
                       </button>
@@ -496,21 +493,31 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
 /* ---------------- Calls ---------------- */
 
 export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
+  const { startCall } = useSocket()
   const [selectionStep, setSelectionStep] = useState<'none' | 'source' | 'type'>('none')
-  const [meetingConfig, setMeetingConfig] = useState<{ source: 'group' | 'contacts', type: 'voice' | 'video' | null }>({
-    source: 'contacts',
-    type: null
-  })
+  const [activeMeeting, setActiveMeeting] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(null)
+  const { user: currentUser } = useDashboard()
+
+  const generateRoomId = () => `bubble-${Math.random().toString(36).slice(2, 11)}`
+
+  const handleStartCall = (type: 'voice' | 'video', coworker?: any) => {
+    if (coworker) {
+      if (startCall) {
+        startCall(coworker._id || coworker.id, coworker.full_name || coworker.username, coworker.avatar, type)
+      }
+      return
+    }
+    const roomId = generateRoomId()
+    setActiveMeeting({ roomId, type })
+    setSelectionStep('none')
+  }
 
   const handleSourceSelect = (source: 'group' | 'contacts') => {
-    setMeetingConfig(prev => ({ ...prev, source }))
     setSelectionStep('type')
   }
 
   const handleTypeSelect = (type: 'voice' | 'video') => {
-    setMeetingConfig(prev => ({ ...prev, type }))
-    onStartMeeting()
-    setSelectionStep('none')
+    handleStartCall(type)
   }
 
   // Fetch real data
@@ -583,7 +590,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
                       ))}
                     </div>
                     <button
-                      onClick={() => onStartMeeting()}
+                      onClick={() => handleStartCall('video')}
                       className="flex size-12 items-center justify-center rounded-2xl bg-purple text-white shadow-lg shadow-purple/30 transition-transform hover:scale-110 active:scale-95 group-hover:rotate-6"
                     >
                       <Video className="size-5" />
@@ -638,13 +645,13 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
 
                     <div className="mt-6 flex items-center gap-2">
                       <button
-                        onClick={() => toast.success(`Calling ${worker.full_name}...`)}
+                        onClick={() => handleStartCall('voice', worker)}
                         className="flex size-10 items-center justify-center rounded-xl bg-purple-soft text-purple transition-all hover:bg-purple hover:text-white"
                       >
                         <Phone className="size-4" />
                       </button>
                       <button
-                        onClick={() => toast.success(`Starting video with ${worker.full_name}...`)}
+                        onClick={() => handleStartCall('video', worker)}
                         className="flex size-10 items-center justify-center rounded-xl bg-purple-soft text-purple transition-all hover:bg-purple hover:text-white"
                       >
                         <Video className="size-4" />
@@ -656,6 +663,18 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
             </div>
           </section>
         </div>
+
+        {/* Meeting Modal - ZegoCloud */}
+        {activeMeeting && (
+          <ZegoMeetingModal
+            roomId={activeMeeting.roomId}
+            type={activeMeeting.type}
+            userId={currentUser?._id || currentUser?.id || 'user'}
+            userName={currentUser?.full_name || currentUser?.username || 'Guest'}
+            userAvatar={currentUser?.avatar}
+            onClose={() => setActiveMeeting(null)}
+          />
+        )}
 
         {/* Meeting Selection Dialog */}
         {selectionStep !== 'none' && (
@@ -738,17 +757,28 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
 /* ---------------- Archive ---------------- */
 
 export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: any) => void }) {
-  const { user, onMessage: contextOnMessage } = useDashboard()
-  const onMessage = propOnMessage || contextOnMessage
+  const {
+    user,
+    onMessage: contextOnMessage,
+    activeChat,
+    setActiveChat,
+    activeChatId,
+    setActiveChatId,
+    messages,
+    setMessages,
+    showInfo,
+    setShowInfo,
+  } = useDashboard()
   const myId = user?._id || user?.id
+  const [chatLoading, setChatLoading] = useState(false)
 
   // Fetch all chats and filter for archived ones
-  const { data: archivedChatsRaw, isLoading } = useQuery({
+  const { data: archivedChatsRaw, isLoading, refetch } = useQuery({
     queryKey: ['allChats', 'archived'],
     queryFn: async () => {
       const res = await fetchAllUserChats()
       const chats = res?.conversations || res?.data || []
-      return (chats as any[]).filter(c => c.isArchived)
+      return (chats as any[]).filter(c => c.archivedBy?.includes(myId))
     }
   })
 
@@ -758,95 +788,138 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
     return other?.full_name || other?.username || chat.chatName || 'Unknown'
   }
 
+  const getChatAvatar = (chat: any) => {
+    if (chat.isGroupChat) return chat.groupIcon
+    const other = chat.users?.find((u: any) => (u._id || u.id) !== myId)
+    return other?.avatar
+  }
+
   const archivedChats = [...(archivedChatsRaw || [])].sort((a, b) =>
     getChatName(a).localeCompare(getChatName(b))
   )
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full flex-col bg-white">
-        <ViewHeader title="Archive" subtitle="Loading..." />
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-purple" />
-        </div>
-      </div>
-    )
+  const handleOpenChat = async (chat: any) => {
+    setChatLoading(true)
+    try {
+      setActiveChatId(chat._id || chat.id)
+      setActiveChat(chat)
+      setMessages([])
+    } finally {
+      setChatLoading(false)
+    }
   }
 
   return (
-    <div className="flex h-full flex-col bg-white">
-      <div className="flex flex-col items-center justify-center border-b border-black/5 bg-white/50 px-6 py-8 backdrop-blur-xl text-center">
-        <h1 className="text-2xl font-bold text-ink">{archivedChats.length === 0 ? "Archive" : "Conversation History"}</h1>
-        <p className="mt-1 text-sm font-medium text-ink-soft">
-          {archivedChats.length === 0
-            ? "Your message history is safe here"
-            : `${archivedChats.length} saved chat${archivedChats.length !== 1 ? 's' : ''} found`}
-        </p>
-      </div>
-      <div className="flex-1 overflow-y-auto px-4 py-2 sm:px-6">
-        {archivedChats.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="size-16 rounded-[24px] bg-purple-soft/50 flex items-center justify-center mb-4">
-              <Archive className="size-8 text-purple/40" />
-            </div>
-            <p className="text-base font-bold text-ink">Your archive is empty</p>
-            <p className="text-sm text-ink-soft mt-1">Archived conversations will appear here.</p>
-          </div>
-        ) : (
-          <div className="mt-4 divide-y divide-black/5">
-            {archivedChats.map((chat: any) => {
-              const name = getChatName(chat)
-              const other = !chat.isGroupChat ? chat.users?.find((u: any) => (u._id || u.id) !== myId) : null
-              const avatar = chat.isGroupChat ? chat.groupIcon : other?.avatar
+    <div className="flex h-full w-full overflow-hidden bg-white rounded-[26px]">
+      {/* Left panel — archived chat list */}
+      <div className={cn(
+        "flex flex-col border-r border-black/5 transition-all duration-500 ease-in-out",
+        activeChat ? "w-[320px] shrink-0" : "w-full",
+        activeChat ? "" : "flex"
+      )}>
+        <ViewHeader
+          title="Archive"
+          subtitle={archivedChats.length > 0 ? `${archivedChats.length} saved conversation${archivedChats.length !== 1 ? 's' : ''}` : 'Your message history'}
+          isNarrow={!!activeChat}
+        />
 
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {isLoading ? (
+            [1, 2, 3, 4].map(i => (
+              <div key={i} className="h-20 rounded-2xl bg-black/3 animate-pulse" />
+            ))
+          ) : archivedChats.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="size-16 rounded-[24px] bg-purple-soft/50 flex items-center justify-center mb-4">
+                <Archive className="size-8 text-purple/40" />
+              </div>
+              <p className="text-sm font-bold text-ink">Archive is empty</p>
+              <p className="text-xs text-ink-soft mt-1">Archived conversations appear here</p>
+            </div>
+          ) : (
+            archivedChats.map((chat: any) => {
+              const name = getChatName(chat)
+              const avatar = getChatAvatar(chat)
+              const isActive = (activeChatId === (chat._id || chat.id))
               return (
                 <div
                   key={chat._id || chat.id}
-                  className="group flex items-center gap-4 py-4 transition-all"
+                  onClick={() => handleOpenChat(chat)}
+                  className={cn(
+                    "group flex items-center gap-3 rounded-[22px] border p-3 transition-all duration-200 cursor-pointer",
+                    isActive
+                      ? "border-purple/30 bg-purple/5 shadow-sm"
+                      : "border-black/5 bg-white hover:border-purple/20 hover:shadow-md"
+                  )}
                 >
-                  <div className="relative">
-                    <ChatAvatar src={avatar} name={name} className="size-14 rounded-2xl shadow-sm" />
+                  <div className="relative shrink-0">
+                    <ChatAvatar src={avatar} name={name} className="size-12 rounded-xl shadow-sm" />
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-base font-bold text-ink">{name}</p>
-                      {chat.isGroupChat && <span className="bg-purple/10 text-purple text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">Group</span>}
+                      <p className="truncate font-bold text-ink text-[13px]">{name}</p>
+                      {chat.isGroupChat && (
+                        <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Group</span>
+                      )}
                     </div>
-                    <p className="truncate text-sm text-ink-soft mt-0.5">
-                      {chat.latestMessage?.content ? `"${chat.latestMessage.content}"` : 'No messages'}
+                    <p className="truncate text-[11px] text-ink-soft mt-0.5">
+                      {chat.latestMessage?.content || 'No messages yet'}
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onMessage?.({ _id: chat._id || chat.id, full_name: name, avatar: avatar })}
-                      className="flex items-center justify-center gap-2 rounded-xl bg-purple text-white px-4 py-2 text-[13px] font-bold transition-all hover:opacity-90 active:scale-95 shadow-sm"
-                    >
-                      <MessageSquare className="size-4" />
-                      <span>Message</span>
-                    </button>
-                    <button
-                      onClick={async () => {
-                        try {
-                          const { toggleArchiveChat } = await import('@/lib/api')
-                          await toggleArchiveChat(chat._id || chat.id)
-                          toast.success('Chat restored')
-                          window.location.reload()
-                        } catch {
-                          toast.error('Failed to restore chat')
-                        }
-                      }}
-                      className="flex items-center justify-center gap-2 rounded-xl bg-purple/10 px-4 py-2 text-[13px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
-                    >
-                      <ArchiveRestore className="size-4" />
-                      <span>Restore</span>
-                    </button>
-                  </div>
+                  {/* Restore button */}
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      try {
+                        const { toggleArchiveChat } = await import('@/lib/api')
+                        await toggleArchiveChat(chat._id || chat.id)
+                        toast.success('Chat restored')
+                        if (isActive) { setActiveChat(null); setActiveChatId(null) }
+                        refetch()
+                      } catch {
+                        toast.error('Failed to restore')
+                      }
+                    }}
+                    title="Restore chat"
+                    className="opacity-0 group-hover:opacity-100 flex size-8 items-center justify-center rounded-xl border border-black/5 text-black/30 hover:text-purple hover:border-purple/30 transition-all shrink-0"
+                  >
+                    <ArchiveRestore className="size-3.5" />
+                  </button>
                 </div>
               )
-            })}
-          </div>
-        )}
+            })
+          )}
+        </div>
       </div>
+
+
+
+      {/* Right panel — ChatWindow */}
+      {activeChat ? (
+        <div className="relative flex flex-1 overflow-hidden">
+          <div className="flex flex-1 flex-col">
+            <ChatWindow
+              chatId={activeChatId!}
+              chat={activeChat}
+              currentUser={user}
+              messages={messages}
+              setMessages={setMessages}
+              onClose={() => { setActiveChat(null); setActiveChatId(null); setShowInfo(false) }}
+              onShowInfo={() => setShowInfo(v => !v)}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className={cn("flex-1 items-center justify-center hidden md:flex")}>
+          <div className="text-center p-8 max-w-sm">
+            <div className="size-20 rounded-3xl bg-purple/10 flex items-center justify-center mb-4 mx-auto">
+              <Archive className="size-10 text-purple/50" />
+            </div>
+            <h2 className="text-xl font-bold text-black mb-2">Archived Chats</h2>
+            <p className="text-sm text-black/40">Select a conversation from the list to read or continue it.</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1346,7 +1419,7 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<'chat' | 'participants'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'participants' | 'transcript'>('chat');
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -1357,6 +1430,20 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
     return () => window.removeEventListener('keydown', handleEsc);
   }, []);
 
+  const transcriptEntries = [
+    { speaker: 'Sarah Miller', time: '10:02 AM', text: "Alright everyone, let's get started. We're reviewing the Q3 design retrospective today.", avatar: 'https://i.pravatar.cc/150?u=sarah' },
+    { speaker: 'Jacob McLeod', time: '10:03 AM', text: 'I think the main takeaway from Q3 is that we need better alignment between design and engineering earlier in the process.', avatar: 'https://i.pravatar.cc/150?u=jacob' },
+    { speaker: 'Kaylee Kemp', time: '10:05 AM', text: 'Agreed. The CJM work we did helped a lot but it came in too late for sprint planning.', avatar: 'https://i.pravatar.cc/150?u=kaylee' },
+    { speaker: 'Sarah Miller', time: '10:07 AM', text: 'Action item: Kaylee to present CJM to engineering before sprint 1 kickoff next cycle.', avatar: 'https://i.pravatar.cc/150?u=sarah' },
+    { speaker: 'Jacob McLeod', time: '10:09 AM', text: 'Also, we should set up a shared Figma workspace so the team can leave comments directly on designs.', avatar: 'https://i.pravatar.cc/150?u=jacob' },
+  ]
+
+  const aiSummaryItems = [
+    { icon: FileText, label: 'Key Discussion', text: 'Design/engineering alignment gaps in Q3, CJM delivery timing issues.' },
+    { icon: ClipboardList, label: 'Action Items', text: 'Kaylee: present CJM before sprint kickoff. Jacob: set up shared Figma workspace.' },
+    { icon: Zap, label: 'Decisions Made', text: 'Adopt early design reviews starting Q4. Figma comments enabled for all engineers.' },
+  ]
+
   return (
     <div className={cn(
       "relative flex flex-col bg-white text-ink transition-all duration-500",
@@ -1365,10 +1452,7 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
       {/* Header */}
       <div className="flex h-16 items-center justify-between px-6 border-b border-black/5 relative z-20 bg-white/80 backdrop-blur-md">
         <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="p-2 hover:bg-black/5 rounded-xl transition-colors"
-          >
+          <button onClick={onBack} className="p-2 hover:bg-black/5 rounded-xl transition-colors">
             <ChevronLeft className="size-5 text-ink" />
           </button>
           <div>
@@ -1383,27 +1467,19 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
                 {String.fromCharCode(64 + i)}
               </div>
             ))}
-            <div className="size-8 rounded-full border-2 border-white bg-purple-soft flex items-center justify-center text-[10px] font-bold text-ink shadow-sm">
-              +9
-            </div>
+            <div className="size-8 rounded-full border-2 border-white bg-purple-soft flex items-center justify-center text-[10px] font-bold text-ink shadow-sm">+9</div>
           </div>
           <button className="flex items-center gap-2 bg-purple/10 hover:bg-purple/20 px-4 py-2 rounded-xl text-xs font-bold text-purple transition-all">
-            <Info className="size-4" />
-            Meeting details
+            <Info className="size-4" />Meeting details
           </button>
         </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Main Content Area */}
+        {/* Main video area */}
         <div className="flex flex-1 flex-col p-6 min-w-0 bg-slate-50/30">
-          {/* Main Participant Grid */}
           <div className="flex-1 relative rounded-[32px] overflow-hidden bg-purple-soft/50 border-4 border-purple shadow-xl shadow-purple/10">
-            <img
-              src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=1200"
-              className="w-full h-full object-cover"
-              alt="Main Speaker"
-            />
+            <img src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=1200" className="w-full h-full object-cover" alt="Main Speaker" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
             <div className="absolute bottom-6 left-6 flex items-center gap-4 bg-black/30 backdrop-blur-md p-3 rounded-2xl border border-white/20">
               <div className="size-10 rounded-xl bg-purple flex items-center justify-center shadow-lg shadow-purple/40 text-white">
@@ -1417,22 +1493,20 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
                 <p className="text-[10px] text-white/60 uppercase tracking-wider font-medium">Principal Designer</p>
               </div>
             </div>
+            <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20">
+              <span className="size-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-[10px] font-bold text-white uppercase tracking-wider">Live Transcript</span>
+            </div>
           </div>
-
-          {/* Bottom Strip */}
           <div className="h-32 mt-6 flex gap-4 overflow-x-auto scrollbar-hide py-1">
             {[
               { name: 'Samila Moon', img: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300' },
               { name: 'Jane Collins', img: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300' },
               { name: 'Me', img: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=300' },
-              { name: '13 other members', img: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300' }
+              { name: '13 others', img: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300' }
             ].map((p, i) => (
               <div key={i} className="flex-none w-48 rounded-[24px] overflow-hidden bg-white border border-black/5 relative group shadow-sm transition-all hover:shadow-md hover:scale-[1.02]">
-                <img
-                  src={p.img}
-                  className="w-full h-full object-cover"
-                  alt={p.name}
-                />
+                <img src={p.img} className="w-full h-full object-cover" alt={p.name} />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-80" />
                 <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
                   <span className="text-[11px] font-bold text-white shadow-sm">{p.name}</span>
@@ -1443,43 +1517,36 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        {/* Right Sidebar - Chat */}
+        {/* Right sidebar */}
         {isChatOpen && (
           <div className="w-80 border-l border-black/5 flex flex-col bg-white animate-in slide-in-from-right duration-300">
             <div className="p-4 border-b border-purple/20 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-ink">Chat</h3>
+              <h3 className="font-bold text-sm text-ink">Meeting Panel</h3>
               <button onClick={() => setIsChatOpen(false)} className="p-1.5 hover:bg-black/5 rounded-lg text-ink-soft">
                 <X className="size-4" />
               </button>
             </div>
 
-            <div className="p-4 border-b border-purple/20">
-              <div className="flex bg-purple-soft/50 rounded-xl p-1">
-                <button
-                  onClick={() => setActiveTab('chat')}
-                  className={cn(
-                    "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all",
-                    activeTab === 'chat' ? "bg-white text-purple shadow-sm" : "text-ink-soft hover:text-ink"
-                  )}
-                >
-                  Messages
-                </button>
-                <button
-                  onClick={() => setActiveTab('participants')}
-                  className={cn(
-                    "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all",
-                    activeTab === 'participants' ? "bg-white text-purple shadow-sm" : "text-ink-soft hover:text-ink"
-                  )}
-                >
-                  People
-                </button>
+            <div className="p-3 border-b border-purple/20">
+              <div className="flex bg-purple-soft/50 rounded-xl p-1 gap-0.5">
+                {(['chat', 'participants', 'transcript'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={cn(
+                      "flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all",
+                      activeTab === tab ? "bg-white text-purple shadow-sm" : "text-ink-soft hover:text-ink"
+                    )}
+                  >
+                    {tab === 'transcript' ? '✦ AI' : tab === 'chat' ? 'Chat' : 'People'}
+                  </button>
+                ))}
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {activeTab === 'chat' ? (
-                <div className="space-y-6">
-                  {/* Image message */}
+                <div className="space-y-5">
                   <div className="space-y-2">
                     <img src="https://images.unsplash.com/photo-1542621334-1100f406f528?w=500" className="rounded-2xl w-full aspect-[4/3] object-cover shadow-sm" alt="Preview" />
                     <div className="flex gap-3">
@@ -1491,18 +1558,15 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
                       </div>
                     </div>
                   </div>
-
-                  {/* Bubble message */}
                   <div className="flex gap-3 flex-row-reverse">
                     <img src={profile.avatar} className="size-8 rounded-full object-cover" alt="Me" />
                     <div className="flex flex-col items-end max-w-[80%]">
                       <div className="bg-purple text-white p-3 rounded-2xl rounded-tr-none shadow-sm shadow-purple/20">
-                        <p className="text-xs">Jessica did a great job this month 💜 The project was difficult</p>
+                        <p className="text-xs">Jessica did a great job this month 💜</p>
                       </div>
                       <p className="text-[9px] text-ink-soft/60 mt-1">09:27 AM</p>
                     </div>
                   </div>
-
                   <div className="flex gap-3">
                     <img src="https://i.pravatar.cc/150?u=jacob" className="size-8 rounded-full object-cover" alt="Jacob" />
                     <div>
@@ -1514,17 +1578,71 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
+              ) : activeTab === 'participants' ? (
+                <div className="space-y-2">
                   {[1, 2, 3, 4, 5, 6].map(i => (
                     <div key={i} className="flex items-center justify-between p-2 rounded-xl hover:bg-purple-soft/30 transition-colors">
                       <div className="flex items-center gap-3">
                         <img src={`https://i.pravatar.cc/150?u=${i + 10}`} className="size-8 rounded-full object-cover" alt="Avatar" />
-                        <span className="text-xs font-bold text-ink">Participant {i}</span>
+                        <div>
+                          <span className="text-xs font-bold text-ink block">Participant {i}</span>
+                          <span className="text-[10px] text-ink-soft">{i % 2 === 0 ? 'Presenter' : 'Viewer'}</span>
+                        </div>
                       </div>
-                      <Mic className="size-3 text-ink-soft" />
+                      {i % 3 !== 0 ? <Mic className="size-3 text-green-500" /> : <MicOff className="size-3 text-ink-soft" />}
                     </div>
                   ))}
+                </div>
+              ) : (
+                /* AI Transcript Tab */
+                <div className="space-y-4">
+                  <div className="rounded-2xl p-4 space-y-3"
+                    style={{ background: 'linear-gradient(135deg, rgba(108,92,231,0.06) 0%, rgba(108,92,231,0.02) 100%)', border: '1px solid rgba(108,92,231,0.12)' }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="size-5 rounded-md bg-purple flex items-center justify-center">
+                        <Sparkles className="size-3 text-white" />
+                      </div>
+                      <p className="text-[11px] font-bold text-purple uppercase tracking-wider">AI Summary</p>
+                    </div>
+                    {aiSummaryItems.map(({ icon: Icon, label, text }) => (
+                      <div key={label} className="flex items-start gap-2.5">
+                        <Icon className="size-3.5 text-purple/70 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-[10px] font-bold text-purple/70 uppercase tracking-wider">{label}</p>
+                          <p className="text-[11px] text-ink mt-0.5 leading-relaxed">{text}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold text-ink-soft uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                      <span className="size-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+                      Live Transcript
+                    </p>
+                    <div className="space-y-4">
+                      {transcriptEntries.map((entry, i) => (
+                        <div key={i} className="flex gap-2.5">
+                          <img src={entry.avatar} className="size-6 rounded-full object-cover shrink-0 mt-0.5" alt={entry.speaker} />
+                          <div>
+                            <div className="flex items-baseline gap-2">
+                              <p className="text-[11px] font-bold text-ink">{entry.speaker}</p>
+                              <p className="text-[9px] text-ink-soft">{entry.time}</p>
+                            </div>
+                            <p className="text-[11px] text-ink-soft mt-0.5 leading-relaxed">{entry.text}</p>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex gap-2.5">
+                        <div className="size-6 rounded-full bg-purple/20 shrink-0 mt-0.5 animate-pulse" />
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="size-1.5 animate-bounce rounded-full bg-black/30" style={{ animationDelay: '0ms' }} />
+                          <span className="size-1.5 animate-bounce rounded-full bg-black/30" style={{ animationDelay: '150ms' }} />
+                          <span className="size-1.5 animate-bounce rounded-full bg-black/30" style={{ animationDelay: '300ms' }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1606,15 +1724,22 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
 /* ---------------- Work (Coworkers) ---------------- */
 
 export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
-  const { user: currentUser, isNarrow: contextNarrow, onMessage: contextOnMessage } = useDashboard()
-  const onMessage = propOnMessage || contextOnMessage
+  const {
+    user: currentUser,
+    isNarrow: contextNarrow,
+    activeChat,
+    setActiveChat,
+    activeChatId,
+    setActiveChatId,
+    messages,
+    setMessages,
+    showInfo,
+    setShowInfo,
+  } = useDashboard()
   const isNarrow = narrowProp ?? contextNarrow
   const [coworkers, setCoworkers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [activeChat, setActiveChat] = useState<any>(null)
-  const [messages, setMessages] = useState<any[]>([])
-  const [showInfo, setShowInfo] = useState(false)
   const [chatLoading, setChatLoading] = useState(false)
   const [collapsingFor, setCollapsingFor] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -1637,18 +1762,18 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
 
   const handleOpenChat = async (worker: any) => {
     const workerId = worker._id || worker.id
-    // 1. Trigger collapse animation
     setCollapsingFor(workerId)
     setChatLoading(true)
     try {
-      // Small delay to let the animation play
-      await new Promise(r => setTimeout(r, 220))
+      await new Promise(r => setTimeout(r, 180))
       const res = await accessOrCreateChat(workerId)
-      const chat = res.data?.conversation || res.data || res
+      const chat = res?.conversation || res?.data?.conversation || res?.data || res
       if (!chat.users && worker) chat.users = [currentUser, worker]
       setActiveChat(chat)
+      setActiveChatId(chat.id || chat._id)
       setMessages([])
-    } catch (err) {
+      setShowInfo(false)
+    } catch {
       toast.error('Failed to open chat')
     } finally {
       setChatLoading(false)
@@ -1709,16 +1834,19 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
             coworkers.map((worker) => {
               const workerId = worker._id || worker.id
               const isCollapsing = collapsingFor === workerId
+              const isActive = activeChatId === workerId || (activeChat?.users?.some((u: any) => (u._id || u.id) === workerId))
               return (
                 <div
                   key={workerId}
-                  className={cn(
-                    "group flex items-center gap-4 rounded-[22px] border border-black/5 bg-white p-3 transition-all duration-300 cursor-pointer",
-                    isCollapsing
-                      ? "scale-[0.97] opacity-60 border-purple/20 shadow-inner"
-                      : "hover:border-purple/30 hover:shadow-md"
-                  )}
                   onClick={() => !chatLoading && handleOpenChat(worker)}
+                  className={cn(
+                    "group flex items-center gap-3 rounded-[22px] border p-3 transition-all duration-200 cursor-pointer",
+                    isCollapsing
+                      ? "scale-[0.97] opacity-60 border-purple/30 shadow-inner"
+                      : isActive
+                        ? "border-purple/30 bg-purple/5 shadow-sm"
+                        : "border-black/5 bg-white hover:border-purple/20 hover:shadow-md"
+                  )}
                 >
                   <div className="relative shrink-0">
                     <ChatAvatar
@@ -1727,40 +1855,32 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
                       className="size-12 rounded-xl shadow-sm"
                     />
                     {worker.isOnline && (
-                      <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-green-500" />
+                      <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-emerald-400" />
                     )}
                   </div>
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-ink truncate max-w-[160px]">
-                        {worker.full_name}
-                      </h3>
+                      <p className="truncate font-bold text-ink text-[13px]">{worker.full_name || worker.username}</p>
                       {(worker.org_role || worker.organization) && (
-                        <span className="text-[10px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-full uppercase tracking-wider truncate max-w-[100px]">
+                        <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                           {worker.org_role || worker.organization}
                         </span>
                       )}
                     </div>
-                    <p className="text-[12px] text-ink-soft truncate">
-                      @{worker.username} {worker.status_message && `• "${worker.status_message}"`}
+                    <p className="text-[11px] text-ink-soft mt-0.5 truncate">
+                      @{worker.username}{worker.status_message ? ` · "${worker.status_message}"` : ''}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
                       onClick={(e) => { e.stopPropagation(); if (!chatLoading) handleOpenChat(worker) }}
                       disabled={chatLoading}
-                      className="flex h-9 items-center gap-2 rounded-xl bg-purple px-4 text-xs font-bold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm disabled:opacity-60"
+                      className="flex h-8 items-center gap-1.5 rounded-xl bg-purple px-3 text-[11px] font-bold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm disabled:opacity-60"
                     >
-                      {isCollapsing ? <Loader2 className="size-3.5 animate-spin" /> : <MessageCircle className="size-3.5" />}
-                      {isCollapsing ? 'Opening...' : 'Message'}
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation() }}
-                      className="flex size-9 items-center justify-center rounded-xl border border-black/5 text-black/40 transition-all hover:border-purple/30 hover:text-purple bg-white shadow-sm"
-                    >
-                      <Phone className="size-3.5" />
+                      {isCollapsing ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
+                      {isCollapsing ? '…' : 'Message'}
                     </button>
                   </div>
                 </div>
@@ -1770,37 +1890,31 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
         </div>
       </div>
 
-      {/* Chat Window: persistent on right if activeChat */}
+
+
+      {/* Chat Window */}
       {activeChat ? (
-        <div className={cn("flex flex-1 overflow-hidden", showInfo ? "flex-row" : "flex-col")}>
-          <div className={cn("flex flex-1 flex-col", showInfo ? "w-2/3" : "w-full")}>
+        <div className="relative flex flex-1 overflow-hidden">
+          <div className="flex flex-1 flex-col">
             <ChatWindow
-              chatId={activeChat.id || activeChat._id}
+              chatId={activeChatId || activeChat.id || activeChat._id}
               chat={activeChat}
               currentUser={currentUser}
               messages={messages}
               setMessages={setMessages}
-              onClose={() => setActiveChat(null)}
-              onShowInfo={() => setShowInfo(!showInfo)}
+              onClose={() => { setActiveChat(null); setActiveChatId(null); setShowInfo(false) }}
+              onShowInfo={() => setShowInfo(v => !v)}
             />
           </div>
-          {showInfo && (
-            <div className="w-1/3 border-l border-black/5 bg-white overflow-y-auto">
-              <GroupInfo
-                conversation={activeChat}
-                onClose={() => setShowInfo(false)}
-              />
-            </div>
-          )}
         </div>
       ) : (
         <div className={cn("flex-1 items-center justify-center hidden md:flex", isNarrow && "hidden")}>
           <div className="text-center p-8 max-w-sm">
-            <div className="size-20 rounded-3xl bg-purple/10 flex items-center justify-center mb-4 mx-auto font-bold text-purple text-2xl">
-              <Briefcase className="size-10" />
+            <div className="size-20 rounded-3xl bg-purple/10 flex items-center justify-center mb-4 mx-auto">
+              <Briefcase className="size-10 text-purple/50" />
             </div>
             <h2 className="text-xl font-bold text-black mb-2">Collaboration Hub</h2>
-            <p className="text-sm text-black/40">Choose a colleague from the list to start a high-performance conversation or view organizational insights.</p>
+            <p className="text-sm text-black/40">Select a colleague to start a conversation.</p>
           </div>
         </div>
       )}

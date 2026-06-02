@@ -42,6 +42,10 @@ export function Dashboard({
   const [overlayWorkCard, setOverlayWorkCard] = useState(false)
   const [messages, setMessages] = useState<any[]>([])
 
+  const SIDE_PANEL_TABS = ['all']
+  const showSidePanel = SIDE_PANEL_TABS.includes(activeTab)
+  const isInfoVisible = !!(showInfo && !isInMeeting && activeChat && (activeTab === 'all' || activeTab === 'friends' || activeTab === 'work' || activeTab === 'archive'))
+
   // Use React Query for profile fetching with caching
   const { data: userData, isLoading: loadingProfile, refetch: refetchProfile } = useQuery({
     queryKey: ['profile'],
@@ -113,8 +117,8 @@ export function Dashboard({
   const handleOpenFullChat = async (targetUser: any) => {
     try {
       const res = await accessOrCreateChat(targetUser._id || targetUser.id)
-      const chat = res.data?.conversation || res.data || res
-      setActiveChatId(chat._id || chat.id)
+      const chat = res?.conversation || res?.data?.conversation || res?.data || res
+      setActiveChatId(chat.id || chat._id)
       setActiveChat(chat)
       setMessages([])
       navigate({ to: '/dashboard/all' })
@@ -136,9 +140,6 @@ export function Dashboard({
     return <SetupProfileView user={user} onComplete={() => { }} />
   }
 
-  const SIDE_PANEL_TABS = ['all']
-  const showSidePanel = SIDE_PANEL_TABS.includes(activeTab)
-
   return (
     <AppProvider user={user}>
       <div className="relative z-10 flex h-[min(960px,92vh)] w-full max-w-[1760px] items-stretch gap-5 2xl:h-[min(1080px,88vh)] font-poppins">
@@ -155,7 +156,7 @@ export function Dashboard({
         >
           <NavSidebar activeTab={activeTab} user={user} onLogout={handleLogout} />
 
-          <div className="flex flex-1 overflow-hidden rounded-[26px] bg-white relative">
+          <div className="flex flex-1 overflow-hidden rounded-[26px] bg-white relative transition-all duration-300">
             {/* Always mount the chat list + window but only show when on 'all' tab */}
             <div className={cn("flex flex-1 overflow-hidden", !showSidePanel && "hidden")}>
               <div className={cn("hidden md:block w-[360px] shrink-0 border-r border-black/5", activeChatId && "block w-full md:w-[360px]")}>
@@ -206,7 +207,15 @@ export function Dashboard({
                 isNarrow: !!activeChatId,
                 setUser: () => refetchProfile(),
                 bgType,
-                setBgType
+                setBgType,
+                showInfo,
+                setShowInfo,
+                activeChatId,
+                setActiveChatId,
+                activeChat,
+                setActiveChat,
+                messages,
+                setMessages
               }}>
                 <Outlet />
               </DashboardProvider>
@@ -214,16 +223,16 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* Right info panel — show on 'all', 'friends', or 'work' tab with an active chat */}
-        {showInfo && !isInMeeting && activeChat && (activeTab === 'all' || activeTab === 'friends' || activeTab === 'work') && (
-          <div className="absolute top-0 right-0 z-50 h-full w-[360px] animate-in slide-in-from-right duration-300 shadow-2xl">
+        {/* Right info panel */}
+        {isInfoVisible && (
+          <aside className="w-[360px] shrink-0 flex flex-col gap-4 overflow-y-auto max-h-full animate-in slide-in-from-right duration-300 custom-scrollbar pr-1">
             <GroupInfo
               key={activeChatId}
               conversation={activeChat}
               messages={messages}
               onClose={() => setShowInfo(false)}
             />
-          </div>
+          </aside>
         )}
 
         {/* Message Overlay for Work/Friends messaging */}

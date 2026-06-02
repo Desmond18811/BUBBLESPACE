@@ -75,8 +75,30 @@ export function ChatWindow({
   messages: any[]
   setMessages: React.Dispatch<React.SetStateAction<any[]>>
 }) {
-  const { socket } = useSocket()
+  const { socket, startCall } = useSocket()
   const myId = currentUser?._id || currentUser?.id
+
+  const handleVoiceCall = () => {
+    if (chat?.isGroupChat) {
+      onStartMeeting?.()
+    } else {
+      const other = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
+      if (other && startCall) {
+        startCall(other._id || other.id, other.full_name || other.username, other.avatar, 'voice')
+      }
+    }
+  }
+
+  const handleVideoCall = () => {
+    if (chat?.isGroupChat) {
+      onStartMeeting?.()
+    } else {
+      const other = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
+      if (other && startCall) {
+        startCall(other._id || other.id, other.full_name || other.username, other.avatar, 'video')
+      }
+    }
+  }
 
   const [loading, setLoading] = useState(true)
   const [input, setInput] = useState('')
@@ -513,10 +535,10 @@ export function ChatWindow({
                 <button onClick={() => setIsSearchExpanded(true)} className="hover:text-purple transition-colors p-1">
                   <Search className="size-5" />
                 </button>
-                <button className="hover:text-purple transition-colors">
+                <button onClick={handleVoiceCall} className="hover:text-purple transition-colors">
                   <Phone className="size-5" />
                 </button>
-                <button onClick={onStartMeeting} className="hover:text-purple transition-colors">
+                <button onClick={handleVideoCall} className="hover:text-purple transition-colors">
                   <Video className="size-5" />
                 </button>
                 <button
