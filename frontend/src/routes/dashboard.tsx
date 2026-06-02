@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
 import React from 'react'
 import { Dashboard } from '@/components/chat/dashboard'
 import { BubbleBackground } from '@/components/chat/bubble-background'
@@ -10,6 +10,10 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardPage() {
     const [bgType, setBgType] = React.useState<string>('bubbles')
+    const location = useLocation()
+
+    // Determine active tab from path (e.g. /dashboard/work -> work)
+    const activeTab = location.pathname.split('/').pop() || 'all'
 
     return (
         <main
@@ -31,7 +35,9 @@ function DashboardPage() {
                 }}
             />
             {bgType === 'bubbles' && <BubbleBackground />}
-            <Dashboard bgType={bgType} setBgType={setBgType} />
+            <Dashboard bgType={bgType} setBgType={setBgType} activeTab={activeTab}>
+                <Outlet />
+            </Dashboard>
         </main>
     );
 }

@@ -106,10 +106,10 @@ export type Message = {
   views: number
   time: string
 } & (
-  | { kind: 'text'; text: string; reactions?: Reaction[] }
-  | { kind: 'image'; image: string }
-  | { kind: 'voice'; duration: string }
-)
+    | { kind: 'text'; text: string; reactions?: Reaction[] }
+    | { kind: 'image'; image: string }
+    | { kind: 'voice'; duration: string }
+  )
 
 export type Member = {
   name: string
@@ -124,9 +124,11 @@ export type FileCategory = {
 
 export type ContactInfo = {
   status: string
-  phone: string
   username: string
   bio: string
+  organization?: string
+  role?: string
+  org_role?: string
 }
 
 export type Conversation = {
@@ -232,7 +234,7 @@ export type Profile = {
   role: string
   bio: string
   email: string
-  phone: string
+  phone?: string
   location: string
   stats: { label: string; value: string }[]
 }
@@ -244,7 +246,6 @@ export const profile: Profile = {
   role: 'Lead Product Designer',
   bio: 'Designing calm, human interfaces. Coffee, type, and clean grids.',
   email: 'tanisha.combs@studio.com',
-  phone: '+1 202 555 0100',
   location: 'San Francisco, CA',
   stats: [
     { label: 'Chats', value: '128' },
@@ -359,9 +360,10 @@ export const conversations: Record<string, Conversation> = {
     avatar: '/avatars/osman.png',
     contact: {
       status: 'online',
-      phone: '+1 202 555 0114',
       username: '@osman.c',
       bio: 'Product designer. Coffee enthusiast. Always shipping.',
+      organization: 'BUBBLESPACE',
+      role: 'Staff Designer'
     },
     files: [
       { label: '4 videos', icon: 'video' },
@@ -425,9 +427,10 @@ export const conversations: Record<string, Conversation> = {
     avatar: '/avatars/jayden.png',
     contact: {
       status: 'last seen 1h ago',
-      phone: '+1 202 555 0188',
       username: '@jchurch',
       bio: 'Frontend engineer. Building delightful interfaces.',
+      organization: 'BUBBLESPACE',
+      role: 'Frontend Engineer'
     },
     files: [
       { label: '2 videos', icon: 'video' },
@@ -479,9 +482,10 @@ export const conversations: Record<string, Conversation> = {
     avatar: '/avatars/jacob.png',
     contact: {
       status: 'online',
-      phone: '+1 202 555 0132',
       username: '@jacob.m',
       bio: 'Brand & motion designer.',
+      organization: 'BUBBLESPACE',
+      role: 'Motion Designer'
     },
     files: [
       { label: '6 videos', icon: 'video' },
@@ -523,9 +527,10 @@ export const conversations: Record<string, Conversation> = {
     avatar: '/avatars/jasmin.png',
     contact: {
       status: 'online',
-      phone: '+1 202 555 0170',
       username: '@jasmin.l',
       bio: 'Design systems lead. Loves clean components.',
+      organization: 'BUBBLESPACE',
+      role: 'Design Systems Lead'
     },
     files: [
       { label: '9 videos', icon: 'video' },
@@ -568,9 +573,10 @@ export const conversations: Record<string, Conversation> = {
     avatar: '/avatars/zaid.png',
     contact: {
       status: 'last seen 45m ago',
-      phone: '+1 202 555 0143',
       username: '@zaid.m',
       bio: 'Mobile engineer. iOS & Android.',
+      organization: 'BUBBLESPACE',
+      role: 'Mobile Engineer'
     },
     files: [
       { label: '3 videos', icon: 'video' },
@@ -612,9 +618,10 @@ export const conversations: Record<string, Conversation> = {
     avatar: '/avatars/anthony.png',
     contact: {
       status: 'last seen 1d ago',
-      phone: '+1 202 555 0199',
       username: '@anthony.c',
       bio: 'Creative director.',
+      organization: 'BUBBLESPACE',
+      role: 'Creative Director'
     },
     files: [
       { label: '1 video', icon: 'video' },
@@ -646,9 +653,10 @@ export const conversations: Record<string, Conversation> = {
     avatar: '/avatars/conner.png',
     contact: {
       status: 'last seen 2d ago',
-      phone: '+1 202 555 0166',
       username: '@conner.g',
       bio: 'UX researcher.',
+      organization: 'BUBBLESPACE',
+      role: 'UX Researcher'
     },
     files: [
       { label: '5 videos', icon: 'video' },
@@ -690,9 +698,10 @@ export const conversations: Record<string, Conversation> = {
     avatar: '/avatars/vanessa.png',
     contact: {
       status: 'last seen 2d ago',
-      phone: '+1 202 555 0121',
       username: '@vanessa.c',
       bio: 'Content strategist.',
+      organization: 'BUBBLESPACE',
+      role: 'Content Strategist'
     },
     files: [
       { label: '2 videos', icon: 'video' },

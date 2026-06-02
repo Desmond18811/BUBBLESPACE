@@ -1,6 +1,6 @@
 // removed 'use client' for Vite
 
-const Image = (props: any) => <img {...props} />
+
 import {
   MessageSquare,
   Phone,
@@ -42,34 +42,31 @@ import {
   Moon,
   Sun,
   Settings,
+  Search,
+  Loader2,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { useDashboard } from '@/contexts/DashboardContext'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
-import { updateProfile, uploadAvatar, uploadBackground } from '@/lib/api'
+import { ChatAvatar } from '@/components/chat/chat-avatar'
+import { updateProfile, uploadAvatar, uploadBackground, searchUsers, getMyContacts, addContact, getSuggestions, removeContact as removeContactApi, blockUser } from '@/lib/api'
 import { toast } from 'sonner'
 import {
-  friends,
-  archivedChats,
   profile,
   type Friend,
 } from '@/lib/chat-data'
+import { fetchAllUserChats, fetchCallLogs } from '@/lib/api'
 
-function ViewHeader({
-  title,
-  subtitle,
-  action,
-}: {
-  title: string
-  subtitle: string
-  action?: React.ReactNode
-}) {
+// Next.js Image polyfill for Vite
+const Image = ({ src, alt, className, ...rest }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string; alt?: string; width?: number; height?: number }) => <img src={src} alt={alt} className={className} {...rest} />
+
+function ViewHeader({ title, subtitle, action, isNarrow = false }: { title: string, subtitle?: string, action?: React.ReactNode, isNarrow?: boolean }) {
   return (
-    <header className="flex items-center justify-between border-b border-black/5 px-4 py-4 sm:px-6">
-      <div>
-        <h1 className="text-[20px] font-bold leading-tight text-ink sm:text-[22px]">
-          {title}
-        </h1>
-        <p className="mt-0.5 text-[12px] text-ink-soft">{subtitle}</p>
+    <header className="flex h-16 shrink-0 items-center justify-between border-b border-black/5 bg-white/50 px-6 backdrop-blur-xl">
+      <div className="min-w-0">
+        <h1 className="truncate text-lg font-bold text-ink">{title}</h1>
+        {subtitle && !isNarrow && <p className="truncate text-[11px] font-medium text-ink-soft">{subtitle}</p>}
       </div>
       {action}
     </header>
@@ -195,35 +192,293 @@ function CallOverlay({
   )
 }
 
-export function FriendsView() {
+export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
+  const [contacts, setContacts] = useState<any[]>([])
+  const [suggestions, setSuggestions] = useState<any[]>([])
+  const [loadingContacts, setLoadingContacts] = useState(true)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [addIdentifier, setAddIdentifier] = useState('')
+  const [addLoading, setAddLoading] = useState(false)
+  const [search, setSearch] = useState('')
   const [activeCall, setActiveCall] = useState<{
-    friend: Friend
+    friend: any
     type: 'voice' | 'video'
   } | null>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoadingContacts(true)
+        const [contactsRes, suggestRes] = await Promise.all([
+          getMyContacts().catch(() => ({ data: [] })),
+          getSuggestions().catch(() => ({ data: [], users: [] })),
+        ])
+        setContacts(contactsRes?.data || [])
+        setSuggestions(suggestRes?.data || suggestRes?.users || [])
+      } finally {
+        setLoadingContacts(false)
+      }
+    }
+    load()
+  }, [])
+
+  const handleAddFriend = async () => {
+    if (!addIdentifier.trim()) return
+    setAddLoading(true)
+    try {
+      const res = await addContact(addIdentifier.trim())
+      const newContact = res?.data || res
+      setContacts(prev => [...prev, newContact])
+      setAddIdentifier('')
+      setShowAddModal(false)
+      toast.success('Contact added!')
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not add contact')
+    } finally {
+      setAddLoading(false)
+    }
+  }
+
+  const handleRemove = async (userId: string) => {
+    try {
+      await removeContactApi(userId)
+      setContacts(prev => prev.filter(c => (c._id || c.id) !== userId))
+      toast.success('Contact removed')
+    } catch {
+      toast.error('Could not remove contact')
+    }
+  }
+
+  const handleBlock = async (userId: string) => {
+    try {
+      await blockUser(userId)
+      setContacts(prev => prev.filter(c => (c._id || c.id) !== userId))
+      toast.success('User blocked')
+    } catch {
+      toast.error('Could not block user')
+    }
+  }
+
+  const filtered = contacts.filter(c =>
+    (c.full_name || c.username || '').toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <div className="flex h-full flex-col bg-white">
       <ViewHeader
-        title="Friends"
-        subtitle={`${friends.length} active connections`}
+        title="Contacts"
+        subtitle={`${contacts.length} connection${contacts.length !== 1 ? 's' : ''}`}
         action={
-          <button
-            type="button"
-            className="flex items-center gap-2 rounded-xl bg-purple px-4 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
-          >
-            <UserPlus className="size-4" />
-            <span className="hidden sm:inline">Add Friend</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="relative hidden sm:block">
+              <input
+                type="text"
+                placeholder="Search contacts..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="h-9 w-48 rounded-xl border border-black/5 bg-black/2 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-purple/30"
+              />
+              <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-black/30" />
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 rounded-xl bg-purple px-4 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+            >
+              <UserPlus className="size-4" />
+              <span className="hidden sm:inline">Add Friend</span>
+            </button>
+          </div>
         }
       />
-      <div className="grid auto-rows-min grid-cols-2 gap-3 overflow-y-auto p-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
-        {friends.map((f) => (
-          <FriendCard
-            key={f.name}
-            friend={f}
-            onCall={(type) => setActiveCall({ friend: f, type })}
-          />
-        ))}
+
+      {/* Add Friend Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl shadow-black/20 mx-4">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-bold text-black">Add a Contact</h2>
+                <p className="text-sm text-black/40 mt-0.5">Enter their unique ID or username</p>
+              </div>
+              <button onClick={() => setShowAddModal(false)} className="flex size-8 items-center justify-center rounded-xl bg-black/5 hover:bg-black/10 transition-colors">
+                <X className="size-4 text-black/50" />
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="e.g. bubble-A3F9X7K2 or @username"
+              value={addIdentifier}
+              onChange={e => setAddIdentifier(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAddFriend()}
+              className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple/30 mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 rounded-xl border border-black/10 py-2.5 text-sm font-semibold text-black/60 hover:bg-black/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddFriend}
+                disabled={addLoading || !addIdentifier.trim()}
+                className="flex-1 rounded-xl bg-purple py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {addLoading ? 'Adding…' : 'Add Contact'}
+              </button>
+            </div>
+
+            {/* Quick suggestions */}
+            {suggestions.length > 0 && (
+              <div className="mt-5">
+                <p className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-3">People you may know</p>
+                <div className="space-y-2">
+                  {suggestions.slice(0, 4).map(s => (
+                    <div key={s._id || s.id} className="flex items-center gap-3 rounded-xl p-2 hover:bg-black/3 transition-colors">
+                      <ChatAvatar src={s.avatar} name={s.full_name || s.username} className="size-9 rounded-xl" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-black truncate">{s.full_name}</p>
+                        <p className="text-xs text-black/40 truncate">@{s.username}</p>
+                      </div>
+                      <button
+                        onClick={() => { setAddIdentifier(s.uniqueTag || s.username); }}
+                        className="shrink-0 rounded-lg bg-purple/10 px-2.5 py-1 text-xs font-semibold text-purple hover:bg-purple/20 transition-colors"
+                      >
+                        Select
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Contacts Grid */}
+      <div className={cn("flex-1 overflow-y-auto", isNarrow ? "p-3" : "p-4 sm:p-6")}>
+        {loadingContacts ? (
+          <div className={cn("grid gap-3", isNarrow ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5")}>
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="flex flex-col items-center gap-2 rounded-2xl bg-black/3 p-4 animate-pulse">
+                <div className="size-14 rounded-2xl bg-black/5" />
+                <div className="h-3 w-16 rounded-full bg-black/5" />
+                <div className="h-2.5 w-12 rounded-full bg-black/5" />
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-center">
+            <Users className="size-12 text-black/10 mb-3" />
+            <p className="text-sm text-black/40">No contacts yet</p>
+            <button onClick={() => setShowAddModal(true)} className="mt-3 text-sm font-semibold text-purple hover:underline">
+              Add your first contact →
+            </button>
+          </div>
+        ) : (
+          <div className={cn("grid gap-3", isNarrow ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5")}>
+            {filtered.map(contact => {
+              const cid = contact._id || contact.id
+              return (
+                <div
+                  key={cid}
+                  className={cn(
+                    "group relative flex border border-black/5 transition-all hover:border-purple/20 hover:shadow-lg hover:shadow-purple/5",
+                    isNarrow
+                      ? "flex-row items-center gap-3 rounded-2xl p-3 text-left"
+                      : "flex-col items-center gap-2 rounded-2xl p-4 text-center"
+                  )}
+                >
+                  <div className="relative">
+                    <ChatAvatar src={contact.avatar} name={contact.full_name || contact.username} className="size-14 rounded-2xl shadow-md" />
+                    {contact.isOnline && (
+                      <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
+                    )}
+                  </div>
+                  <div className={cn("min-w-0 flex-1", isNarrow ? "text-left" : "text-center")}>
+                    <p className={cn("truncate font-bold text-ink", isNarrow ? "text-sm" : "text-[13px]")}>
+                      {contact.full_name || contact.username}
+                    </p>
+                    <p className="truncate text-[10px] text-black/40">
+                      {isNarrow ? (contact.isOnline ? "Online" : "Away") : (contact.org_role || contact.status_message || '@' + (contact.username || ''))}
+                    </p>
+                  </div>
+
+                  {!isNarrow ? (
+                    <div className="flex items-center gap-1.5 w-full">
+                      <button
+                        onClick={() => onMessage?.(contact)}
+                        className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-purple/10 py-1.5 text-[11px] font-semibold text-purple hover:bg-purple hover:text-white transition-all"
+                      >
+                        <MessageSquare className="size-3" /> Chat
+                      </button>
+                      <button
+                        className="flex size-7 items-center justify-center rounded-lg border border-black/5 text-black/30 hover:text-purple hover:border-purple/20 transition-all"
+                        onClick={() => setActiveCall({ friend: contact, type: 'voice' })}
+                      >
+                        <Phone className="size-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => onMessage?.(contact)}
+                      className="absolute inset-0 z-10"
+                    />
+                  )}
+
+                  {/* Dropdown on hover */}
+                  <div className="absolute top-2 right-2 hidden group-hover:block">
+                    <div className="relative">
+                      <button className="flex size-6 items-center justify-center rounded-lg bg-white shadow-sm border border-black/5 text-black/30">
+                        <MoreVertical className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Quick remove/block in hover state */}
+                  <div className="absolute inset-0 rounded-2xl overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <div className="absolute bottom-0 inset-x-0 bg-linear-to-t from-white/90 via-white/50 to-transparent pt-6 pb-2 px-2 pointer-events-auto">
+                      <div className="flex gap-1 justify-center">
+                        <button onClick={() => handleRemove(cid)} className="rounded-lg bg-black/5 px-2 py-1 text-[10px] text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
+                          Remove
+                        </button>
+                        <button onClick={() => handleBlock(cid)} className="rounded-lg bg-black/5 px-2 py-1 text-[10px] text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
+                          Block
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Suggestions section */}
+        {suggestions.length > 0 && filtered.length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-sm font-semibold text-black/40 uppercase tracking-wider mb-4">People You May Know</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {suggestions.slice(0, 6).map(s => (
+                <div key={s._id || s.id} className="flex items-center gap-3 rounded-2xl border border-black/5 p-3 hover:border-purple/20 hover:shadow-sm transition-all">
+                  <ChatAvatar src={s.avatar} name={s.full_name || s.username} className="size-11 rounded-xl shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-black truncate">{s.full_name}</p>
+                    <p className="text-xs text-black/40">@{s.username}</p>
+                  </div>
+                  <button
+                    onClick={() => { setAddIdentifier(s.uniqueTag || s.username); setShowAddModal(true) }}
+                    className="shrink-0 flex size-8 items-center justify-center rounded-xl bg-purple/10 text-purple hover:bg-purple hover:text-white transition-all"
+                  >
+                    <UserPlus className="size-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {activeCall && (
@@ -246,12 +501,16 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
     type: null
   })
 
-  const activeRooms = [
-    { id: 1, title: 'Product Designers', members: 12, callers: ['A', 'B', 'C'], active: true },
-    { id: 2, title: 'Engineering Sync', members: 8, callers: ['X', 'Y'], active: true },
-    { id: 3, title: 'Marketing Weekly', members: 15, callers: ['M', 'N', 'O'], active: false },
-    { id: 4, title: 'General Hangout', members: 32, callers: ['P', 'Q'], active: false },
-  ]
+  // Fetch real call logs
+  const { data: callLogsData, isLoading } = useQuery({
+    queryKey: ['callLogs'],
+    queryFn: async () => {
+      const res = await fetchCallLogs()
+      return res.data || []
+    }
+  })
+
+  const activeRooms = callLogsData || []
 
   const handleSourceSelect = (src: 'group' | 'contacts') => {
     setMeetingConfig({ source: src, type: null })
@@ -278,49 +537,96 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
         }
       />
 
-      <div className="grid flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-3">
-        {activeRooms.map(room => (
-          <div key={room.id} className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] bg-purple-soft/40 p-5 transition-all hover:bg-purple-soft/70 hover:shadow-xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-[16px] font-bold text-ink">{room.title}</h3>
-                <p className="text-[11px] text-ink-soft">{room.members} members</p>
-              </div>
-              {room.active && (
-                <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-bold text-emerald-600 ring-1 ring-emerald-500/20 animate-pulse">
-                  <span className="size-1.5 rounded-full bg-emerald-500" />
-                  LIVE
-                </span>
-              )}
-            </div>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8">
+        {/* Active Rooms */}
+        <section>
+          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-black/30 px-2">Live Meetings</h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {activeRooms.map((room: any) => (
+              <div key={room.id} className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] bg-purple-soft/40 p-5 transition-all hover:bg-purple-soft/70 hover:shadow-xl">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-[16px] font-bold text-ink">{room.title}</h3>
+                    <p className="text-[11px] text-ink-soft">{room.members} members</p>
+                  </div>
+                  {room.active && (
+                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-100/50 px-2.5 py-1 text-[9px] font-bold text-emerald-600 ring-1 ring-emerald-500/20">
+                      <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      LIVE
+                    </span>
+                  )}
+                </div>
 
-            <div className="mt-6 flex items-end justify-between">
-              <div className="flex -space-x-3">
-                {room.callers.map((c, i) => (
-                  <div key={i} className="flex size-9 items-center justify-center rounded-full border-2 border-white bg-purple text-[11px] font-bold text-white shadow-sm">
-                    {c}
+                <div className="mt-6 flex items-end justify-between">
+                  <div className="flex -space-x-3">
+                    {room.callers?.map((c: string, i: number) => (
+                      <div key={i} className="flex size-9 items-center justify-center rounded-full border-2 border-white bg-purple text-[11px] font-bold text-white shadow-sm shrink-0">
+                        {c}
+                      </div>
+                    ))}
+                    {room.members > (room.callers?.length || 0) && (
+                      <div className="flex size-9 items-center justify-center rounded-full border-2 border-white bg-white text-[11px] font-bold text-purple shadow-sm shrink-0">
+                        +{room.members - (room.callers?.length || 0)}
+                      </div>
+                    )}
                   </div>
-                ))}
-                {room.members > room.callers.length && (
-                  <div className="flex size-9 items-center justify-center rounded-full border-2 border-white bg-white text-[11px] font-bold text-purple shadow-sm">
-                    +{room.members - room.callers.length}
-                  </div>
-                )}
+                  <button
+                    onClick={() => room.active ? onStartMeeting() : toast.error('Room is currently inactive')}
+                    className="flex size-11 items-center justify-center rounded-2xl bg-purple text-white shadow-lg shadow-purple/20 transition-transform hover:scale-110 active:scale-95"
+                  >
+                    {room.active ? <Video className="size-4" /> : <Phone className="size-4" />}
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={() => room.active ? onStartMeeting() : alert('Room is currently inactive')}
-                className="flex size-11 items-center justify-center rounded-2xl bg-purple text-white shadow-lg transition-transform hover:scale-110 active:scale-95"
-              >
-                {room.active ? <Video className="size-4" /> : <Phone className="size-4" />}
-              </button>
-            </div>
+            ))}
           </div>
-        ))}
+        </section>
+
+        {/* People in the Office */}
+        <section>
+          <div className="mb-4 flex items-center justify-between px-2">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-black/30">People in the office</h3>
+            <span className="text-[10px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-full">ALL COWORKERS</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {callLogsData?.coworkers?.map((worker: any) => (
+              <div key={worker._id || worker.id} className="group flex flex-col items-center gap-2 rounded-3xl border border-black/5 p-4 text-center transition-all hover:border-purple/30 hover:shadow-lg">
+                <div className="relative shrink-0">
+                  <ChatAvatar
+                    src={worker.avatar}
+                    name={worker.full_name || worker.username}
+                    className="size-14 rounded-2xl shadow-sm"
+                  />
+                  {worker.isOnline && (
+                    <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-green-500" />
+                  )}
+                </div>
+                <div className="min-w-0 w-full">
+                  <p className="truncate text-xs font-bold text-ink">{worker.full_name}</p>
+                  <p className="truncate text-[10px] text-ink-soft uppercase tracking-wider">{worker.org_role || 'Member'}</p>
+                </div>
+                <button
+                  onClick={() => onStartMeeting()}
+                  className="mt-2 flex h-8 w-full items-center justify-center gap-2 rounded-xl bg-purple/10 text-purple transition-all hover:bg-purple hover:text-white"
+                >
+                  <Phone className="size-3" />
+                  <span className="text-[10px] font-bold">Call</span>
+                </button>
+              </div>
+            ))}
+            {(!callLogsData?.coworkers || callLogsData.coworkers.length === 0) && (
+              <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-black/5 rounded-3xl col-span-full">
+                <Users className="size-8 text-black/10 mb-2" />
+                <p className="text-sm text-black/30 font-medium">Connect with your team instantly</p>
+              </div>
+            )}
+          </div>
+        </section>
       </div>
 
       {/* Meeting Selection Dialog */}
       {selectionStep !== 'none' && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectionStep('none')} />
           <div className="relative w-full max-w-sm rounded-[32px] bg-white p-8 shadow-2xl animate-in zoom-in-95 duration-200">
             <button
@@ -396,48 +702,101 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
 
 /* ---------------- Archive ---------------- */
 
-export function ArchiveView() {
+export function ArchiveView({ onMessage: _onMessage }: { onMessage?: (user: any) => void }) {
+  const { user, onMessage } = useDashboard()
+  const myId = user?._id || user?.id
+
+  // Fetch all chats and filter for archived ones
+  const { data: archivedChatsRaw, isLoading } = useQuery({
+    queryKey: ['allChats', 'archived'],
+    queryFn: async () => {
+      const res = await fetchAllUserChats()
+      const chats = res?.conversations || res?.data || []
+      return (chats as any[]).filter(c => c.isArchived)
+    }
+  })
+
+  const getChatName = (chat: any) => {
+    if (chat.isGroupChat) return chat.chatName || 'Group Chat'
+    const other = chat.users?.find((u: any) => (u._id || u.id) !== myId)
+    return other?.full_name || other?.username || chat.chatName || 'Unknown'
+  }
+
+  const archivedChats = [...(archivedChatsRaw || [])].sort((a, b) =>
+    getChatName(a).localeCompare(getChatName(b))
+  )
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full flex-col bg-white">
+        <ViewHeader title="Archive" subtitle="Loading..." />
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-purple" />
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex h-full flex-col">
-      <ViewHeader
-        title="Archive"
-        subtitle={`${archivedChats.length} saved chats`}
-      />
-      <div className="grid auto-rows-min grid-cols-3 gap-2 overflow-y-auto p-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
-        {archivedChats.map((chat) => (
-          <div
-            key={chat.id}
-            className="group flex flex-col items-center gap-1 rounded-[16px] bg-purple-soft/40 p-2.5 text-center transition-all hover:bg-purple-soft/70 hover:shadow-md hover:-translate-y-0.5"
-          >
-            <div className="relative">
-              <Image
-                src={chat.avatar || '/placeholder.svg'}
-                alt={chat.name}
-                width={44}
-                height={44}
-                className="size-11 rounded-[13px] object-cover shadow-sm"
-              />
+    <div className="flex h-full flex-col bg-white">
+      <div className="flex flex-col items-center justify-center border-b border-black/5 bg-white/50 px-6 py-8 backdrop-blur-xl text-center">
+        <h1 className="text-2xl font-bold text-ink">{archivedChats.length === 0 ? "Archive" : "Conversation History"}</h1>
+        <p className="mt-1 text-sm font-medium text-ink-soft">
+          {archivedChats.length === 0
+            ? "Your message history is safe here"
+            : `${archivedChats.length} saved chat${archivedChats.length !== 1 ? 's' : ''} found`}
+        </p>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-2 sm:px-6">
+        {archivedChats.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="size-16 rounded-[24px] bg-purple-soft/50 flex items-center justify-center mb-4">
+              <Archive className="size-8 text-purple/40" />
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-[11.5px] font-bold text-ink leading-tight">
-                {chat.name}
-              </p>
-            </div>
-            <div className="flex items-center gap-1 opacity-0 transition-all duration-300 group-hover:opacity-100">
-              <button
-                type="button"
-                aria-label="Restore chat"
-                className="flex size-5 shrink-0 items-center justify-center rounded-md bg-white text-purple shadow-sm hover:scale-110 active:scale-95"
-              >
-                <ArchiveRestore className="size-2.5" />
-              </button>
-            </div>
+            <p className="text-base font-bold text-ink">Your archive is empty</p>
+            <p className="text-sm text-ink-soft mt-1">Archived conversations will appear here.</p>
           </div>
-        ))}
+        ) : (
+          <div className="mt-4 divide-y divide-black/5">
+            {archivedChats.map((chat: any) => {
+              const name = getChatName(chat)
+              const other = !chat.isGroupChat ? chat.users?.find((u: any) => (u._id || u.id) !== myId) : null
+              const avatar = chat.isGroupChat ? chat.groupIcon : other?.avatar
+
+              return (
+                <div
+                  key={chat._id || chat.id}
+                  className="group flex items-center gap-4 py-4 transition-all"
+                >
+                  <div className="relative">
+                    <ChatAvatar src={avatar} name={name} className="size-14 rounded-2xl shadow-sm" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-base font-bold text-ink">{name}</p>
+                      {chat.isGroupChat && <span className="bg-purple/10 text-purple text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">Group</span>}
+                    </div>
+                    <p className="truncate text-sm text-ink-soft mt-0.5">
+                      {chat.latestMessage?.content ? `"${chat.latestMessage.content}"` : 'No messages'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onMessage?.({ _id: chat._id || chat.id, full_name: name, avatar: avatar })}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-purple/10 px-4 py-2 text-[13px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
+                  >
+                    <ArchiveRestore className="size-4" />
+                    <span>Restore</span>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
 }
+
 
 /* ---------------- Profile ---------------- */
 
@@ -1160,4 +1519,114 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
       </div>
     </div>
   );
+}
+/* ---------------- Work (Coworkers) ---------------- */
+
+export function WorkView({ onMessage, isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
+  const [coworkers, setCoworkers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    const fetchCoworkers = async () => {
+      try {
+        setLoading(true)
+        const res = await searchUsers(search)
+        setCoworkers(res.users || [])
+      } catch (err) {
+        console.error('Failed to fetch coworkers:', err)
+        toast.error('Failed to load coworkers')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchCoworkers()
+  }, [search])
+
+  return (
+    <div className="flex h-full flex-col bg-white">
+      <ViewHeader
+        title="Workroom"
+        subtitle="Everyone in your organization"
+        action={
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search coworkers..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 w-64 rounded-xl border border-black/5 bg-black/2 pl-9 pr-4 text-sm focus:border-purple/20 focus:bg-white focus:outline-none focus:ring-0"
+            />
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/40" />
+          </div>
+        }
+      />
+
+      <div className={cn("flex-1 overflow-y-auto", isNarrow ? "p-3" : "p-6")}>
+        {loading ? (
+          <div className={cn("grid gap-4", isNarrow ? "grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3")}>
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="flex flex-col items-center rounded-2xl border border-black/5 p-6 animate-pulse">
+                <div className="size-20 rounded-2xl bg-black/5 mb-4" />
+                <div className="h-4 w-24 bg-black/5 rounded-full mb-2" />
+                <div className="h-3 w-16 bg-black/5 rounded-full" />
+              </div>
+            ))}
+          </div>
+        ) : coworkers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Users className="mb-3 size-12 text-black/10" />
+            <p className="text-sm font-medium text-black/40">No coworkers found</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {coworkers.map((worker) => (
+              <div
+                key={worker._id || worker.id}
+                className="group flex items-center gap-4 rounded-[22px] border border-black/5 bg-white p-3 transition-all hover:border-purple/30 hover:shadow-md"
+              >
+                <div className="relative shrink-0">
+                  <ChatAvatar
+                    src={worker.avatar}
+                    name={worker.full_name || worker.username}
+                    className="size-12 rounded-xl shadow-sm"
+                  />
+                  {worker.isOnline && (
+                    <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-green-500" />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-ink truncate max-w-[200px]">
+                      {worker.full_name}
+                    </h3>
+                    <span className="text-[10px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      {worker.org_role || 'Member'}
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-ink-soft truncate">
+                    @{worker.username} {worker.status_message && `• "${worker.status_message}"`}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => onMessage?.(worker)}
+                    className="flex h-9 items-center gap-2 rounded-xl bg-purple px-4 text-xs font-bold text-white transition-all hover:opacity-90 active:scale-95"
+                  >
+                    <MessageCircle className="size-3.5" />
+                    Message
+                  </button>
+                  <button className="flex size-9 items-center justify-center rounded-xl border border-black/5 text-black/40 transition-all hover:border-purple/30 hover:text-purple">
+                    <Phone className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }

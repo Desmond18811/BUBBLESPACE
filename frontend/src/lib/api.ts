@@ -130,6 +130,13 @@ export const getContacts = async (searchQuery = '') => {
     return handleResponse(res);
 };
 
+export const getMyContacts = async () => {
+    const res = await fetch(`${BASE_URL}/user/contacts/my`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
 export const addContact = async (identifier: string) => {
     const res = await fetch(`${BASE_URL}/user/contacts/add`, {
         method: 'POST',
@@ -378,6 +385,38 @@ export const toggleMessagePin = async (messageId: string) => {
     return handleResponse(res);
 };
 
+export const deleteChat = async (chatId: string) => {
+    const res = await fetch(`${BASE_URL}/chat/${chatId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const removeContact = async (userId: string) => {
+    const res = await fetch(`${BASE_URL}/user/contacts/${userId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const getSuggestions = async () => {
+    const res = await fetch(`${BASE_URL}/user/suggestions`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const getAidaWritingSuggestions = async (message: string, conversationId: string) => {
+    const res = await fetch(`${BASE_URL}/aida/writing-suggestions`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ message, conversationId }),
+    });
+    return handleResponse(res);
+};
+
 // ─── Stories ──────────────────────────────────────────────────────────────────
 
 export const fetchStories = async () => {
@@ -430,15 +469,7 @@ export const getPublicKey = async (userId: string) => {
     return handleResponse(res);
 };
 
-// ─── Chat Deletion ────────────────────────────────────────────────────────────
 
-export const deleteChat = async (chatId: string) => {
-    const res = await fetch(`${BASE_URL}/chat/${chatId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-    });
-    return handleResponse(res);
-};
 
 // ─── Workspace Files ──────────────────────────────────────────────────────────
 

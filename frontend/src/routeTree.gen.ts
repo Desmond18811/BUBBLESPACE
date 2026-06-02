@@ -9,6 +9,16 @@ import { Route as VerifyOtpImport } from './routes/verify-otp'
 import { Route as GoogleCallbackImport } from './routes/google-callback'
 import { Route as NotFoundImport } from './routes/404'
 
+// Dashboard sub-routes
+import { Route as DashboardIndexImport } from './routes/dashboard/index'
+import { Route as DashboardAllImport } from './routes/dashboard/all'
+import { Route as DashboardWorkImport } from './routes/dashboard/work'
+import { Route as DashboardFriendsImport } from './routes/dashboard/friends'
+import { Route as DashboardCallsImport } from './routes/dashboard/calls'
+import { Route as DashboardArchiveImport } from './routes/dashboard/archive'
+import { Route as DashboardProfileImport } from './routes/dashboard/profile'
+import { Route as DashboardEditProfileImport } from './routes/dashboard/edit-profile'
+
 const IndexRoute = IndexImport.update({
     path: '/',
     getParentRoute: () => rootRoute,
@@ -21,11 +31,6 @@ const LoginRoute = LoginImport.update({
 
 const SignupRoute = SignupImport.update({
     path: '/signup',
-    getParentRoute: () => rootRoute,
-} as any)
-
-const DashboardRoute = DashboardImport.update({
-    path: '/dashboard',
     getParentRoute: () => rootRoute,
 } as any)
 
@@ -53,6 +58,61 @@ const NotFoundRoute = NotFoundImport.update({
     path: '/404',
     getParentRoute: () => rootRoute,
 } as any)
+
+// Dashboard and children
+const DashboardIndexRoute = DashboardIndexImport.update({
+    path: '/',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
+const DashboardAllRoute = DashboardAllImport.update({
+    path: '/all',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
+const DashboardWorkRoute = DashboardWorkImport.update({
+    path: '/work',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
+const DashboardFriendsRoute = DashboardFriendsImport.update({
+    path: '/friends',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
+const DashboardCallsRoute = DashboardCallsImport.update({
+    path: '/calls',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
+const DashboardArchiveRoute = DashboardArchiveImport.update({
+    path: '/archive',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
+const DashboardProfileRoute = DashboardProfileImport.update({
+    path: '/profile',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
+const DashboardEditProfileRoute = DashboardEditProfileImport.update({
+    path: '/edit-profile',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
+const DashboardRoute = DashboardImport.update({
+    path: '/dashboard',
+    getParentRoute: () => rootRoute,
+} as any).addChildren([
+    DashboardIndexRoute,
+    DashboardAllRoute,
+    DashboardWorkRoute,
+    DashboardFriendsRoute,
+    DashboardCallsRoute,
+    DashboardArchiveRoute,
+    DashboardProfileRoute,
+    DashboardEditProfileRoute,
+])
 
 export const routeTree = rootRoute.addChildren([
     IndexRoute,

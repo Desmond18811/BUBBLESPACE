@@ -1,0 +1,465 @@
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { X, Send, Paperclip, Smile, Phone, Video, MoreVertical, Check, CheckCheck, Edit2, Trash2, Copy, Pin, MoreHorizontal } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ChatAvatar } from '@/components/chat/chat-avatar'
+import {
+    accessOrCreateChat,
+    fetchMessages,
+    sendTextMessage,
+    updateMessage,
+    deleteMessageForMe,
+    deleteMessageForEveryone,
+    reactToMessage,
+    markMessagesRead,
+} from '@/lib/api'
+import { getSocket } from '@/lib/socket'
+import { toast } from 'sonner'
+
+const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
+
+interface MessageOverlayProps {
+    user: any            // the logged-in user
+    targetUser: any      // the user we are messaging
+    onClose: () => void
+    workCardInfo?: boolean  // show work profile card on right side
+}
+
+interface Msg {
+    _id: string
+    content: string
+    sender: any
+    createdAt: string
+    message_type: string
+    isDeleted?: boolean
+    isEdited?: boolean
+    reactions?: { emoji: string; users: string[] }[]
+    readBy?: string[]
+}
+
+export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false }: MessageOverlayProps) {
+    const [chatId, setChatId] = useState<string | null>(null)
+    const [messages, setMessages] = useState<Msg[]>([])
+    const [loading, setLoading] = useState(true)
+    const [sending, setSending] = useState(false)
+    const [input, setInput] = useState('')
+    const [editingId, setEditingId] = useState<string | null>(null)
+    const [editText, setEditText] = useState('')
+    const [contextMenu, setContextMenu] = useState<{ msgId: string; x: number; y: number } | null>(null)
+    const [reactionPicker, setReactionPicker] = useState<string | null>(null)
+    const [typing, setTyping] = useState(false)
+    const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const bottomRef = useRef<HTMLDivElement>(null)
+    const socket = getSocket()
+    const myId = user?._id || user?.id
+
+    // Open or create the DM chat
+    useEffect(() => {
+        const init = async () => {
+            try {
+                const res = await accessOrCreateChat(targetUser._id || targetUser.id)
+                const cid = res?.conversation?._id || res?.conversation?.id || res?._id
+                setChatId(cid)
+                const msgs = await fetchMessages(cid)
+                setMessages(msgs?.messages || msgs?.data || [])
+                await markMessagesRead(cid)
+                socket?.emit('join_room', cid)
+            } catch (err: any) {
+                toast.error('Could not open chat')
+                console.error(err)
+            } finally {
+                setLoading(false)
+            }
+        }
+        init()
+        return () => {
+            if (chatId) socket?.emit('leave_room', chatId)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [targetUser])
+
+    // Scroll to bottom
+    useEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [messages])
+
+    // Listen for socket events
+    useEffect(() => {
+        if (!socket || !chatId) return
+        const onNewMsg = (msg: any) => {
+            const m = msg?.data || msg
+            if ((m?.chatId || m?.chat) === chatId || m?.chatId?._id === chatId) {
+                setMessages(prev => {
+                    if (prev.find(p => p._id === m._id)) return prev
+                    return [...prev, m]
+                })
+                markMessagesRead(chatId)
+            }
+        }
+        const onMsgUpdated = (msg: any) => {
+            const m = msg?.data || msg
+            setMessages(prev => prev.map(p => p._id === m._id ? { ...p, ...m } : p))
+        }
+        const onMsgDeleted = ({ messageId }: any) => {
+            setMessages(prev => prev.map(p => p._id === messageId ? { ...p, isDeleted: true, content: 'This message was deleted' } : p))
+        }
+        const onTypingStart = ({ fromUserId }: any) => {
+            if (fromUserId !== myId) setTyping(true)
+        }
+        const onTypingStop = ({ fromUserId }: any) => {
+            if (fromUserId !== myId) setTyping(false)
+        }
+
+        socket.on('new_message', onNewMsg)
+        socket.on('message_updated', onMsgUpdated)
+        socket.on('message_deleted', onMsgDeleted)
+        socket.on('typing_start', onTypingStart)
+        socket.on('typing_stop', onTypingStop)
+
+        return () => {
+            socket.off('new_message', onNewMsg)
+            socket.off('message_updated', onMsgUpdated)
+            socket.off('message_deleted', onMsgDeleted)
+            socket.off('typing_start', onTypingStart)
+            socket.off('typing_stop', onTypingStop)
+        }
+    }, [socket, chatId, myId])
+
+    const handleInputChange = (val: string) => {
+        setInput(val)
+        if (!chatId) return
+        socket?.emit('typing_start', { toUserId: targetUser._id || targetUser.id, chatId })
+        if (typingTimer.current) clearTimeout(typingTimer.current)
+        typingTimer.current = setTimeout(() => {
+            socket?.emit('typing_stop', { toUserId: targetUser._id || targetUser.id, chatId })
+        }, 2000)
+    }
+
+    const handleSend = useCallback(async () => {
+        if (!input.trim() || !chatId || sending) return
+        setSending(true)
+        const tempId = `temp-${Date.now()}`
+        const optimistic: Msg = {
+            _id: tempId,
+            content: input,
+            sender: { _id: myId, full_name: user?.full_name, avatar: user?.avatar },
+            createdAt: new Date().toISOString(),
+            message_type: 'text',
+        }
+        setMessages(prev => [...prev, optimistic])
+        setInput('')
+        socket?.emit('typing_stop', { toUserId: targetUser._id || targetUser.id, chatId })
+        try {
+            const res = await sendTextMessage(chatId, input)
+            const sent = res?.data || res
+            setMessages(prev => prev.map(m => m._id === tempId ? { ...m, ...sent, _id: sent._id || tempId } : m))
+        } catch (err) {
+            toast.error('Failed to send message')
+            setMessages(prev => prev.filter(m => m._id !== tempId))
+        } finally {
+            setSending(false)
+        }
+    }, [input, chatId, sending, socket, targetUser, myId, user])
+
+    const handleEdit = async (msgId: string) => {
+        if (!editText.trim()) return
+        try {
+            const res = await updateMessage(msgId, editText)
+            const updated = res?.data || res
+            setMessages(prev => prev.map(m => m._id === msgId ? { ...m, ...updated } : m))
+            setEditingId(null)
+        } catch {
+            toast.error('Could not edit message')
+        }
+    }
+
+    const handleDelete = async (msgId: string, forEveryone: boolean) => {
+        setContextMenu(null)
+        try {
+            if (forEveryone) {
+                await deleteMessageForEveryone(msgId)
+                setMessages(prev => prev.map(m => m._id === msgId ? { ...m, isDeleted: true, content: 'This message was deleted' } : m))
+            } else {
+                await deleteMessageForMe(msgId)
+                setMessages(prev => prev.filter(m => m._id !== msgId))
+            }
+        } catch {
+            toast.error('Could not delete message')
+        }
+    }
+
+    const handleReact = async (msgId: string, emoji: string) => {
+        setReactionPicker(null)
+        try {
+            await reactToMessage(msgId, emoji)
+        } catch {
+            toast.error('Could not react')
+        }
+    }
+
+    const isOwn = (msg: Msg) => {
+        const senderId = msg.sender?._id || msg.sender?.id || msg.sender
+        return String(senderId) === String(myId)
+    }
+
+    const canDeleteForAll = (msg: Msg) => {
+        const ms = Date.now() - new Date(msg.createdAt).getTime()
+        return isOwn(msg) && ms < 2 * 60 * 1000
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-end pointer-events-none">
+            {/* Backdrop blur */}
+            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm pointer-events-auto" onClick={onClose} />
+
+            {/* Panel */}
+            <div className="relative pointer-events-auto flex h-[85vh] w-full max-w-[900px] overflow-hidden rounded-t-3xl bg-white shadow-2xl shadow-black/20 mx-auto md:mx-6 md:mb-6 md:rounded-3xl md:h-[78vh]"
+                onClick={e => { setContextMenu(null); setReactionPicker(null); e.stopPropagation() }}
+            >
+                {/* Chat Column */}
+                <div className="flex flex-1 flex-col min-w-0">
+                    {/* Header */}
+                    <div className="flex items-center gap-3 border-b border-black/5 px-5 py-4">
+                        <div className="relative">
+                            <ChatAvatar
+                                src={targetUser.avatar}
+                                name={targetUser.full_name || targetUser.username}
+                                className="size-10 rounded-xl"
+                            />
+                            {targetUser.isOnline && (
+                                <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
+                            )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-black truncate">{targetUser.full_name || targetUser.username}</p>
+                            <p className="text-xs text-black/40">
+                                {typing ? <span className="text-purple animate-pulse">typing…</span> : targetUser.isOnline ? 'Online' : 'Offline'}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button className="flex size-9 items-center justify-center rounded-xl bg-purple/10 text-purple hover:bg-purple/20 transition-all">
+                                <Phone className="size-4" />
+                            </button>
+                            <button className="flex size-9 items-center justify-center rounded-xl bg-purple/10 text-purple hover:bg-purple/20 transition-all">
+                                <Video className="size-4" />
+                            </button>
+                            <button onClick={onClose} className="flex size-9 items-center justify-center rounded-xl bg-black/5 text-black/50 hover:bg-black/10 transition-all">
+                                <X className="size-4" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Messages */}
+                    <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+                        {loading ? (
+                            <div className="flex h-full items-center justify-center">
+                                <div className="size-6 animate-spin rounded-full border-2 border-purple border-t-transparent" />
+                            </div>
+                        ) : messages.length === 0 ? (
+                            <div className="flex h-full flex-col items-center justify-center text-center">
+                                <ChatAvatar src={targetUser.avatar} name={targetUser.full_name || targetUser.username} className="size-16 mb-3 rounded-2xl" />
+                                <p className="font-semibold text-black">{targetUser.full_name || targetUser.username}</p>
+                                <p className="text-sm text-black/40 mt-1">Start the conversation!</p>
+                            </div>
+                        ) : (
+                            messages.map(msg => {
+                                const own = isOwn(msg)
+                                return (
+                                    <div key={msg._id} className={cn("flex gap-2 group", own ? "justify-end" : "justify-start")}>
+                                        {!own && (
+                                            <ChatAvatar src={msg.sender?.avatar} name={msg.sender?.full_name || msg.sender?.username || 'User'} className="size-7 rounded-lg mt-1 shrink-0" />
+                                        )}
+                                        <div className={cn("relative max-w-[70%]")}>
+                                            {editingId === msg._id ? (
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        value={editText}
+                                                        onChange={e => setEditText(e.target.value)}
+                                                        onKeyDown={e => e.key === 'Enter' && handleEdit(msg._id)}
+                                                        className="rounded-xl border border-purple/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple/50"
+                                                        autoFocus
+                                                    />
+                                                    <button onClick={() => handleEdit(msg._id)} className="rounded-xl bg-purple px-3 py-2 text-xs text-white">Save</button>
+                                                    <button onClick={() => setEditingId(null)} className="rounded-xl bg-black/5 px-3 py-2 text-xs">Cancel</button>
+                                                </div>
+                                            ) : (
+                                                <div
+                                                    className={cn(
+                                                        "relative px-4 py-2.5 rounded-2xl text-sm leading-relaxed cursor-default select-text",
+                                                        own
+                                                            ? "bg-purple text-white rounded-tr-sm"
+                                                            : "bg-black/5 text-black rounded-tl-sm",
+                                                        msg.isDeleted && "opacity-50 italic"
+                                                    )}
+                                                    onContextMenu={e => {
+                                                        e.preventDefault()
+                                                        if (!msg.isDeleted) setContextMenu({ msgId: msg._id, x: e.clientX, y: e.clientY })
+                                                    }}
+                                                >
+                                                    {msg.content}
+                                                    {msg.isEdited && <span className="ml-1 text-xs opacity-50">(edited)</span>}
+
+                                                    {/* Reactions */}
+                                                    {(msg.reactions?.length ?? 0) > 0 && (
+                                                        <div className="mt-1 flex flex-wrap gap-1">
+                                                            {msg.reactions!.map(r => (
+                                                                <span key={r.emoji} className="flex items-center gap-0.5 rounded-full bg-white/10 px-1.5 py-0.5 text-xs">
+                                                                    {r.emoji} {r.users.length}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Quick actions on hover */}
+                                                    {!msg.isDeleted && (
+                                                        <div className={cn(
+                                                            "absolute -top-7 hidden group-hover:flex items-center gap-1 rounded-xl bg-white shadow-lg shadow-black/10 border border-black/5 px-2 py-1",
+                                                            own ? "right-0" : "left-0"
+                                                        )}>
+                                                            {EMOJIS.slice(0, 4).map(e => (
+                                                                <button key={e} onClick={() => handleReact(msg._id, e)} className="hover:scale-125 transition-transform text-base">
+                                                                    {e}
+                                                                </button>
+                                                            ))}
+                                                            <button
+                                                                className="ml-1 flex size-6 items-center justify-center rounded-lg hover:bg-black/5"
+                                                                onClick={ev => { ev.stopPropagation(); setContextMenu({ msgId: msg._id, x: ev.clientX, y: ev.clientY }) }}
+                                                            >
+                                                                <MoreHorizontal className="size-3.5 text-black/50" />
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Timestamp + read */}
+                                            <p className={cn("mt-0.5 text-[10px] text-black/30 flex items-center gap-1", own && "justify-end")}>
+                                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {own && (msg.readBy && msg.readBy.length > 1 ? <CheckCheck className="size-3 text-purple" /> : <Check className="size-3" />)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )
+                            })
+                        )}
+                        {typing && (
+                            <div className="flex gap-2">
+                                <ChatAvatar src={targetUser.avatar} name={targetUser.full_name} className="size-7 rounded-lg" />
+                                <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm bg-black/5 px-4 py-3">
+                                    <span className="size-1.5 animate-bounce rounded-full bg-black/40" style={{ animationDelay: '0ms' }} />
+                                    <span className="size-1.5 animate-bounce rounded-full bg-black/40" style={{ animationDelay: '150ms' }} />
+                                    <span className="size-1.5 animate-bounce rounded-full bg-black/40" style={{ animationDelay: '300ms' }} />
+                                </div>
+                            </div>
+                        )}
+                        <div ref={bottomRef} />
+                    </div>
+
+                    {/* Input */}
+                    <div className="border-t border-black/5 px-4 py-3">
+                        <div className="flex items-center gap-3 rounded-2xl bg-black/3 px-4 py-2.5">
+                            <button className="text-black/40 hover:text-purple transition-colors shrink-0">
+                                <Paperclip className="size-5" />
+                            </button>
+                            <input
+                                className="flex-1 bg-transparent text-sm text-black placeholder:text-black/30 focus:outline-none"
+                                placeholder={`Message ${targetUser.full_name || targetUser.username}…`}
+                                value={input}
+                                onChange={e => handleInputChange(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                            />
+                            <button className="text-black/40 hover:text-purple transition-colors shrink-0">
+                                <Smile className="size-5" />
+                            </button>
+                            <button
+                                onClick={handleSend}
+                                disabled={!input.trim() || sending}
+                                className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-purple text-white transition-all hover:bg-purple/90 disabled:opacity-40"
+                            >
+                                <Send className="size-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Work profile sidebar */}
+                {workCardInfo && (
+                    <div className="hidden lg:flex w-72 flex-col border-l border-black/5 bg-black/1.5 p-6">
+                        <div className="flex flex-col items-center text-center mb-6">
+                            <ChatAvatar src={targetUser.avatar} name={targetUser.full_name || targetUser.username} className="size-20 rounded-2xl mb-4 shadow-xl shadow-black/10" />
+                            <h3 className="font-bold text-lg text-black">{targetUser.full_name}</h3>
+                            <p className="text-sm text-purple font-medium mt-0.5">{targetUser.org_role || targetUser.role || 'Team Member'}</p>
+                            {targetUser.organization && (
+                                <p className="text-xs text-black/40 mt-1">{targetUser.organization}</p>
+                            )}
+                        </div>
+                        {targetUser.bio && (
+                            <div className="mb-4">
+                                <p className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-1">Bio</p>
+                                <p className="text-sm text-black/70 leading-relaxed">{targetUser.bio}</p>
+                            </div>
+                        )}
+                        {targetUser.status_message && (
+                            <div className="rounded-xl bg-purple/5 px-3 py-2.5 text-sm text-black/60 italic">
+                                "{targetUser.status_message}"
+                            </div>
+                        )}
+                        <div className="mt-4 space-y-2">
+                            {targetUser.isOnline !== undefined && (
+                                <div className="flex items-center gap-2 text-sm">
+                                    <div className={cn("size-2 rounded-full", targetUser.isOnline ? "bg-green-500" : "bg-black/20")} />
+                                    <span className="text-black/50">{targetUser.isOnline ? 'Online now' : 'Offline'}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Right-click context menu */}
+            {contextMenu && (
+                <div
+                    className="fixed z-60 w-48 rounded-2xl bg-white shadow-2xl shadow-black/10 border border-black/5 py-1 pointer-events-auto"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                >
+                    {(() => {
+                        const msg = messages.find(m => m._id === contextMenu.msgId)!
+                        const own = msg && isOwn(msg)
+                        return (
+                            <>
+                                <button onClick={() => { navigator.clipboard.writeText(msg?.content || ''); setContextMenu(null) }} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-black hover:bg-black/5 transition-colors">
+                                    <Copy className="size-4 text-black/40" /> Copy
+                                </button>
+                                {own && !msg?.isDeleted && (
+                                    <>
+                                        <button
+                                            onClick={() => { setEditingId(contextMenu.msgId); setEditText(msg?.content || ''); setContextMenu(null) }}
+                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-black hover:bg-black/5 transition-colors"
+                                        >
+                                            <Edit2 className="size-4 text-black/40" /> Edit
+                                        </button>
+                                        {canDeleteForAll(msg!) && (
+                                            <button onClick={() => handleDelete(contextMenu.msgId, true)} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
+                                                <Trash2 className="size-4" /> Delete for Everyone
+                                            </button>
+                                        )}
+                                    </>
+                                )}
+                                <button onClick={() => handleDelete(contextMenu.msgId, false)} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-black/60 hover:bg-black/5 transition-colors">
+                                    <Trash2 className="size-4 text-black/40" /> Delete for Me
+                                </button>
+                                <div className="border-t border-black/5 mt-1 pt-1 px-4 pb-2">
+                                    <p className="text-[10px] text-black/30 mb-1.5">React</p>
+                                    <div className="flex gap-1">
+                                        {EMOJIS.map(e => (
+                                            <button key={e} onClick={() => handleReact(contextMenu.msgId, e)} className="text-base hover:scale-125 transition-transform">{e}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )
+                    })()}
+                </div>
+            )}
+        </div>
+    )
+}

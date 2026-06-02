@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ChatAvatar } from '@/components/chat/chat-avatar'
 
 type NavItem = {
   id: string
@@ -83,16 +84,17 @@ function NavButton({
   )
 }
 
+import { Link } from '@tanstack/react-router'
 import { BubblespaceLogo } from '@/components/logo'
 
 export function NavSidebar({
   activeTab,
-  onSelect,
   onLogout,
+  user,
 }: {
   activeTab: string
-  onSelect: (id: string) => void
   onLogout: () => void
+  user: any
 }) {
   return (
     <nav className="flex w-[88px] shrink-0 flex-col items-center py-6">
@@ -102,23 +104,84 @@ export function NavSidebar({
       </div>
 
       <div className="flex flex-1 flex-col gap-2">
-        {items.map((item) => (
-          <NavButton
-            key={item.id}
-            item={{ ...item, active: item.id === activeTab }}
-            onClick={() => onSelect(item.id)}
-          />
-        ))}
+        {items.map((item) => {
+          const Icon = item.icon
+          const isActive = item.id === activeTab
+          return (
+            <Link
+              key={item.id}
+              to={`/dashboard/${item.id === 'all' ? 'all' : item.id}`}
+              className={cn(
+                'group relative flex w-full flex-col items-center gap-1.5 rounded-2xl px-2 py-3 transition-all duration-300',
+                isActive ? 'bg-white/15 backdrop-blur-md shadow-lg shadow-black/10 border border-white/10' : 'hover:bg-white/5',
+              )}
+            >
+              {/* Side indicator animation */}
+              <span
+                className={cn(
+                  'absolute left-0 top-1/4 h-1/2 w-1 rounded-r-full bg-white transition-all duration-300',
+                  isActive ? 'opacity-100' : 'scale-y-0 opacity-0 group-hover:scale-y-100 group-hover:opacity-50',
+                )}
+              />
+              <span className="relative">
+                <Icon
+                  className={cn(
+                    'size-6',
+                    isActive ? 'text-white' : 'text-white/70',
+                  )}
+                />
+                {item.badge ? (
+                  <span className="absolute -right-2.5 -top-2 flex min-w-[18px] items-center justify-center rounded-full bg-accent-orange px-1 text-[10px] font-semibold leading-[18px] text-white">
+                    {item.badge}
+                  </span>
+                ) : null}
+              </span>
+              <span
+                className={cn(
+                  'text-[11px] font-medium',
+                  isActive ? 'text-white' : 'text-white/60',
+                )}
+              >
+                {item.label}
+              </span>
+            </Link>
+          )
+        })}
 
         <div className="mx-auto my-2 h-px w-8 bg-white/10" />
 
-        {bottomItems.map((item) => (
-          <NavButton
-            key={item.id}
-            item={{ ...item, active: item.id === activeTab }}
-            onClick={() => onSelect(item.id)}
-          />
-        ))}
+        {bottomItems.map((item) => {
+          const Icon = item.icon
+          const isActive = item.id === activeTab
+          return (
+            <Link
+              key={item.id}
+              to={`/dashboard/${item.id === 'edit' ? 'edit-profile' : item.id}`}
+              className={cn(
+                'group relative flex w-full flex-col items-center gap-1.5 rounded-2xl px-2 py-3 transition-all duration-300',
+                isActive ? 'bg-white/15 backdrop-blur-md shadow-lg shadow-black/10 border border-white/10' : 'hover:bg-white/5',
+              )}
+            >
+              {item.id === 'profile' ? (
+                <ChatAvatar
+                  src={user?.avatar}
+                  name={user?.full_name || 'User'}
+                  className="size-6 rounded-lg ring-2 ring-white/10 group-hover:ring-white/30"
+                />
+              ) : (
+                <Icon
+                  className={cn(
+                    'size-6',
+                    isActive ? 'text-white' : 'text-white/70',
+                  )}
+                />
+              )}
+              <span className={cn('text-[11px] font-medium', isActive ? 'text-white' : 'text-white/60')}>
+                {item.label}
+              </span>
+            </Link>
+          )
+        })}
       </div>
 
       <button
