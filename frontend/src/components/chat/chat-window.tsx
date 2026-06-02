@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Search, Phone, MoreVertical, Paperclip, Mic, Send, Video, Info,
   Sparkles, Archive, ArrowLeft, X, Check, CheckCheck, Edit2, Trash2,
-  Copy, Pin, Play, Smile, BellOff, EyeOff, Forward, MoreHorizontal
+  Copy, Pin, Play, Smile, BellOff, EyeOff, Forward, MoreHorizontal,
+  ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
@@ -11,6 +12,7 @@ import { useSocket } from '@/contexts/AppContext'
 import {
   fetchMessages,
   sendTextMessage,
+  sendMediaMessage,
   updateMessage,
   deleteMessageForMe,
   reactToMessage,
@@ -52,6 +54,72 @@ function formatDate(dateStr?: string) {
   const yest = new Date(now); yest.setDate(now.getDate() - 1)
   if (d.toDateString() === yest.toDateString()) return 'Yesterday'
   return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })
+}
+
+function VoiceBubble({ msg, own }: { msg: any; own: boolean }) {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const togglePlay = () => {
+    const url = getSecureMediaUrl(msg.mediaUrl || msg.media_url)
+    if (!url) return
+
+    if (!audioRef.current) {
+      audioRef.current = new Audio(url)
+      audioRef.current.onended = () => setIsPlaying(false)
+    }
+
+    if (isPlaying) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+    } else {
+      audioRef.current.play().catch(err => {
+        console.error("Audio playback failed:", err)
+      })
+      setIsPlaying(true)
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+    }
+  }, [])
+
+  return (
+    <div className="flex items-center gap-3 min-w-[200px]">
+      <button
+        onClick={togglePlay}
+        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/20 hover:scale-105 active:scale-95 transition-all"
+        type="button"
+      >
+        {isPlaying ? (
+          <span className="flex items-center gap-[2px] justify-center size-full text-white">
+            <span className="w-1 h-3.5 bg-current animate-pulse" />
+            <span className="w-1 h-3.5 bg-current animate-pulse" style={{ animationDelay: '150ms' }} />
+          </span>
+        ) : (
+          <Play className={cn("size-4 fill-current", own ? "text-white" : "text-purple")} />
+        )}
+      </button>
+      <div className="flex flex-1 items-center gap-[2px]">
+        {waveform.map((h, i) => (
+          <span
+            key={`${msg._id}-wave-${i}`}
+            className={cn(
+              "w-[2px] rounded-full transition-all",
+              own ? "bg-white/70" : "bg-purple/40",
+              isPlaying && (i % 3 === 0) && "animate-bounce"
+            )}
+            style={{ height: `${h}px` }}
+          />
+        ))}
+      </div>
+      <span className="text-xs opacity-70">{msg.duration || '0:00'}</span>
+    </div>
+  )
 }
 
 export function ChatWindow({
@@ -125,6 +193,25 @@ export function ChatWindow({
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const shouldDiscardRef = useRef(false)
 
+  // Audio Recording Review State
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null)
+  const [recordedAudioFile, setRecordedAudioFile] = useState<File | null>(null)
+  const [recordedAudioDuration, setRecordedAudioDuration] = useState<number>(0)
+  const [isAudioPreviewPlaying, setIsAudioPreviewPlaying] = useState(false)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const startTimeRef = useRef<number>(0)
+
+  // Attachment State
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [selectedAttachment, setSelectedAttachment] = useState<{
+    file: File
+    url: string
+    type: 'image' | 'video' | 'audio' | 'file'
+  } | null>(null)
+
+  // Lightbox State
+  const [lightboxImageIndex, setLightboxImageIndex] = useState<number | null>(null)
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevChatId = useRef<string | null>(null)
@@ -140,6 +227,9 @@ export function ChatWindow({
     setInput('')
     setEditingId(null)
     setContextMenu(null)
+    discardRecordedAudio()
+    setSelectedAttachment(null)
+    setLightboxImageIndex(null)
     // onShowInfo sidebar reset handled by Dashboard/Prop update if desired, 
     // but here we just ensure we call it if we want it closed on chat change.
     if (isInfoOpen) onShowInfo?.()
@@ -337,34 +427,17 @@ export function ChatWindow({
 
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
         const file = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' })
+        const url = URL.createObjectURL(audioBlob)
+        const durationSec = Math.round((Date.now() - startTimeRef.current) / 1000)
 
-        // Use sendTextMessage but it actually handles files too if renamed or similar
-        // Better: create a specialized sendMediaMessage or use existing sendMessage API
-        try {
-          setSending(true)
-          const formData = new FormData()
-          formData.append('chatId', chatId)
-          formData.append('file', file)
-          formData.append('message_type', 'voice')
-
-          const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1'
-          await fetch(`${API_URL}/message`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-            },
-            body: formData
-          })
-          toast.success('Voice message sent')
-        } catch (err) {
-          toast.error('Failed to send voice message')
-        } finally {
-          setSending(false)
-        }
+        setRecordedAudioUrl(url)
+        setRecordedAudioFile(file)
+        setRecordedAudioDuration(durationSec || 1)
 
         stream.getTracks().forEach(t => t.stop())
       }
 
+      startTimeRef.current = Date.now()
       recorder.start()
       setIsRecording(true)
       setRecordingDuration(0)
@@ -390,24 +463,135 @@ export function ChatWindow({
     return `${mins}:${s.toString().padStart(2, '0')}`
   }
 
-  const handleSend = async () => {
-    if (!input.trim() || sending) return
+  const discardRecordedAudio = () => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause()
+      previewAudioRef.current = null
+    }
+    if (recordedAudioUrl) {
+      URL.revokeObjectURL(recordedAudioUrl)
+    }
+    setRecordedAudioUrl(null)
+    setRecordedAudioFile(null)
+    setRecordedAudioDuration(0)
+    setIsAudioPreviewPlaying(false)
+  }
+
+  const sendRecordedAudio = async () => {
+    if (!recordedAudioFile || sending) return
     setSending(true)
+
+    const tempId = `temp-${Date.now()}`
+    const optimistic = {
+      _id: tempId,
+      content: '',
+      sender: { _id: myId, full_name: currentUser?.full_name, avatar: currentUser?.avatar },
+      createdAt: new Date().toISOString(),
+      message_type: 'voice',
+      mediaUrl: recordedAudioUrl,
+      media_url: recordedAudioUrl,
+      duration: formatDuration(recordedAudioDuration),
+    }
+
+    setMessages(prev => [...prev, optimistic])
+    const audioFile = recordedAudioFile
+    const audioDuration = recordedAudioDuration
+
+    discardRecordedAudio()
+
+    try {
+      const res = await sendMediaMessage(chatId, audioFile, {
+        message_type: 'voice',
+        media_duration: audioDuration,
+      })
+      const data = res?.data || res
+      setMessages(prev => prev.map(m => m._id === tempId ? { ...m, ...data, _id: data._id || tempId } : m))
+      toast.success('Voice message sent')
+    } catch {
+      toast.error('Failed to send voice message')
+      setMessages(prev => prev.filter(m => m._id !== tempId))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const togglePlayPreview = () => {
+    if (!recordedAudioUrl) return
+    if (!previewAudioRef.current) {
+      previewAudioRef.current = new Audio(recordedAudioUrl)
+      previewAudioRef.current.onended = () => setIsAudioPreviewPlaying(false)
+    }
+
+    if (isAudioPreviewPlaying) {
+      previewAudioRef.current.pause()
+      setIsAudioPreviewPlaying(false)
+    } else {
+      previewAudioRef.current.play().catch(err => {
+        console.error("Preview play failed:", err)
+      })
+      setIsAudioPreviewPlaying(true)
+    }
+  }
+
+  // --- Attachment Handlers ---
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const type = file.type.startsWith('image/')
+      ? 'image'
+      : file.type.startsWith('video/')
+      ? 'video'
+      : file.type.startsWith('audio/')
+      ? 'audio'
+      : 'file'
+
+    const url = URL.createObjectURL(file)
+    setSelectedAttachment({ file, url, type })
+  }
+
+  const removeSelectedAttachment = () => {
+    if (selectedAttachment) {
+      URL.revokeObjectURL(selectedAttachment.url)
+    }
+    setSelectedAttachment(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleSend = async () => {
+    if ((!input.trim() && !selectedAttachment) || sending) return
+    setSending(true)
+
     const tempId = `temp-${Date.now()}`
     const optimistic = {
       _id: tempId,
       content: input,
       sender: { _id: myId, full_name: currentUser?.full_name, avatar: currentUser?.avatar },
       createdAt: new Date().toISOString(),
-      message_type: 'text',
+      message_type: selectedAttachment ? selectedAttachment.type : 'text',
+      mediaUrl: selectedAttachment ? selectedAttachment.url : undefined,
+      media_url: selectedAttachment ? selectedAttachment.url : undefined,
     }
+
     setMessages(prev => [...prev, optimistic])
-    const sent = input
+    const sentText = input
+    const attachment = selectedAttachment
     setInput('')
+    removeSelectedAttachment()
     emitTyping(false)
 
     try {
-      const res = await sendTextMessage(chatId, sent)
+      let res
+      if (attachment) {
+        res = await sendMediaMessage(chatId, attachment.file, {
+          content: sentText,
+          message_type: attachment.type === 'audio' ? 'voice' : attachment.type,
+        })
+      } else {
+        res = await sendTextMessage(chatId, sentText)
+      }
       const data = res?.data || res
       setMessages(prev => prev.map(m => m._id === tempId ? { ...m, ...data, _id: data._id || tempId } : m))
     } catch {
@@ -714,26 +898,99 @@ export function ChatWindow({
                                 {!own && chat?.isGroupChat && !msg.isDeleted && (
                                   <p className="text-[12px] font-semibold text-purple mb-1">{senderName}</p>
                                 )}
-                                {msg.message_type === 'voice' ? (
-                                  <div className="flex items-center gap-3 min-w-[200px]">
-                                    <button className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/20">
-                                      <Play className={cn("size-4 fill-current", own ? "text-white" : "text-purple")} />
-                                    </button>
-                                    <div className="flex flex-1 items-center gap-[2px]">
-                                      {waveform.map((h, i) => (
-                                        <span key={`${msg._id}-wave-${i}`} className={cn("w-[2px] rounded-full", own ? "bg-white/70" : "bg-purple/40")} style={{ height: `${h}px` }} />
-                                      ))}
-                                    </div>
-                                    <span className="text-xs opacity-70">{msg.duration || '0:00'}</span>
-                                  </div>
-                                ) : msg.message_type === 'image' && (msg.mediaUrl || msg.media_url) ? (
-                                  <img
-                                    src={getSecureMediaUrl(msg.mediaUrl || msg.media_url) || ''}
-                                    alt="media"
-                                    className="max-w-[280px] rounded-xl object-cover cursor-pointer hover:opacity-90"
-                                    onClick={() => onShowInfo?.()} // Or a dedicated lightbox trigger
-                                  />
-                                ) : (
+                                 {msg.message_type === 'voice' ? (
+                                   <VoiceBubble msg={msg} own={own} />
+                                 ) : msg.message_type === 'image' && (msg.mediaUrl || msg.media_url) ? (
+                                   <div
+                                     className="p-1.5 rounded-xl border flex flex-col gap-1.5"
+                                     style={{
+                                       background: own 
+                                         ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.08) 100%)' 
+                                         : 'linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.4) 100%)',
+                                       backdropFilter: 'blur(20px) saturate(180%)',
+                                       WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                                       borderColor: own ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.06)',
+                                       boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.06)',
+                                     }}
+                                   >
+                                     <img
+                                       src={getSecureMediaUrl(msg.mediaUrl || msg.media_url) || ''}
+                                       alt="media"
+                                       className="max-w-[280px] max-h-[220px] rounded-lg object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                                       onClick={() => {
+                                         const allImages = messages
+                                           .filter(m => m.message_type === 'image' && (m.mediaUrl || m.media_url))
+                                           .map(m => getSecureMediaUrl(m.mediaUrl || m.media_url))
+                                           .filter(Boolean) as string[]
+                                         const currentUrl = getSecureMediaUrl(msg.mediaUrl || msg.media_url)
+                                         const idx = allImages.indexOf(currentUrl || '')
+                                         if (idx !== -1) {
+                                           setLightboxImageIndex(idx)
+                                         }
+                                       }}
+                                     />
+                                     {msg.content && (
+                                       <p className="px-1.5 py-1 text-sm leading-normal text-current">
+                                         {msg.content}
+                                       </p>
+                                     )}
+                                   </div>
+                                 ) : msg.message_type === 'video' && (msg.mediaUrl || msg.media_url) ? (
+                                   <div
+                                     className="p-1.5 rounded-xl border flex flex-col gap-1.5"
+                                     style={{
+                                       background: own 
+                                         ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.08) 100%)' 
+                                         : 'linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.4) 100%)',
+                                       backdropFilter: 'blur(20px) saturate(180%)',
+                                       WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                                       borderColor: own ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.06)',
+                                       boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.06)',
+                                     }}
+                                   >
+                                     <video
+                                       src={getSecureMediaUrl(msg.mediaUrl || msg.media_url) || ''}
+                                       controls
+                                       className="max-w-[280px] max-h-[220px] rounded-lg object-cover"
+                                     />
+                                     {msg.content && (
+                                       <p className="px-1.5 py-1 text-sm leading-normal text-current">
+                                         {msg.content}
+                                       </p>
+                                     )}
+                                   </div>
+                                 ) : (msg.message_type === 'file' || msg.message_type === 'document' || (msg.mediaUrl && !msg.message_type)) && (msg.mediaUrl || msg.media_url) ? (
+                                   <a
+                                     href={getSecureMediaUrl(msg.mediaUrl || msg.media_url) || ''}
+                                     target="_blank"
+                                     rel="noopener noreferrer"
+                                     className="flex flex-col gap-2 p-3 rounded-xl border bg-white/10 hover:bg-white/20 transition-all text-current select-none"
+                                     style={{
+                                       borderColor: own ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.06)',
+                                     }}
+                                   >
+                                     <div className="flex items-center gap-3">
+                                       <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
+                                         <Paperclip className="size-5 text-current" />
+                                       </div>
+                                       <div className="flex-1 min-w-0">
+                                         <p className="text-sm font-semibold truncate">
+                                           {(msg.mediaUrl || msg.media_url)?.split('/').pop() || 'Attachment'}
+                                         </p>
+                                         {msg.fileSize && (
+                                           <p className="text-xs opacity-75 mt-0.5">
+                                             {(msg.fileSize / 1024 / 1024).toFixed(2)} MB
+                                           </p>
+                                         )}
+                                       </div>
+                                     </div>
+                                     {msg.content && (
+                                       <p className="px-1 text-sm leading-normal text-current">
+                                         {msg.content}
+                                       </p>
+                                     )}
+                                   </a>
+                                 ) : (
                                   <span>
                                     {msg.content}
                                     {msg.isEdited && <span className="ml-1 text-[10px] opacity-50">(edited)</span>}
@@ -849,91 +1106,174 @@ export function ChatWindow({
         )}
 
         {/* Input */}
-        <div className="mt-auto border-t border-black/5 px-4 pb-4 pt-3">
-          <div className="flex items-center gap-3 rounded-[20px] bg-black/3 px-4 py-2.5">
-            <button className="text-black/40 hover:text-purple transition-colors">
-              <Paperclip className="size-5" />
-            </button>
-            <div className="flex-1 min-w-0">
-              {isRecording ? (
-                <div className="flex items-center justify-between px-2 py-1 w-full">
-                  <div className="flex items-center gap-2">
-                    <div className="size-2.5 rounded-full bg-red-500 animate-pulse" />
-                    <span className="text-sm font-bold text-red-500 font-mono">
-                      Recording ({formatDuration(recordingDuration)})
+        {recordedAudioUrl ? (
+          <div className="mt-auto border-t border-black/5 px-4 pb-4 pt-3">
+            <div className="flex items-center justify-between gap-3 rounded-[20px] bg-purple-soft/40 px-4 py-2.5 border border-purple/10">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <button
+                  onClick={togglePlayPreview}
+                  className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-purple text-white shadow-bubble shadow-purple/20 transition-all hover:scale-105 active:scale-95"
+                  type="button"
+                >
+                  {isAudioPreviewPlaying ? (
+                    <span className="flex items-center gap-[2px] justify-center size-full text-white">
+                      <span className="w-1 h-3.5 bg-current animate-pulse" />
+                      <span className="w-1 h-3.5 bg-current animate-pulse" style={{ animationDelay: '150ms' }} />
                     </span>
-                  </div>
-                  {/* Cancel Recording */}
-                  <button
-                    onClick={() => {
-                      shouldDiscardRef.current = true
-                      stopRecording()
-                    }}
-                    type="button"
-                    className="mr-3 text-black/40 hover:text-red-500 transition-colors flex items-center gap-1 text-xs font-semibold"
-                  >
-                    Cancel
-                  </button>
+                  ) : (
+                    <Play className="size-4 fill-current text-white" />
+                  )}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-purple">Voice Note Recorded</p>
+                  <p className="text-[11px] text-ink-soft font-mono mt-0.5">{formatDuration(recordedAudioDuration)}</p>
                 </div>
-              ) : (
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => handleInputChange(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="Type a message..."
-                  className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-[15px] placeholder:text-black/30"
-                />
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="text-black/40 hover:text-purple transition-colors">
-                    <Smile className="size-5" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 border-none bg-transparent shadow-xl" side="top" align="end">
-                  <EmojiPicker
-                    onEmojiClick={(emojiData) => setInput(prev => prev + emojiData.emoji)}
-                    lazyLoadEmojis={true}
-                    theme={EmojiTheme.LIGHT}
-                  />
-                </PopoverContent>
-              </Popover>
-
-              {input.trim() ? (
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={discardRecordedAudio}
+                  className="flex size-9 items-center justify-center rounded-xl bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 transition-all active:scale-95"
+                  title="Discard recording"
+                >
+                  <Trash2 className="size-5" />
+                </button>
                 <button
                   disabled={sending}
-                  onClick={handleSend}
-                  className="flex size-9 items-center justify-center rounded-xl bg-purple text-white shadow-bubble shadow-purple/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                  onClick={sendRecordedAudio}
+                  className="flex size-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-bubble shadow-emerald-500/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                  title="Send voice note"
                 >
                   <Send className="size-5" />
                 </button>
-              ) : isRecording ? (
-                <button
-                  disabled={sending}
-                  onClick={() => {
-                    shouldDiscardRef.current = false
-                    stopRecording()
-                  }}
-                  className="flex size-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-bubble shadow-emerald-500/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                  title="Send recording"
-                >
-                  <Check className="size-5" />
-                </button>
-              ) : (
-                <button
-                  onClick={startRecording}
-                  className="text-black/40 hover:text-purple transition-colors active:scale-95 p-1"
-                  title="Record voice message"
-                >
-                  <Mic className="size-5" />
-                </button>
-              )}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-auto border-t border-black/5 px-4 pb-4 pt-3">
+            {selectedAttachment && (
+              <div className="mb-2.5 p-2.5 rounded-[18px] bg-white/80 backdrop-blur-md border border-black/5 flex items-center justify-between animate-in slide-in-from-bottom-2 duration-200">
+                <div className="flex items-center gap-3 min-w-0">
+                  {selectedAttachment.type === 'image' ? (
+                    <div className="relative size-12 rounded-xl overflow-hidden border border-black/5 shrink-0">
+                      <img src={selectedAttachment.url} alt="preview" className="size-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-purple/10 text-purple border border-purple/5">
+                      <Paperclip className="size-5" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate text-ink">
+                      {selectedAttachment.file.name}
+                    </p>
+                    <p className="text-xs text-ink-soft font-medium mt-0.5">
+                      {(selectedAttachment.file.size / 1024).toFixed(1)} KB • {selectedAttachment.type}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={removeSelectedAttachment}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg hover:bg-black/5 text-ink-soft hover:text-ink transition-colors"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            )}
+            <div className="flex items-center gap-3 rounded-[20px] bg-black/3 px-4 py-2.5">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-black/40 hover:text-purple transition-colors"
+              >
+                <Paperclip className="size-5" />
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                className="hidden"
+                accept="image/*,video/*,audio/*,application/*,text/*"
+              />
+              <div className="flex-1 min-w-0">
+                {isRecording ? (
+                  <div className="flex items-center justify-between px-2 py-1 w-full">
+                    <div className="flex items-center gap-2">
+                      <div className="size-2.5 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-sm font-bold text-red-500 font-mono">
+                        Recording ({formatDuration(recordingDuration)})
+                      </span>
+                    </div>
+                    {/* Cancel Recording */}
+                    <button
+                      onClick={() => {
+                        shouldDiscardRef.current = true
+                        stopRecording()
+                      }}
+                      type="button"
+                      className="mr-3 text-black/40 hover:text-red-500 transition-colors flex items-center gap-1 text-xs font-semibold"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => handleInputChange(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                    placeholder={selectedAttachment ? "Add a caption..." : "Type a message..."}
+                    className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-[15px] placeholder:text-black/30"
+                  />
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="text-black/40 hover:text-purple transition-colors">
+                      <Smile className="size-5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 border-none bg-transparent shadow-xl" side="top" align="end">
+                    <EmojiPicker
+                      onEmojiClick={(emojiData) => setInput(prev => prev + emojiData.emoji)}
+                      lazyLoadEmojis={true}
+                      theme={EmojiTheme.LIGHT}
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                {(input.trim() || selectedAttachment) ? (
+                  <button
+                    disabled={sending}
+                    onClick={handleSend}
+                    className="flex size-9 items-center justify-center rounded-xl bg-purple text-white shadow-bubble shadow-purple/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                  >
+                    <Send className="size-5" />
+                  </button>
+                ) : isRecording ? (
+                  <button
+                    disabled={sending}
+                    onClick={() => {
+                      shouldDiscardRef.current = false
+                      stopRecording()
+                    }}
+                    className="flex size-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-bubble shadow-emerald-500/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                    title="Stop and preview recording"
+                  >
+                    <Check className="size-5" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={startRecording}
+                    className="text-black/40 hover:text-purple transition-colors active:scale-95 p-1"
+                    title="Record voice message"
+                  >
+                    <Mic className="size-5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Redundant Sidebar block removed. Relying on GroupInfo from Dashboard. */}
@@ -989,6 +1329,88 @@ export function ChatWindow({
           })()}
         </div>
       )}
+      {/* Lightbox Gallery */}
+      {lightboxImageIndex !== null && (() => {
+        const chatImages = messages
+          .filter(m => m.message_type === 'image' && (m.mediaUrl || m.media_url))
+          .map(m => getSecureMediaUrl(m.mediaUrl || m.media_url))
+          .filter(Boolean) as string[]
+
+        if (chatImages.length === 0 || lightboxImageIndex >= chatImages.length) return null
+
+        return (
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(20px)' }}
+            onClick={() => setLightboxImageIndex(null)}
+          >
+            <button
+              onClick={() => setLightboxImageIndex(null)}
+              className="absolute top-4 right-4 flex size-10 items-center justify-center rounded-full text-white"
+              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)' }}
+            >
+              <X className="size-5" />
+            </button>
+            <div
+              className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs font-semibold text-white"
+              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)' }}
+            >
+              {lightboxImageIndex + 1} / {chatImages.length}
+            </div>
+            {chatImages.length > 1 && (
+              <button
+                onClick={e => {
+                  e.stopPropagation()
+                  setLightboxImageIndex(i => (i! - 1 + chatImages.length) % chatImages.length)
+                }}
+                className="absolute left-4 flex size-11 items-center justify-center rounded-full text-white transition-all hover:scale-110"
+                style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)' }}
+              >
+                <ChevronLeft className="size-6" />
+              </button>
+            )}
+            <img
+              src={chatImages[lightboxImageIndex]}
+              onClick={e => e.stopPropagation()}
+              className="max-h-[85vh] max-w-[85vw] rounded-2xl object-contain shadow-2xl animate-in zoom-in-95 duration-200"
+              alt={`Chat Image ${lightboxImageIndex + 1}`}
+            />
+            {chatImages.length > 1 && (
+              <button
+                onClick={e => {
+                  e.stopPropagation()
+                  setLightboxImageIndex(i => (i! + 1) % chatImages.length)
+                }}
+                className="absolute right-4 flex size-11 items-center justify-center rounded-full text-white transition-all hover:scale-110"
+                style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)' }}
+              >
+                <ChevronRight className="size-6" />
+              </button>
+            )}
+            {chatImages.length > 1 && (
+              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2 max-w-[80vw] overflow-x-auto px-2 pb-1 scrollbar-hide">
+                {chatImages.map((img, i) => (
+                  <button
+                    key={i}
+                    onClick={e => {
+                      e.stopPropagation()
+                      setLightboxImageIndex(i)
+                    }}
+                    className={cn(
+                      'shrink-0 size-12 rounded-xl overflow-hidden border-2 transition-all',
+                      i === lightboxImageIndex
+                        ? 'border-white scale-110'
+                        : 'border-white/20 opacity-60 hover:opacity-90'
+                    )}
+                  >
+                    <img src={img} className="size-full object-cover" alt={`thumb-${i}`} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -91,19 +91,82 @@ function ImageGallery({ images, startIndex, onClose }: { images: string[]; start
 function countMedia(messages: any[]) {
   let images = 0, videos = 0, audio = 0, files = 0, voice = 0
   const imageUrls: string[] = []
+  const videoItems: any[] = []
+  const audioItems: any[] = []
+  const fileItems: any[] = []
+  const voiceItems: any[] = []
+  const linkItems: any[] = []
+
   for (const m of messages) {
     const url = m.mediaUrl || m.media_url
     const t = m.mediaType || m.message_type || m.type || ''
+
+    if (m.content) {
+      // Find URLs
+      const match = m.content.match(/(https?:\/\/[^\s]+)/gi)
+      if (match) {
+        match.forEach((link: string) => {
+          linkItems.push({
+            label: link.replace(/^https?:\/\/(www\.)?/, '').split('/')[0],
+            icon: 'link',
+            url: link,
+          })
+        })
+      }
+    }
+
     if (!url) continue
+
     if (t === 'image' || m.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(url)) {
-      images++; const r = getSecureMediaUrl(url); if (r) imageUrls.push(r)
+      images++
+      const r = getSecureMediaUrl(url)
+      if (r) imageUrls.push(r)
     } else if (t === 'video' || m.mimeType?.startsWith('video/') || /\.(mp4|webm|mov|mkv)(\?|$)/i.test(url)) {
       videos++
+      videoItems.push({
+        label: m.fileName || url.split('/').pop() || 'Video file',
+        icon: 'video',
+        url: url,
+      })
     } else if (t === 'voice' || t === 'audio' || m.mimeType?.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|weba)(\?|$)/i.test(url)) {
-      if (t === 'voice') voice++; else audio++
-    } else { files++ }
+      if (t === 'voice') {
+        voice++
+        voiceItems.push({
+          label: `Voice note (${m.duration || '0:00'})`,
+          icon: 'voice',
+          url: url,
+        })
+      } else {
+        audio++
+        audioItems.push({
+          label: m.fileName || url.split('/').pop() || 'Audio file',
+          icon: 'audio',
+          url: url,
+        })
+      }
+    } else {
+      files++
+      fileItems.push({
+        label: m.fileName || url.split('/').pop() || 'Attachment file',
+        icon: 'files',
+        url: url,
+      })
+    }
   }
-  return { images, videos, audio, files, voice, imageUrls }
+
+  return {
+    images,
+    videos,
+    audio,
+    files,
+    voice,
+    imageUrls,
+    videoItems,
+    audioItems,
+    fileItems,
+    voiceItems,
+    linkItems,
+  }
 }
 
 /* ── File Row ────────────────────────────────────────────────────────────── */
@@ -116,25 +179,50 @@ const iconMap: Record<string, React.ElementType> = {
   voice: Mic,
 }
 
-function FileRow({ file }: { file: FileCategory }) {
+function FileRow({
+  file,
+  items = [],
+}: {
+  file: { label: string; icon: string }
+  items?: any[]
+}) {
   const [open, setOpen] = useState(false)
   const Icon = iconMap[file.icon] || Files
   return (
-    <div>
+    <div className="border-b border-black/2 last:border-b-0 py-1">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
         className="flex w-full items-center justify-between rounded-xl py-1.5 text-left transition-colors hover:text-purple"
       >
         <span className="flex items-center gap-3">
-          <Icon className="size-[20px] text-ink" />
-          <span className="text-[14px] text-ink">{file.label}</span>
+          <Icon className="size-[20px] text-ink shrink-0" />
+          <span className="text-[14px] text-ink truncate">{file.label}</span>
         </span>
-        <ChevronDown className={cn('size-4 text-ink-soft transition-transform', open && 'rotate-180')} />
+        <ChevronDown className={cn('size-4 text-ink-soft shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="mt-1 pl-8 text-[12px] text-ink-soft">
-          <p>No items to preview yet.</p>
+        <div className="mt-1.5 pl-8 pr-2 pb-2 space-y-2 max-h-[140px] overflow-y-auto custom-scrollbar">
+          {items.length === 0 ? (
+            <p className="text-[11px] text-ink-soft italic">No items to preview yet.</p>
+          ) : (
+            items.map((item, idx) => {
+              const url = item.url?.startsWith('http') ? item.url : getSecureMediaUrl(item.url)
+              if (!url) return null
+              return (
+                <a
+                  key={idx}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-[12px] text-purple hover:underline truncate"
+                >
+                  <span className="size-1 bg-purple rounded-full shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </a>
+              )
+            })
+          )}
         </div>
       )}
     </div>
@@ -157,7 +245,18 @@ function FilesCard({
   onClose?: () => void
 }) {
   const conv = conversation as any
-  const { videos, audio, files: fileCount, voice, imageUrls } = countMedia(messages)
+  const {
+    videos,
+    audio,
+    files: fileCount,
+    voice,
+    imageUrls,
+    videoItems,
+    audioItems,
+    fileItems,
+    voiceItems,
+    linkItems,
+  } = countMedia(messages)
   const extraPhotos: string[] = (conv.mediaMessages || [])
     .filter((m: any) => m.message_type === 'image')
     .map((m: any) => getSecureMediaUrl(m.mediaUrl))
@@ -165,12 +264,13 @@ function FilesCard({
   const allImageUrls = [...new Set([...imageUrls, ...extraPhotos])]
   const [photosOpen, setPhotosOpen] = useState(allImageUrls.length > 0)
   const staticFiles: FileCategory[] = conversation.files || []
-  const dynamicRows: { label: string; icon: string }[] = []
-  if (videos > 0) dynamicRows.push({ label: `${videos} video${videos !== 1 ? 's' : ''}`, icon: 'video' })
-  if (fileCount > 0) dynamicRows.push({ label: `${fileCount} file${fileCount !== 1 ? 's' : ''}`, icon: 'files' })
-  if (audio > 0) dynamicRows.push({ label: `${audio} audio file${audio !== 1 ? 's' : ''}`, icon: 'audio' })
-  if (voice > 0) dynamicRows.push({ label: `${voice} voice message${voice !== 1 ? 's' : ''}`, icon: 'voice' })
-  const fileRows = dynamicRows.length > 0 ? dynamicRows : staticFiles
+  const dynamicRows: { label: string; icon: string; items: any[] }[] = []
+  if (videos > 0) dynamicRows.push({ label: `${videos} video${videos !== 1 ? 's' : ''}`, icon: 'video', items: videoItems })
+  if (fileCount > 0) dynamicRows.push({ label: `${fileCount} file${fileCount !== 1 ? 's' : ''}`, icon: 'files', items: fileItems })
+  if (audio > 0) dynamicRows.push({ label: `${audio} audio file${audio !== 1 ? 's' : ''}`, icon: 'audio', items: audioItems })
+  if (voice > 0) dynamicRows.push({ label: `${voice} voice message${voice !== 1 ? 's' : ''}`, icon: 'voice', items: voiceItems })
+  if (linkItems.length > 0) dynamicRows.push({ label: `${linkItems.length} link${linkItems.length !== 1 ? 's' : ''}`, icon: 'link', items: linkItems })
+  const fileRows = dynamicRows.length > 0 ? dynamicRows : staticFiles.map(f => ({ label: f.label, icon: f.icon, items: [] }))
   const hasContent = allImageUrls.length > 0 || fileRows.length > 0
 
   return (
@@ -222,7 +322,7 @@ function FilesCard({
               <p className="mt-4 text-[14px] font-semibold text-ink mb-1.5">Files</p>
               <div className="space-y-1">
                 {fileRows.map((file: any) => (
-                  <FileRow key={file.label} file={file} />
+                  <FileRow key={file.label} file={file} items={file.items} />
                 ))}
               </div>
             </>
