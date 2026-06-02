@@ -103,6 +103,15 @@ export const verify2FA = async (token: string) => {
     return handleResponse(res);
 };
 
+export const joinOrganizationByInvite = async (inviteCode: string) => {
+    const res = await fetch(`${BASE_URL}/org/join`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ inviteCode }),
+    });
+    return handleResponse(res);
+};
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export const searchUsers = async (query: string) => {
@@ -403,6 +412,21 @@ export const removeContact = async (userId: string) => {
 
 export const getSuggestions = async () => {
     const res = await fetch(`${BASE_URL}/user/suggestions`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const getUnreadChatCount = async () => {
+    const res = await fetch(`${BASE_URL}/chat/unread-count`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const toggleArchiveChat = async (chatId: string) => {
+    const res = await fetch(`${BASE_URL}/chat/toggle-archive/${chatId}`, {
+        method: 'PATCH',
         headers: getAuthHeaders(),
     });
     return handleResponse(res);

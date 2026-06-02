@@ -13,15 +13,21 @@ import {
   sendTextMessage,
   updateMessage,
   deleteMessageForMe,
-  deleteMessageForEveryone,
   reactToMessage,
   toggleMessagePin,
+  deleteMessageForEveryone,
   markMessagesRead,
   muteChat,
   clearChat,
   deleteChat,
   getAidaWritingSuggestions,
 } from '@/lib/api'
+import EmojiPicker, { Theme as EmojiTheme } from 'emoji-picker-react'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { toast } from 'sonner'
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '👎', '🎉']
@@ -53,6 +59,7 @@ export function ChatWindow({
   chat,
   currentUser,
   onShowInfo,
+  isInfoOpen,
   onStartMeeting,
   onClose,
   messages,
@@ -62,6 +69,7 @@ export function ChatWindow({
   chat: any
   currentUser: any
   onShowInfo?: () => void
+  isInfoOpen?: boolean
   onStartMeeting?: () => void
   onClose?: () => void
   messages: any[]
@@ -81,12 +89,18 @@ export function ChatWindow({
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showChatMenu, setShowChatMenu] = useState(false)
-  const [showInfoSidebar, setShowInfoSidebar] = useState(false)
   const [isAiThinking, setIsAiThinking] = useState(false)
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
   const [isAiSuggesting, setIsAiSuggesting] = useState(false)
   const suggestDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Audio Recording State
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState(0)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -94,12 +108,18 @@ export function ChatWindow({
 
   // Fetch messages when chat changes
   useEffect(() => {
-    if (!chatId) return
+    if (!chatId) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setMessages([])
     setInput('')
     setEditingId(null)
     setContextMenu(null)
+    // onShowInfo sidebar reset handled by Dashboard/Prop update if desired, 
+    // but here we just ensure we call it if we want it closed on chat change.
+    if (isInfoOpen) onShowInfo?.()
 
     fetchMessages(chatId)
       .then(res => setMessages(res?.messages || res?.data || []))
@@ -112,10 +132,28 @@ export function ChatWindow({
     socket?.emit('join_room', chatId)
     prevChatId.current = chatId
 
+    // Trigger initial AI suggestions if input is empty
+    handleInputChange('')
+
     return () => {
       socket?.emit('leave_room', chatId)
     }
   }, [chatId, socket])
+
+  // Escape key support
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isInfoOpen) {
+          onShowInfo?.()
+        } else if (onClose) {
+          onClose()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [onClose, isInfoOpen, onShowInfo])
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -223,21 +261,22 @@ export function ChatWindow({
 
     // AI Writing Suggestions
     if (suggestDebounce.current) clearTimeout(suggestDebounce.current)
-    if (val.trim().length > 3) {
-      suggestDebounce.current = setTimeout(async () => {
-        setIsAiSuggesting(true)
-        try {
-          const res = await getAidaWritingSuggestions(val, chatId)
-          setAiSuggestions(res.suggestions || [])
-        } catch (err) {
-          console.error('Failed to get AI suggestions:', err)
-        } finally {
-          setIsAiSuggesting(false)
-        }
-      }, 800)
-    } else {
-      setAiSuggestions([])
-    }
+
+    // If empty, fetch "start" suggestions
+    const query = val.trim() || "Hi"
+
+    suggestDebounce.current = setTimeout(async () => {
+      if (!chatId) return
+      setIsAiSuggesting(true)
+      try {
+        const res = await getAidaWritingSuggestions(query, chatId)
+        setAiSuggestions(res.suggestions || [])
+      } catch (err) {
+        console.error('Failed to get AI suggestions:', err)
+      } finally {
+        setIsAiSuggesting(false)
+      }
+    }, val.trim().length > 0 ? 800 : 200)
   }
 
   const handleSuggestionClick = (s: string) => {
@@ -252,6 +291,74 @@ export function ChatWindow({
       setInput(prev => prev.trim() + ' ' + s)
     }
     setAiSuggestions([])
+  }
+
+  // --- Audio Recording Handlers ---
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+      audioChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+        const file = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' })
+
+        // Use sendTextMessage but it actually handles files too if renamed or similar
+        // Better: create a specialized sendMediaMessage or use existing sendMessage API
+        try {
+          setSending(true)
+          const formData = new FormData()
+          formData.append('chatId', chatId)
+          formData.append('file', file)
+          formData.append('message_type', 'voice')
+
+          const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1'
+          await fetch(`${API_URL}/message`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            },
+            body: formData
+          })
+          toast.success('Voice message sent')
+        } catch (err) {
+          toast.error('Failed to send voice message')
+        } finally {
+          setSending(false)
+        }
+
+        stream.getTracks().forEach(t => t.stop())
+      }
+
+      recorder.start()
+      setIsRecording(true)
+      setRecordingDuration(0)
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1)
+      }, 1000)
+    } catch (err) {
+      toast.error('Microphone access denied')
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current)
+    }
+  }
+
+  const formatDuration = (sec: number) => {
+    const mins = Math.floor(sec / 60)
+    const s = sec % 60
+    return `${mins}:${s.toString().padStart(2, '0')}`
   }
 
   const handleSend = async () => {
@@ -345,7 +452,8 @@ export function ChatWindow({
   const getChatTitle = () => {
     if (chat?.isGroupChat) return chat.chatName || 'Group Chat'
     const other = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
-    return other?.full_name || other?.username || chat?.chatName || 'Chat'
+    if (other) return other.full_name || other.username || 'User'
+    return (chat.chatName && chat.chatName !== 'direct') ? chat.chatName : 'Chat'
   }
 
   const getChatAvatar = () => {
@@ -372,7 +480,7 @@ export function ChatWindow({
   return (
     <div className="flex h-full w-full overflow-hidden" onClick={() => { setContextMenu(null); setShowChatMenu(false) }}>
       <div
-        className={cn("flex h-full flex-col bg-white transition-all duration-300", showInfoSidebar ? "w-2/3 border-r border-black/5" : "w-full")}
+        className="flex h-full w-full flex-col bg-white transition-all duration-300"
       >
         {/* Header */}
         <header className="flex items-center justify-between border-b border-black/5 px-6 py-4">
@@ -414,9 +522,9 @@ export function ChatWindow({
                 <button
                   onClick={() => {
                     setAiSummary(null)
-                    setShowInfoSidebar(!showInfoSidebar)
+                    onShowInfo?.()
                   }}
-                  className={cn("hover:text-purple transition-colors p-1", showInfoSidebar && "text-purple")}
+                  className={cn("hover:text-purple transition-colors p-1", isInfoOpen && "text-purple")}
                 >
                   <Info className="size-5" />
                 </button>
@@ -431,7 +539,7 @@ export function ChatWindow({
                   </button>
                   {showChatMenu && (
                     <div className="absolute right-0 top-full mt-2 z-50 w-52 rounded-2xl bg-white shadow-xl border border-black/5 py-1 animate-in fade-in zoom-in-95 duration-150">
-                      <button onClick={() => { setAiSummary(null); setShowInfoSidebar(true); setShowChatMenu(false) }} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 transition-colors">
+                      <button onClick={() => { setAiSummary(null); onShowInfo?.(); setShowChatMenu(false) }} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 transition-colors">
                         <Info className="size-4 text-black/40" /> Information
                       </button>
                       <button onClick={handleAiSummary} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 transition-colors">
@@ -714,106 +822,64 @@ export function ChatWindow({
         {/* Input */}
         <div className="mt-auto border-t border-black/5 px-4 pb-4 pt-3">
           <div className="flex items-center gap-3 rounded-[20px] bg-black/3 px-4 py-2.5">
-            <button className="text-black/40 hover:text-purple transition-colors shrink-0">
+            <button className="text-black/40 hover:text-purple transition-colors">
               <Paperclip className="size-5" />
             </button>
-            <input
-              type="text"
-              placeholder="Your message…"
-              value={input}
-              onChange={e => handleInputChange(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-              className="flex-1 bg-transparent text-sm text-ink placeholder:text-ink/40 focus:outline-none"
-            />
-            <button className="text-black/40 hover:text-purple transition-colors shrink-0">
-              <Smile className="size-5" />
-            </button>
-            <button className="text-black/40 hover:text-purple transition-colors shrink-0">
-              <Mic className="size-5" />
-            </button>
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || sending}
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-purple text-white transition-all hover:bg-purple/90 disabled:opacity-40"
-            >
-              <Send className="size-4" />
-            </button>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Info Sidebar */}
-      {showInfoSidebar && (
-        <div className="w-1/3 h-full bg-white animate-in slide-in-from-right duration-300 overflow-y-auto border-l border-black/5">
-          <div className="flex h-full flex-col">
-            <header className="flex items-center justify-between border-b border-black/5 p-6">
-              <h2 className="text-lg font-bold text-ink">Information</h2>
-              <button onClick={() => setShowInfoSidebar(false)} className="text-black/20 hover:text-ink">
-                <X className="size-6" />
-              </button>
-            </header>
-
-            <div className="p-8 flex flex-col items-center text-center">
-              <ChatAvatar src={getChatAvatar()} name={getChatTitle()} className="size-32 rounded-3xl shadow-2xl mb-6 shadow-purple/10" />
-              <h3 className="text-xl font-bold text-ink mb-1">{getChatTitle()}</h3>
-              <p className="text-sm text-ink-soft mb-6">{chat?.isGroupChat ? 'Group chat' : getOtherUser()?.username || 'Contact'}</p>
-
-              <div className="flex gap-4 mb-8">
-                <button className="flex flex-col items-center gap-2 group">
-                  <div className="size-12 rounded-2xl bg-purple/10 text-purple flex items-center justify-center group-hover:bg-purple group-hover:text-white transition-all">
-                    <Phone className="size-5" />
-                  </div>
-                  <span className="text-[11px] font-bold text-ink-soft">Audio</span>
-                </button>
-                <button className="flex flex-col items-center gap-2 group">
-                  <div className="size-12 rounded-2xl bg-purple/10 text-purple flex items-center justify-center group-hover:bg-purple group-hover:text-white transition-all">
-                    <Video className="size-5" />
-                  </div>
-                  <span className="text-[11px] font-bold text-ink-soft">Video</span>
-                </button>
-                <button className="flex flex-col items-center gap-2 group">
-                  <div className="size-12 rounded-2xl bg-purple/10 text-purple flex items-center justify-center group-hover:bg-purple group-hover:text-white transition-all">
-                    <Search className="size-5" />
-                  </div>
-                  <span className="text-[11px] font-bold text-ink-soft">Search</span>
-                </button>
-              </div>
-
-              <div className="w-full text-left space-y-6">
-                <div>
-                  <h4 className="text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-2">About</h4>
-                  <p className="text-sm text-ink leading-relaxed">
-                    {chat?.contact?.bio || chat?.description || "No bio information available for this conversation."}
-                  </p>
+            <div className="flex-1 min-w-0">
+              {isRecording ? (
+                <div className="flex items-center gap-2 px-2 py-1">
+                  <div className="size-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-sm font-medium text-red-500">Recording... {formatDuration(recordingDuration)}</span>
                 </div>
+              ) : (
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                  placeholder="Type a message..."
+                  className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-[15px] placeholder:text-black/30"
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="text-black/40 hover:text-purple transition-colors">
+                    <Smile className="size-5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 border-none bg-transparent shadow-xl" side="top" align="end">
+                  <EmojiPicker
+                    onEmojiClick={(emojiData) => setInput(prev => prev + emojiData.emoji)}
+                    lazyLoadEmojis={true}
+                    theme={EmojiTheme.LIGHT}
+                  />
+                </PopoverContent>
+              </Popover>
 
-                {!chat?.isGroupChat && (
-                  <div>
-                    <h4 className="text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-2">Shared Groups</h4>
-                    <p className="text-sm text-ink">12 mutual groups</p>
-                  </div>
-                )}
-
-                <div>
-                  <h4 className="text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-3">Settings</h4>
-                  <div className="space-y-1">
-                    <button className="flex w-full items-center justify-between py-2 text-sm text-ink hover:text-purple transition-colors">
-                      <span>Mute Notifications</span>
-                      <div className="w-8 h-4 rounded-full bg-black/10 relative">
-                        <div className="absolute left-0.5 top-0.5 size-3 rounded-full bg-white shadow-sm" />
-                      </div>
-                    </button>
-                    <button className="flex w-full items-center justify-between py-2 text-sm text-red-500 hover:text-red-600 transition-colors">
-                      <span>Block Contact</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+              {input.trim() || isRecording ? (
+                <button
+                  disabled={sending}
+                  onClick={isRecording ? stopRecording : handleSend}
+                  className="flex size-9 items-center justify-center rounded-xl bg-purple text-white shadow-bubble shadow-purple/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                >
+                  {isRecording ? <X className="size-5" /> : <Send className="size-5" />}
+                </button>
+              ) : (
+                <button
+                  onClick={startRecording}
+                  className="text-black/40 hover:text-purple transition-colors active:scale-95"
+                >
+                  <Mic className="size-5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Redundant Sidebar block removed. Relying on GroupInfo from Dashboard. */}
 
       {/* Message Context Menu */}
       {contextMenu && messages.find(m => m._id === contextMenu.msgId) && (

@@ -80,6 +80,11 @@ export function Dashboard({
     }
   }, [activeChatId, activeChat, user]);
 
+  // Handle tab switching: close info sidebar and optionally clear chat
+  React.useEffect(() => {
+    setShowInfo(false);
+  }, [activeTab]);
+
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -171,6 +176,7 @@ export function Dashboard({
                     currentUser={user}
                     messages={messages}
                     setMessages={setMessages}
+                    isInfoOpen={showInfo}
                     onShowInfo={() => setShowInfo(!showInfo)}
                     onStartMeeting={() => setIsInMeeting(true)}
                     onClose={() => {
@@ -210,12 +216,14 @@ export function Dashboard({
 
         {/* Right info panel — show on 'all', 'friends', or 'work' tab with an active chat */}
         {showInfo && !isInMeeting && activeChat && (activeTab === 'all' || activeTab === 'friends' || activeTab === 'work') && (
-          <GroupInfo
-            key={activeChatId}
-            conversation={activeChat}
-            messages={messages}
-            onClose={() => setShowInfo(false)}
-          />
+          <div className="absolute top-0 right-0 z-50 h-full w-[360px] animate-in slide-in-from-right duration-300 shadow-2xl">
+            <GroupInfo
+              key={activeChatId}
+              conversation={activeChat}
+              messages={messages}
+              onClose={() => setShowInfo(false)}
+            />
+          </div>
         )}
 
         {/* Message Overlay for Work/Friends messaging */}

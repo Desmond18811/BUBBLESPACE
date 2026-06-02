@@ -18,6 +18,11 @@ function Signup() {
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [loading, setLoading] = useState(false);
+    const [signupMode, setSignupMode] = useState<"individual" | "organization">("individual");
+    const [orgName, setOrgName] = useState("");
+    const [orgIndustry, setOrgIndustry] = useState("");
+    const [orgSize, setOrgSize] = useState("");
+    const [inviteCode, setInviteCode] = useState("");
     const navigate = useNavigate();
 
     const handleSignup = async (e: React.FormEvent) => {
@@ -45,7 +50,11 @@ function Signup() {
                 password,
                 confirm_password: confirmPassword,
                 full_name: name,
-                publicKey
+                publicKey,
+                org_name: signupMode === "organization" ? orgName : undefined,
+                org_industry: signupMode === "organization" ? orgIndustry : undefined,
+                org_size: signupMode === "organization" ? orgSize : undefined,
+                inviteCode: inviteCode || undefined,
             });
 
             toast.success('Account created! Check your email for a verification code.');
@@ -86,10 +95,68 @@ function Signup() {
                         Join the bubble
                     </h2>
                     <p className="mt-2 text-muted-foreground">
-                        Create your Bubblespace account
+                        {signupMode === "organization" ? "Register your business workspace" : "Create your Bubblespace account"}
                     </p>
 
+                    <div className="mt-8 flex p-1 bg-muted rounded-2xl">
+                        <button
+                            type="button"
+                            onClick={() => setSignupMode("individual")}
+                            className={`flex-1 py-2 text-sm font-semibold rounded-xl transition-all ${signupMode === "individual" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                            Individual
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSignupMode("organization")}
+                            className={`flex-1 py-2 text-sm font-semibold rounded-xl transition-all ${signupMode === "organization" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                            Organization
+                        </button>
+                    </div>
+
                     <form onSubmit={handleSignup} className="mt-8 space-y-4 text-left">
+                        {signupMode === "organization" && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                className="space-y-4"
+                            >
+                                <div className="relative">
+                                    <Sparkles className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-20" />
+                                    <input
+                                        type="text"
+                                        placeholder="Organization Name"
+                                        required
+                                        value={orgName}
+                                        onChange={(e) => setOrgName(e.target.value)}
+                                        className="w-full pl-12 pr-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <input
+                                        type="text"
+                                        placeholder="Industry"
+                                        value={orgIndustry}
+                                        onChange={(e) => setOrgIndustry(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10 text-sm"
+                                    />
+                                    <select
+                                        value={orgSize}
+                                        onChange={(e) => setOrgSize(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10 text-sm appearance-none"
+                                    >
+                                        <option value="">Company Size</option>
+                                        <option value="1-10">1-10 Employees</option>
+                                        <option value="11-50">11-50 Employees</option>
+                                        <option value="51-200">51-200 Employees</option>
+                                        <option value="201-500">201-500 Employees</option>
+                                        <option value="500+">500+ Employees</option>
+                                    </select>
+                                </div>
+                            </motion.div>
+                        )}
+
                         <div className="relative">
                             <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-20" />
                             <input
@@ -101,6 +168,19 @@ function Signup() {
                                 className="w-full pl-12 pr-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10"
                             />
                         </div>
+
+                        {signupMode === "individual" && (
+                            <div className="relative">
+                                <Sparkles className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-20" />
+                                <input
+                                    type="text"
+                                    placeholder="Invite Code (optional)"
+                                    value={inviteCode}
+                                    onChange={(e) => setInviteCode(e.target.value)}
+                                    className="w-full pl-12 pr-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10"
+                                />
+                            </div>
+                        )}
                         <div className="relative">
                             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-20" />
                             <input

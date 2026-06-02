@@ -1,6 +1,3 @@
-// removed 'use client' for Vite
-
-
 import {
   MessageSquare,
   Phone,
@@ -47,6 +44,7 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useDashboard } from '@/contexts/DashboardContext'
+import { useNavigate } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
@@ -56,7 +54,10 @@ import {
   profile,
   type Friend,
 } from '@/lib/chat-data'
-import { fetchAllUserChats, fetchCallLogs } from '@/lib/api'
+import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite } from '@/lib/api'
+import { ChatWindow } from '@/components/chat/chat-window'
+import { GroupInfo } from '@/components/chat/group-info'
+import { useSocket } from '@/contexts/AppContext'
 
 // Next.js Image polyfill for Vite
 const Image = ({ src, alt, className, ...rest }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string; alt?: string; width?: number; height?: number }) => <img src={src} alt={alt} className={className} {...rest} />
@@ -501,209 +502,244 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
     type: null
   })
 
-  // Fetch real call logs
-  const { data: callLogsData, isLoading } = useQuery({
-    queryKey: ['callLogs'],
-    queryFn: async () => {
-      const res = await fetchCallLogs()
-      return res.data || []
-    }
-  })
-
-  const activeRooms = callLogsData || []
-
-  const handleSourceSelect = (src: 'group' | 'contacts') => {
-    setMeetingConfig({ source: src, type: null })
+  const handleSourceSelect = (source: 'group' | 'contacts') => {
+    setMeetingConfig(prev => ({ ...prev, source }))
     setSelectionStep('type')
   }
 
   const handleTypeSelect = (type: 'voice' | 'video') => {
-    setSelectionStep('none')
+    setMeetingConfig(prev => ({ ...prev, type }))
     onStartMeeting()
+    setSelectionStep('none')
   }
 
+  // Fetch real data
+  const { data: callLogsData, isLoading } = useQuery({
+    queryKey: ['callLogs'],
+    queryFn: async () => {
+      const res = await fetchCallLogs()
+      return res.data || { rooms: [], coworkers: [] }
+    }
+  })
+
+  const { data: coworkerData } = useQuery({
+    queryKey: ['coworkers-calls'],
+    queryFn: async () => {
+      const res = await searchUsers('')
+      return res.users || []
+    }
+  })
+
+  const activeRooms = callLogsData?.rooms || []
+  const coworkers = coworkerData || []
+
   return (
-    <div className="flex h-full flex-col bg-white">
-      <ViewHeader
-        title="Calls & Meet"
-        subtitle="Experience seamless communication"
-        action={
-          <button
-            onClick={() => setSelectionStep('source')}
-            className="rounded-xl bg-purple px-5 py-2 text-sm font-bold text-white shadow-lg shadow-purple/20 transition-all hover:opacity-90 active:scale-95"
-          >
-            Start New Meeting
-          </button>
-        }
-      />
-
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8">
-        {/* Active Rooms */}
-        <section>
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-black/30 px-2">Live Meetings</h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {activeRooms.map((room: any) => (
-              <div key={room.id} className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] bg-purple-soft/40 p-5 transition-all hover:bg-purple-soft/70 hover:shadow-xl">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-[16px] font-bold text-ink">{room.title}</h3>
-                    <p className="text-[11px] text-ink-soft">{room.members} members</p>
-                  </div>
-                  {room.active && (
-                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-100/50 px-2.5 py-1 text-[9px] font-bold text-emerald-600 ring-1 ring-emerald-500/20">
-                      <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      LIVE
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-6 flex items-end justify-between">
-                  <div className="flex -space-x-3">
-                    {room.callers?.map((c: string, i: number) => (
-                      <div key={i} className="flex size-9 items-center justify-center rounded-full border-2 border-white bg-purple text-[11px] font-bold text-white shadow-sm shrink-0">
-                        {c}
-                      </div>
-                    ))}
-                    {room.members > (room.callers?.length || 0) && (
-                      <div className="flex size-9 items-center justify-center rounded-full border-2 border-white bg-white text-[11px] font-bold text-purple shadow-sm shrink-0">
-                        +{room.members - (room.callers?.length || 0)}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => room.active ? onStartMeeting() : toast.error('Room is currently inactive')}
-                    className="flex size-11 items-center justify-center rounded-2xl bg-purple text-white shadow-lg shadow-purple/20 transition-transform hover:scale-110 active:scale-95"
-                  >
-                    {room.active ? <Video className="size-4" /> : <Phone className="size-4" />}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* People in the Office */}
-        <section>
-          <div className="mb-4 flex items-center justify-between px-2">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-black/30">People in the office</h3>
-            <span className="text-[10px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-full">ALL COWORKERS</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {callLogsData?.coworkers?.map((worker: any) => (
-              <div key={worker._id || worker.id} className="group flex flex-col items-center gap-2 rounded-3xl border border-black/5 p-4 text-center transition-all hover:border-purple/30 hover:shadow-lg">
-                <div className="relative shrink-0">
-                  <ChatAvatar
-                    src={worker.avatar}
-                    name={worker.full_name || worker.username}
-                    className="size-14 rounded-2xl shadow-sm"
-                  />
-                  {worker.isOnline && (
-                    <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-green-500" />
-                  )}
-                </div>
-                <div className="min-w-0 w-full">
-                  <p className="truncate text-xs font-bold text-ink">{worker.full_name}</p>
-                  <p className="truncate text-[10px] text-ink-soft uppercase tracking-wider">{worker.org_role || 'Member'}</p>
-                </div>
-                <button
-                  onClick={() => onStartMeeting()}
-                  className="mt-2 flex h-8 w-full items-center justify-center gap-2 rounded-xl bg-purple/10 text-purple transition-all hover:bg-purple hover:text-white"
-                >
-                  <Phone className="size-3" />
-                  <span className="text-[10px] font-bold">Call</span>
-                </button>
-              </div>
-            ))}
-            {(!callLogsData?.coworkers || callLogsData.coworkers.length === 0) && (
-              <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-black/5 rounded-3xl col-span-full">
-                <Users className="size-8 text-black/10 mb-2" />
-                <p className="text-sm text-black/30 font-medium">Connect with your team instantly</p>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* Meeting Selection Dialog */}
-      {selectionStep !== 'none' && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectionStep('none')} />
-          <div className="relative w-full max-w-sm rounded-[32px] bg-white p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+    <div className="flex h-full w-full overflow-hidden bg-white rounded-[26px]">
+      <div className="flex flex-1 flex-col overflow-hidden border-r border-black/5 bg-white">
+        <ViewHeader
+          title="Calls & Meet"
+          subtitle="Experience seamless communication"
+          action={
             <button
-              onClick={() => setSelectionStep('none')}
-              className="absolute right-4 top-4 text-ink-soft hover:text-ink"
+              onClick={() => setSelectionStep('source')}
+              className="rounded-xl bg-purple px-5 py-2 text-sm font-bold text-white shadow-lg shadow-purple/20 transition-all hover:opacity-90 active:scale-95"
             >
-              <X className="size-5" />
+              Start New Meeting
             </button>
+          }
+        />
 
-            {selectionStep === 'source' ? (
-              <>
-                <h3 className="text-xl font-bold text-ink mb-2">New Meeting</h3>
-                <p className="text-sm text-ink-soft mb-6">Choose where to invite members from</p>
-                <div className="grid grid-cols-1 gap-3">
-                  <button
-                    onClick={() => handleSourceSelect('group')}
-                    className="flex items-center gap-4 rounded-2xl bg-purple-soft/50 p-4 text-left transition-colors hover:bg-purple-soft"
-                  >
-                    <div className="size-12 rounded-xl bg-purple text-white flex items-center justify-center">
-                      <Users className="size-6" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-ink">Group Members</p>
-                      <p className="text-xs text-ink-soft">Invite from your active groups</p>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleSourceSelect('contacts')}
-                    className="flex items-center gap-4 rounded-2xl bg-purple-soft/50 p-4 text-left transition-colors hover:bg-purple-soft"
-                  >
-                    <div className="size-12 rounded-xl bg-purple text-white flex items-center justify-center">
-                      <User className="size-6" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-ink">Normal Contacts</p>
-                      <p className="text-xs text-ink-soft">Start a chat with your friends</p>
-                    </div>
-                  </button>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8">
+          {/* Active Rooms */}
+          <section>
+            <div className="mb-4 flex items-center justify-between px-2">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-black/30 italic">Live Collaborative Spaces</h3>
+              <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-bold text-emerald-600">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                {activeRooms.length} ACTIVE ROOMS
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {activeRooms.length === 0 ? (
+                <div className="col-span-full py-8 text-center rounded-[28px] border-2 border-dashed border-black/5 bg-black/2">
+                  <p className="text-sm text-black/30 font-medium">No active live meetings. Start one to collaborate!</p>
                 </div>
-              </>
-            ) : (
-              <>
-                <h3 className="text-xl font-bold text-ink mb-2">Call Type</h3>
-                <p className="text-sm text-ink-soft mb-6">Select how you want to connect</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    onClick={() => handleTypeSelect('voice')}
-                    className="flex flex-col items-center gap-3 rounded-2xl bg-purple-soft/50 p-6 transition-colors hover:bg-purple-soft"
-                  >
-                    <div className="size-14 rounded-full bg-white text-purple flex items-center justify-center shadow-sm">
-                      <Phone className="size-6" />
+              ) : activeRooms.map((room: any) => (
+                <div key={room.id} className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] bg-purple-soft/40 p-5 transition-all hover:bg-purple-soft/70 hover:shadow-xl border border-purple/5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-[17px] font-bold text-ink">{room.title}</h3>
+                      <p className="text-[11px] text-ink-soft font-medium uppercase tracking-tight">{room.members} members joined</p>
                     </div>
-                    <p className="font-bold text-ink">Voice Call</p>
-                  </button>
-                  <button
-                    onClick={() => handleTypeSelect('video')}
-                    className="flex flex-col items-center gap-3 rounded-2xl bg-purple-soft/50 p-6 transition-colors hover:bg-purple-soft"
-                  >
-                    <div className="size-14 rounded-full bg-white text-purple flex items-center justify-center shadow-sm">
-                      <Video className="size-6" />
+                  </div>
+
+                  <div className="mt-8 flex items-end justify-between">
+                    <div className="flex -space-x-3">
+                      {room.callers?.slice(0, 3).map((c: string, i: number) => (
+                        <div key={i} className="flex size-10 items-center justify-center rounded-full border-2 border-white bg-purple text-[12px] font-bold text-white shadow-sm shrink-0">
+                          {c[0]}
+                        </div>
+                      ))}
                     </div>
-                    <p className="font-bold text-ink">Video Call</p>
-                  </button>
+                    <button
+                      onClick={() => onStartMeeting()}
+                      className="flex size-12 items-center justify-center rounded-2xl bg-purple text-white shadow-lg shadow-purple/30 transition-transform hover:scale-110 active:scale-95 group-hover:rotate-6"
+                    >
+                      <Video className="size-5" />
+                    </button>
+                  </div>
                 </div>
-              </>
-            )}
-          </div>
+              ))}
+            </div>
+          </section>
+
+          {/* People in the Office (Cards View) */}
+          <section>
+            <div className="mb-4 flex items-center justify-between px-2">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-black/30 italic">People in the office</h3>
+              <span className="text-[10px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-full uppercase">All Active Staff</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
+              {isLoading ? (
+                [1, 2, 3, 4, 5, 6].map(i => (
+                  <div key={i} className="h-48 rounded-[32px] bg-black/3 animate-pulse" />
+                ))
+              ) : coworkers.map((worker: any) => (
+                <div key={worker._id || worker.id} className="group relative flex flex-col items-center gap-3 overflow-hidden rounded-[32px] border border-black/5 bg-white p-5 text-center transition-all hover:border-purple/30 hover:shadow-2xl">
+                  <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-purple/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                  <div className="relative z-10">
+                    <div className="relative mx-auto inline-block">
+                      <ChatAvatar
+                        src={worker.avatar}
+                        name={worker.full_name || worker.username}
+                        className="size-20 rounded-[24px] shadow-lg ring-4 ring-white"
+                      />
+                      {worker.isOnline && (
+                        <span className="absolute -bottom-1 -right-1 size-5 rounded-full border-[3px] border-white bg-green-500 shadow-sm" />
+                      )}
+                    </div>
+
+                    <div className="mt-4">
+                      <h4 className="text-[15px] font-bold text-ink truncate max-w-[140px]">
+                        {worker.full_name}
+                      </h4>
+                      <div className="mt-1 flex flex-col gap-0.5">
+                        <p className="text-[11px] font-bold text-purple uppercase tracking-wider italic">
+                          {worker.org_role || 'Staff Member'}
+                        </p>
+                        <p className="text-[10px] text-ink-soft font-medium truncate px-1">
+                          {worker.organization || 'Bubble Workspace'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex items-center gap-2">
+                      <button
+                        onClick={() => toast.success(`Calling ${worker.full_name}...`)}
+                        className="flex size-10 items-center justify-center rounded-xl bg-purple-soft text-purple transition-all hover:bg-purple hover:text-white"
+                      >
+                        <Phone className="size-4" />
+                      </button>
+                      <button
+                        onClick={() => toast.success(`Starting video with ${worker.full_name}...`)}
+                        className="flex size-10 items-center justify-center rounded-xl bg-purple-soft text-purple transition-all hover:bg-purple hover:text-white"
+                      >
+                        <Video className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
-      )}
+
+        {/* Meeting Selection Dialog */}
+        {selectionStep !== 'none' && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectionStep('none')} />
+            <div className="relative w-full max-w-sm rounded-[32px] bg-white p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+              <button
+                onClick={() => setSelectionStep('none')}
+                className="absolute right-4 top-4 text-ink-soft hover:text-ink"
+              >
+                <X className="size-5" />
+              </button>
+
+              {selectionStep === 'source' ? (
+                <>
+                  <h3 className="text-xl font-bold text-ink mb-2">New Meeting</h3>
+                  <p className="text-sm text-ink-soft mb-6">Choose where to invite members from</p>
+                  <div className="grid grid-cols-1 gap-3">
+                    <button
+                      onClick={() => handleSourceSelect('group')}
+                      className="flex items-center gap-4 rounded-2xl bg-purple-soft/50 p-4 text-left transition-colors hover:bg-purple-soft"
+                    >
+                      <div className="size-12 rounded-xl bg-purple text-white flex items-center justify-center">
+                        <Users className="size-6" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-ink">Group Members</p>
+                        <p className="text-xs text-ink-soft">Invite from your active groups</p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => handleSourceSelect('contacts')}
+                      className="flex items-center gap-4 rounded-2xl bg-purple-soft/50 p-4 text-left transition-colors hover:bg-purple-soft"
+                    >
+                      <div className="size-12 rounded-xl bg-purple text-white flex items-center justify-center">
+                        <User className="size-6" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-ink">Normal Contacts</p>
+                        <p className="text-xs text-ink-soft">Start a chat with your friends</p>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-xl font-bold text-ink mb-2">Call Type</h3>
+                  <p className="text-sm text-ink-soft mb-6">Select how you want to connect</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={() => handleTypeSelect('voice')}
+                      className="flex flex-col items-center gap-3 rounded-2xl bg-purple-soft/50 p-6 transition-colors hover:bg-purple-soft"
+                    >
+                      <div className="size-14 rounded-full bg-white text-purple flex items-center justify-center shadow-sm">
+                        <Phone className="size-6" />
+                      </div>
+                      <p className="font-bold text-ink">Voice Call</p>
+                    </button>
+                    <button
+                      onClick={() => handleTypeSelect('video')}
+                      className="flex flex-col items-center gap-3 rounded-2xl bg-purple-soft/50 p-6 transition-colors hover:bg-purple-soft"
+                    >
+                      <div className="size-14 rounded-full bg-white text-purple flex items-center justify-center shadow-sm">
+                        <Video className="size-6" />
+                      </div>
+                      <p className="font-bold text-ink">Video Call</p>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
+
 /* ---------------- Archive ---------------- */
 
-export function ArchiveView({ onMessage: _onMessage }: { onMessage?: (user: any) => void }) {
-  const { user, onMessage } = useDashboard()
+export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: any) => void }) {
+  const { user, onMessage: contextOnMessage } = useDashboard()
+  const onMessage = propOnMessage || contextOnMessage
   const myId = user?._id || user?.id
 
   // Fetch all chats and filter for archived ones
@@ -780,13 +816,31 @@ export function ArchiveView({ onMessage: _onMessage }: { onMessage?: (user: any)
                       {chat.latestMessage?.content ? `"${chat.latestMessage.content}"` : 'No messages'}
                     </p>
                   </div>
-                  <button
-                    onClick={() => onMessage?.({ _id: chat._id || chat.id, full_name: name, avatar: avatar })}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-purple/10 px-4 py-2 text-[13px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
-                  >
-                    <ArchiveRestore className="size-4" />
-                    <span>Restore</span>
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onMessage?.({ _id: chat._id || chat.id, full_name: name, avatar: avatar })}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-purple text-white px-4 py-2 text-[13px] font-bold transition-all hover:opacity-90 active:scale-95 shadow-sm"
+                    >
+                      <MessageSquare className="size-4" />
+                      <span>Message</span>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { toggleArchiveChat } = await import('@/lib/api')
+                          await toggleArchiveChat(chat._id || chat.id)
+                          toast.success('Chat restored')
+                          window.location.reload()
+                        } catch {
+                          toast.error('Failed to restore chat')
+                        }
+                      }}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-purple/10 px-4 py-2 text-[13px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
+                    >
+                      <ArchiveRestore className="size-4" />
+                      <span>Restore</span>
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -936,6 +990,7 @@ export function EditView({
     status_message: user?.status_message || '',
     city: user?.location?.city || '',
     country: user?.location?.country || '',
+    inviteCode: '',
   })
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -1122,6 +1177,34 @@ export function EditView({
               </select>
             </label>
           </div>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Organization Invite Code</span>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={formData.inviteCode || ''}
+                onChange={e => setFormData({ ...formData, inviteCode: e.target.value })}
+                className="flex-1 rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+                placeholder="Enter 8-digit code"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await joinOrganizationByInvite(formData.inviteCode);
+                    toast.success('Successfully joined organization!');
+                    window.location.reload();
+                  } catch (err: any) {
+                    toast.error(err.message || 'Failed to join');
+                  }
+                }}
+                className="px-6 rounded-2xl bg-purple text-white text-sm font-bold shadow-lg shadow-purple/10 hover:opacity-90 active:scale-95 transition-all"
+              >
+                Join
+              </button>
+            </div>
+          </label>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="block">
@@ -1522,10 +1605,19 @@ export function MeetingView({ onBack }: { onBack: () => void }) {
 }
 /* ---------------- Work (Coworkers) ---------------- */
 
-export function WorkView({ onMessage, isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
+export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
+  const { user: currentUser, isNarrow: contextNarrow, onMessage: contextOnMessage } = useDashboard()
+  const onMessage = propOnMessage || contextOnMessage
+  const isNarrow = narrowProp ?? contextNarrow
   const [coworkers, setCoworkers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [activeChat, setActiveChat] = useState<any>(null)
+  const [messages, setMessages] = useState<any[]>([])
+  const [showInfo, setShowInfo] = useState(false)
+  const [chatLoading, setChatLoading] = useState(false)
+  const [collapsingFor, setCollapsingFor] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     const fetchCoworkers = async () => {
@@ -1543,90 +1635,175 @@ export function WorkView({ onMessage, isNarrow = false }: { onMessage?: (user: a
     fetchCoworkers()
   }, [search])
 
+  const handleOpenChat = async (worker: any) => {
+    const workerId = worker._id || worker.id
+    // 1. Trigger collapse animation
+    setCollapsingFor(workerId)
+    setChatLoading(true)
+    try {
+      // Small delay to let the animation play
+      await new Promise(r => setTimeout(r, 220))
+      const res = await accessOrCreateChat(workerId)
+      const chat = res.data?.conversation || res.data || res
+      if (!chat.users && worker) chat.users = [currentUser, worker]
+      setActiveChat(chat)
+      setMessages([])
+    } catch (err) {
+      toast.error('Failed to open chat')
+    } finally {
+      setChatLoading(false)
+      setCollapsingFor(null)
+    }
+  }
+
   return (
-    <div className="flex h-full flex-col bg-white">
-      <ViewHeader
-        title="Workroom"
-        subtitle="Everyone in your organization"
-        action={
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search coworkers..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-64 rounded-xl border border-black/5 bg-black/2 pl-9 pr-4 text-sm focus:border-purple/20 focus:bg-white focus:outline-none focus:ring-0"
-            />
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/40" />
-          </div>
-        }
-      />
-
-      <div className={cn("flex-1 overflow-y-auto", isNarrow ? "p-3" : "p-6")}>
-        {loading ? (
-          <div className={cn("grid gap-4", isNarrow ? "grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3")}>
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="flex flex-col items-center rounded-2xl border border-black/5 p-6 animate-pulse">
-                <div className="size-20 rounded-2xl bg-black/5 mb-4" />
-                <div className="h-4 w-24 bg-black/5 rounded-full mb-2" />
-                <div className="h-3 w-16 bg-black/5 rounded-full" />
-              </div>
-            ))}
-          </div>
-        ) : coworkers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Users className="mb-3 size-12 text-black/10" />
-            <p className="text-sm font-medium text-black/40">No coworkers found</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {coworkers.map((worker) => (
-              <div
-                key={worker._id || worker.id}
-                className="group flex items-center gap-4 rounded-[22px] border border-black/5 bg-white p-3 transition-all hover:border-purple/30 hover:shadow-md"
-              >
-                <div className="relative shrink-0">
-                  <ChatAvatar
-                    src={worker.avatar}
-                    name={worker.full_name || worker.username}
-                    className="size-12 rounded-xl shadow-sm"
+    <div className="flex h-full w-full overflow-hidden bg-white rounded-[26px]">
+      {/* Side-by-side layout: List on left, Chat on right */}
+      <div className={cn(
+        "flex flex-col border-r border-black/5 transition-all duration-500 ease-in-out",
+        activeChat && !isNarrow ? "w-[340px] shrink-0" : "w-full",
+        activeChat && isNarrow ? "hidden" : "flex"
+      )}>
+        <ViewHeader
+          title="Workroom"
+          subtitle="Everyone in your organization"
+          isNarrow={!!activeChat}
+          action={
+            <div className="flex items-center gap-2">
+              {!activeChat && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search coworkers..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="h-9 w-52 rounded-xl border border-black/5 bg-black/2 pl-9 pr-4 text-sm focus:border-purple/20 focus:bg-white focus:outline-none focus:ring-0"
                   />
-                  {worker.isOnline && (
-                    <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-green-500" />
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/40" />
+                </div>
+              )}
+              <button
+                onClick={() => navigate({ to: '/dashboard/archive' })}
+                className="flex h-9 items-center gap-1.5 rounded-xl border border-black/5 bg-white px-3 text-xs font-semibold text-black/50 hover:bg-black/5 hover:text-black/70 transition-all shrink-0"
+                title="Archive Charts"
+              >
+                <Archive className="size-3.5" />
+                {!activeChat && <span>Archive Charts</span>}
+              </button>
+            </div>
+          }
+        />
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {loading ? (
+            [1, 2, 3, 4].map(i => (
+              <div key={i} className="h-20 rounded-2xl bg-black/3 animate-pulse" />
+            ))
+          ) : coworkers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Users className="mb-3 size-12 text-black/10" />
+              <p className="text-sm font-medium text-black/40">No coworkers found</p>
+              <p className="text-xs text-black/30 mt-1">Members of your organization will appear here</p>
+            </div>
+          ) : (
+            coworkers.map((worker) => {
+              const workerId = worker._id || worker.id
+              const isCollapsing = collapsingFor === workerId
+              return (
+                <div
+                  key={workerId}
+                  className={cn(
+                    "group flex items-center gap-4 rounded-[22px] border border-black/5 bg-white p-3 transition-all duration-300 cursor-pointer",
+                    isCollapsing
+                      ? "scale-[0.97] opacity-60 border-purple/20 shadow-inner"
+                      : "hover:border-purple/30 hover:shadow-md"
                   )}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-ink truncate max-w-[200px]">
-                      {worker.full_name}
-                    </h3>
-                    <span className="text-[10px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      {worker.org_role || 'Member'}
-                    </span>
+                  onClick={() => !chatLoading && handleOpenChat(worker)}
+                >
+                  <div className="relative shrink-0">
+                    <ChatAvatar
+                      src={worker.avatar}
+                      name={worker.full_name || worker.username}
+                      className="size-12 rounded-xl shadow-sm"
+                    />
+                    {worker.isOnline && (
+                      <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-green-500" />
+                    )}
                   </div>
-                  <p className="text-[12px] text-ink-soft truncate">
-                    @{worker.username} {worker.status_message && `• "${worker.status_message}"`}
-                  </p>
-                </div>
 
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => onMessage?.(worker)}
-                    className="flex h-9 items-center gap-2 rounded-xl bg-purple px-4 text-xs font-bold text-white transition-all hover:opacity-90 active:scale-95"
-                  >
-                    <MessageCircle className="size-3.5" />
-                    Message
-                  </button>
-                  <button className="flex size-9 items-center justify-center rounded-xl border border-black/5 text-black/40 transition-all hover:border-purple/30 hover:text-purple">
-                    <Phone className="size-3.5" />
-                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-ink truncate max-w-[160px]">
+                        {worker.full_name}
+                      </h3>
+                      {(worker.org_role || worker.organization) && (
+                        <span className="text-[10px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-full uppercase tracking-wider truncate max-w-[100px]">
+                          {worker.org_role || worker.organization}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-ink-soft truncate">
+                      @{worker.username} {worker.status_message && `• "${worker.status_message}"`}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (!chatLoading) handleOpenChat(worker) }}
+                      disabled={chatLoading}
+                      className="flex h-9 items-center gap-2 rounded-xl bg-purple px-4 text-xs font-bold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm disabled:opacity-60"
+                    >
+                      {isCollapsing ? <Loader2 className="size-3.5 animate-spin" /> : <MessageCircle className="size-3.5" />}
+                      {isCollapsing ? 'Opening...' : 'Message'}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation() }}
+                      className="flex size-9 items-center justify-center rounded-xl border border-black/5 text-black/40 transition-all hover:border-purple/30 hover:text-purple bg-white shadow-sm"
+                    >
+                      <Phone className="size-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              )
+            })
+          )}
+        </div>
       </div>
+
+      {/* Chat Window: persistent on right if activeChat */}
+      {activeChat ? (
+        <div className={cn("flex flex-1 overflow-hidden", showInfo ? "flex-row" : "flex-col")}>
+          <div className={cn("flex flex-1 flex-col", showInfo ? "w-2/3" : "w-full")}>
+            <ChatWindow
+              chatId={activeChat.id || activeChat._id}
+              chat={activeChat}
+              currentUser={currentUser}
+              messages={messages}
+              setMessages={setMessages}
+              onClose={() => setActiveChat(null)}
+              onShowInfo={() => setShowInfo(!showInfo)}
+            />
+          </div>
+          {showInfo && (
+            <div className="w-1/3 border-l border-black/5 bg-white overflow-y-auto">
+              <GroupInfo
+                conversation={activeChat}
+                onClose={() => setShowInfo(false)}
+              />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className={cn("flex-1 items-center justify-center hidden md:flex", isNarrow && "hidden")}>
+          <div className="text-center p-8 max-w-sm">
+            <div className="size-20 rounded-3xl bg-purple/10 flex items-center justify-center mb-4 mx-auto font-bold text-purple text-2xl">
+              <Briefcase className="size-10" />
+            </div>
+            <h2 className="text-xl font-bold text-black mb-2">Collaboration Hub</h2>
+            <p className="text-sm text-black/40">Choose a colleague from the list to start a high-performance conversation or view organizational insights.</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

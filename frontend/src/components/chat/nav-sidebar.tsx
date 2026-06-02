@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
+import { useQuery } from '@tanstack/react-query'
+import { getUnreadChatCount } from '@/lib/api'
 
 type NavItem = {
   id: string
@@ -22,12 +24,12 @@ type NavItem = {
   active?: boolean
 }
 
-const items: NavItem[] = [
-  { id: 'all', label: 'All chats', icon: MessageSquare, badge: 43 },
-  { id: 'work', label: 'Work', icon: FolderClosed, badge: 4, active: true },
+const navItems: NavItem[] = [
+  { id: 'all', label: 'All chats', icon: MessageSquare },
+  { id: 'work', label: 'Work', icon: FolderClosed },
   { id: 'friends', label: 'Friends', icon: Users },
   { id: 'calls', label: 'Calls', icon: Phone },
-  { id: 'archive', label: 'Archive chats', icon: Archive },
+  { id: 'archive', label: 'Archived', icon: Archive },
 ]
 
 const bottomItems: NavItem[] = [
@@ -96,6 +98,14 @@ export function NavSidebar({
   onLogout: () => void
   user: any
 }) {
+  const { data: unreadData } = useQuery({
+    queryKey: ['unreadCount'],
+    queryFn: getUnreadChatCount,
+    refetchInterval: 10000, // Refresh every 10s
+  })
+
+  const totalUnread = unreadData?.count || 0
+
   return (
     <nav className="flex w-[88px] shrink-0 flex-col items-center py-6">
       {/* Logo */}
@@ -104,9 +114,12 @@ export function NavSidebar({
       </div>
 
       <div className="flex flex-1 flex-col gap-2">
-        {items.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon
           const isActive = item.id === activeTab
+          // For now, show total unread on 'all' or 'work' if we don't have per-category data
+          const badge = (item.id === 'all' || item.id === 'work') ? totalUnread : 0
+
           return (
             <Link
               key={item.id}
@@ -130,16 +143,16 @@ export function NavSidebar({
                     isActive ? 'text-white' : 'text-white/70',
                   )}
                 />
-                {item.badge ? (
-                  <span className="absolute -right-2.5 -top-2 flex min-w-[18px] items-center justify-center rounded-full bg-accent-orange px-1 text-[10px] font-semibold leading-[18px] text-white">
-                    {item.badge}
+                {badge > 0 ? (
+                  <span className="absolute -right-2.5 -top-2 flex min-w-[18px] items-center justify-center rounded-full bg-accent-orange px-1 text-[10px] font-semibold leading-[18px] text-white animate-in zoom-in duration-300 shadow-sm">
+                    {badge}
                   </span>
                 ) : null}
               </span>
               <span
                 className={cn(
-                  'text-[11px] font-medium',
-                  isActive ? 'text-white' : 'text-white/60',
+                  'text-[11px] font-medium transition-colors',
+                  isActive ? 'text-white' : 'text-white/60 group-hover:text-white/80',
                 )}
               >
                 {item.label}

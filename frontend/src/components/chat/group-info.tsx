@@ -437,7 +437,7 @@ export function GroupInfo({
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null)
 
   return (
-    <aside className="hidden w-[360px] shrink-0 flex-col gap-4 xl:flex overflow-y-auto">
+    <aside className="flex h-full w-full flex-col gap-4 overflow-y-auto bg-white/80 backdrop-blur-xl border-l border-black/5 p-4 rounded-l-3xl shadow-2xl pointer-events-auto">
       {lightboxState && (
         <ImageGallery
           images={lightboxState.images}

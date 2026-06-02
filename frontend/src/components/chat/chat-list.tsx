@@ -77,6 +77,9 @@ function ChatContextMenu({
   )
 }
 
+import { useNavigate } from '@tanstack/react-router'
+import { getMyContacts, accessOrCreateChat } from '@/lib/api'
+
 export function ChatList({
   activeId,
   onSelect,
@@ -90,17 +93,65 @@ export function ChatList({
   const [search, setSearch] = useState('')
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set())
+  const [contacts, setContacts] = useState<any[]>([])
+  const [loadingContacts, setLoadingContacts] = useState(false)
+  const navigate = useNavigate()
 
-  const filtered = chats.filter(c => {
+  useEffect(() => {
+    const loadContacts = async () => {
+      try {
+        setLoadingContacts(true)
+        const res = await getMyContacts()
+        setContacts(res.data || [])
+      } catch (err) {
+        console.error('Failed to load contacts for chat list:', err)
+      } finally {
+        setLoadingContacts(false)
+      }
+    }
+    loadContacts()
+  }, [])
+
+  // Merge chats and contacts
+  // Users who have a chat already are in `chats`
+  // Users who are contacts but NO chat yet should be appended
+  const chatUserIds = new Set()
+  chats.forEach(c => {
+    if (!c.isGroupChat) {
+      const other = c.users?.find((u: any) => (u._id || u.id) !== currentUserId)
+      if (other) chatUserIds.add(other._id || other.id)
+    }
+  })
+
+  const contactsWithoutChats = contacts.filter(con => !chatUserIds.has(con._id || con.id))
+
+  const filteredChats = chats.filter(c => {
     if (archivedIds.has(c._id || c.id)) return false
     const name = getChatName(c, currentUserId)
     return name.toLowerCase().includes(search.toLowerCase())
   })
 
+  const filteredContacts = contactsWithoutChats.filter(con => {
+    const name = con.full_name || con.username || ''
+    return name.toLowerCase().includes(search.toLowerCase())
+  })
+
+  const handleContactClick = async (contact: any) => {
+    try {
+      const res = await accessOrCreateChat(contact._id || contact.id)
+      const chat = res.data?.conversation || res.data || res
+      onSelect(chat._id || chat.id, chat)
+      refreshChats()
+    } catch (err) {
+      toast.error('Failed to start chat')
+    }
+  }
+
   function getChatName(chat: any, myId?: string): string {
     if (chat.isGroupChat) return chat.chatName || 'Group Chat'
     const other = chat.users?.find((u: any) => (u._id || u.id) !== myId)
-    return other?.full_name || other?.username || chat.chatName || 'Unknown'
+    if (other) return other.full_name || other.username || 'User'
+    return (chat.chatName && chat.chatName !== 'direct') ? chat.chatName : 'Chat'
   }
 
   function getChatAvatar(chat: any, myId?: string): string | undefined {
@@ -132,7 +183,10 @@ export function ChatList({
           toast.success('Chat cleared')
           break
         case 'archive':
+          const { toggleArchiveChat } = await import('@/lib/api')
+          await toggleArchiveChat(chatId)
           setArchivedIds(prev => new Set([...prev, chatId]))
+          refreshChats()
           toast.success('Chat archived')
           break
         case 'delete':
@@ -158,13 +212,25 @@ export function ChatList({
 
   return (
     <aside className="flex h-full flex-col bg-white">
+      {/* Header with Archive Charts */}
+      <div className="flex items-center justify-between px-4 pt-6 pb-2">
+        <h2 className="text-xl font-bold bg-linear-to-r from-purple to-purple/60 bg-clip-text text-transparent">Messages</h2>
+        <button
+          onClick={() => navigate({ to: '/dashboard/archive' })}
+          className="flex items-center gap-1.5 rounded-full bg-black/3 px-3 py-1.5 text-[11px] font-bold text-black/50 hover:bg-black/5 hover:text-black transition-all"
+        >
+          <Archive className="size-3.5" />
+          Archive Charts
+        </button>
+      </div>
+
       {/* Search */}
-      <div className="px-4 pt-5 pb-2">
+      <div className="px-4 py-2">
         <div className="flex items-center gap-3 rounded-[24px] bg-purple/10 border border-purple/5 backdrop-blur-xl px-4 py-3 shadow-inner">
           <Search className="size-5 text-purple shrink-0" />
           <input
             type="text"
-            placeholder="Search messages..."
+            placeholder="Search conversations..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full bg-transparent text-[15px] text-ink placeholder:text-ink/40 focus:outline-none"
@@ -177,7 +243,7 @@ export function ChatList({
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto px-2 pb-4">
-        {loadingChats ? (
+        {loadingChats || loadingContacts ? (
           <div className="flex flex-col gap-2 p-2">
             {[1, 2, 3, 4].map(i => (
               <div key={i} className="flex items-center gap-3 rounded-2xl px-3 py-3 animate-pulse">
@@ -189,95 +255,140 @@ export function ChatList({
               </div>
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : (filteredChats.length === 0 && filteredContacts.length === 0) ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <MessageSquarePlus className="size-10 text-black/10 mb-3" />
             <p className="text-sm font-medium text-black/30">No conversations yet</p>
-            <p className="text-xs text-black/20 mt-1">Message a colleague to get started</p>
+            <p className="text-xs text-black/20 mt-1">Message a contact to get started</p>
           </div>
         ) : (
-          <div className="mt-1 space-y-0.5">
-            {filtered
-              .sort((a, b) => {
-                if (a.isPinned && !b.isPinned) return -1
-                if (!a.isPinned && b.isPinned) return 1
-                return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
-              })
-              .map(chat => {
-                const chatId = chat._id || chat.id
-                const name = getChatName(chat, currentUserId)
-                const avatar = getChatAvatar(chat, currentUserId)
-                const unread = getUnread(chat)
-                const preview = chat.latestMessage?.content || 'Start a conversation…'
-                const time = formatTime(chat.updatedAt || chat.latestMessage?.createdAt)
-                const selected = chatId === activeId
+          <div className="mt-1 space-y-4">
+            {/* Active Chats Section */}
+            {filteredChats.length > 0 && (
+              <div className="space-y-0.5">
+                <div className="px-3 mb-2 flex items-center justify-between text-[10px] font-bold text-black/30 uppercase tracking-widest italic">
+                  RECENT MESSAGES
+                  <span className="h-px flex-1 ml-3 bg-black/5" />
+                </div>
+                {filteredChats
+                  .sort((a: any, b: any) => {
+                    if (a.isPinned && !b.isPinned) return -1
+                    if (!a.isPinned && b.isPinned) return 1
+                    return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+                  })
+                  .map((chat: any) => {
+                    const chatId = chat._id || chat.id
+                    const name = getChatName(chat, currentUserId)
+                    const avatar = getChatAvatar(chat, currentUserId)
+                    const unread = getUnread(chat)
+                    const preview = chat.latestMessage?.content || 'Say hello! 👋'
+                    const time = formatTime(chat.updatedAt || chat.latestMessage?.createdAt)
+                    const selected = chatId === activeId
 
-                return (
-                  <div
-                    key={chatId}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelect(chatId, chat)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        onSelect(chatId, chat)
-                      }
-                    }}
-                    onContextMenu={e => {
-                      e.preventDefault()
-                      setContextMenu({ chatId, x: e.clientX, y: e.clientY })
-                    }}
-                    className={cn(
-                      'group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors cursor-pointer outline-none',
-                      selected ? 'bg-purple-light no-underline shadow-[inset_0_0_0_1px_rgba(139,92,246,0.1)]' : 'hover:bg-purple-light/50',
-                    )}
-                  >
-                    <div className="relative shrink-0">
-                      <ChatAvatar src={avatar} name={name} className="size-[52px] rounded-2xl" />
-                      {chat.isOnline && (
-                        <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-[15px] font-semibold text-ink flex items-center gap-1.5">
-                          {chat.isPinned && <Pin className="size-3 fill-purple text-purple" />}
-                          {name}
-                        </span>
-                        <span className="shrink-0 text-xs text-ink-soft">{time}</span>
-                      </div>
-
-                      <div className="mt-0.5 flex items-center justify-between gap-2">
-                        <p className={cn("truncate text-[13px]", unread > 0 ? "font-medium text-ink" : "text-ink-soft")}>
-                          {chat.isMuted && <BellOff className="inline size-3 mr-1 text-black/30" />}
-                          {preview}
-                        </p>
-                        <span className="flex shrink-0 items-center gap-1.5">
-                          {unread > 0 && (
-                            <span className="flex size-5 items-center justify-center rounded-full bg-accent-orange text-[11px] font-semibold leading-[18px] text-white">
-                              {unread > 9 ? '9+' : unread}
-                            </span>
+                    return (
+                      <div
+                        key={chatId}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onSelect(chatId, chat)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onSelect(chatId, chat)
+                          }
+                        }}
+                        onContextMenu={e => {
+                          e.preventDefault()
+                          setContextMenu({ chatId, x: e.clientX, y: e.clientY })
+                        }}
+                        className={cn(
+                          'group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors cursor-pointer outline-none',
+                          selected ? 'bg-purple-light no-underline shadow-[inset_0_0_0_1px_rgba(139,92,246,0.1)]' : 'hover:bg-purple-light/50',
+                        )}
+                      >
+                        <div className="relative shrink-0">
+                          <ChatAvatar src={avatar} name={name} className="size-[52px] rounded-2xl shadow-sm" />
+                          {chat.isOnline && (
+                            <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500 shadow-sm" />
                           )}
-                          {chat.isPinned && <Pin className="size-4 rotate-45 fill-purple text-purple" />}
-                        </span>
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-[15px] font-semibold text-ink flex items-center gap-1.5">
+                              {chat.isPinned && <Pin className="size-3 fill-purple text-purple" />}
+                              {name}
+                            </span>
+                            <span className="shrink-0 text-xs text-ink-soft">{time}</span>
+                          </div>
+
+                          <div className="mt-0.5 flex items-center justify-between gap-2">
+                            <p className={cn("truncate text-[13px]", unread > 0 ? "font-medium text-ink" : "text-ink-soft")}>
+                              {chat.isMuted && <BellOff className="inline size-3 mr-1 text-black/30" />}
+                              {preview}
+                            </p>
+                            <span className="flex shrink-0 items-center gap-1.5">
+                              {unread > 0 && (
+                                <span className="flex size-5 items-center justify-center rounded-full bg-accent-orange text-[11px] font-semibold leading-[18px] text-white animate-pulse">
+                                  {unread > 9 ? '9+' : unread}
+                                </span>
+                              )}
+                              {chat.isPinned && <Pin className="size-4 rotate-45 fill-purple text-purple opacity-50" />}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Hover 3-dot menu */}
+                        <button
+                          className="hidden group-hover:flex size-7 shrink-0 items-center justify-center rounded-xl hover:bg-black/5"
+                          onClick={e => {
+                            e.stopPropagation()
+                            setContextMenu({ chatId, x: e.clientX, y: e.clientY })
+                          }}
+                        >
+                          <MoreVertical className="size-4 text-black/40" />
+                        </button>
+                      </div>
+                    )
+                  })}
+              </div>
+            )}
+
+            {/* Contacts Section (Users you can message) */}
+            {filteredContacts.length > 0 && (
+              <div className="space-y-0.5">
+                <div className="px-3 mb-2 flex items-center justify-between text-[10px] font-bold text-black/30 uppercase tracking-widest italic">
+                  CONTACTS
+                  <span className="h-px flex-1 ml-3 bg-black/5" />
+                </div>
+                {filteredContacts.map((contact: any) => {
+                  const name = contact.full_name || contact.username || 'User'
+                  return (
+                    <div
+                      key={contact._id || contact.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleContactClick(contact)}
+                      className="group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors cursor-pointer outline-none hover:bg-purple/5"
+                    >
+                      <div className="relative shrink-0">
+                        <ChatAvatar src={contact.avatar} name={name} className="size-[52px] rounded-2xl opacity-80" />
+                        {contact.isOnline && (
+                          <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500 shadow-sm" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="truncate text-[15px] font-semibold text-ink-soft group-hover:text-ink">{name}</h4>
+                        <p className="truncate text-[12px] text-black/30 italic">Not messaged yet • Click to chat</p>
+                      </div>
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <MessageSquarePlus className="size-4 text-purple" />
                       </div>
                     </div>
-
-                    {/* Hover 3-dot menu */}
-                    <button
-                      className="hidden group-hover:flex size-7 shrink-0 items-center justify-center rounded-xl hover:bg-black/5"
-                      onClick={e => {
-                        e.stopPropagation()
-                        setContextMenu({ chatId, x: e.clientX, y: e.clientY })
-                      }}
-                    >
-                      <MoreVertical className="size-4 text-black/40" />
-                    </button>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
