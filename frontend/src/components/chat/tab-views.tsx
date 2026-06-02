@@ -872,9 +872,15 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
                   <button
                     onClick={async (e) => {
                       e.stopPropagation()
+                      const chatId = chat._id || chat.id
                       try {
                         const { toggleArchiveChat } = await import('@/lib/api')
-                        await toggleArchiveChat(chat._id || chat.id)
+                        const chatObj = (archivedChatsRaw || []).find((c: any) => (c._id || c.id) === chatId)
+                        if (chatObj && myId) {
+                          const updatedArchivedBy = (chatObj.archivedBy || []).filter((id: string) => String(id) !== String(myId))
+                          updateChatInList(chatId, { archivedBy: updatedArchivedBy })
+                        }
+                        await toggleArchiveChat(chatId)
                         toast.success('Chat restored')
                         if (isActive) { setActiveChat(null); setActiveChatId(null) }
                         refetch()

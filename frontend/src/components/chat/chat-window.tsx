@@ -483,14 +483,15 @@ export function ChatWindow({
     setSending(true)
 
     const tempId = `temp-${Date.now()}`
+    const localUrl = recordedAudioUrl
     const optimistic = {
       _id: tempId,
       content: '',
       sender: { _id: myId, full_name: currentUser?.full_name, avatar: currentUser?.avatar },
       createdAt: new Date().toISOString(),
       message_type: 'voice',
-      mediaUrl: recordedAudioUrl,
-      media_url: recordedAudioUrl,
+      mediaUrl: localUrl || undefined,
+      media_url: localUrl || undefined,
       duration: formatDuration(recordedAudioDuration),
     }
 
@@ -498,7 +499,15 @@ export function ChatWindow({
     const audioFile = recordedAudioFile
     const audioDuration = recordedAudioDuration
 
-    discardRecordedAudio()
+    // Clear voice recorder UI state immediately, but DO NOT revoke the local URL yet
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause()
+      previewAudioRef.current = null
+    }
+    setRecordedAudioUrl(null)
+    setRecordedAudioFile(null)
+    setRecordedAudioDuration(0)
+    setIsAudioPreviewPlaying(false)
 
     try {
       const res = await sendMediaMessage(chatId, audioFile, {
@@ -508,9 +517,15 @@ export function ChatWindow({
       const data = res?.data || res
       setMessages(prev => prev.map(m => m._id === tempId ? { ...m, ...data, _id: data._id || tempId } : m))
       toast.success('Voice message sent')
+      if (localUrl) {
+        URL.revokeObjectURL(localUrl)
+      }
     } catch {
       toast.error('Failed to send voice message')
       setMessages(prev => prev.filter(m => m._id !== tempId))
+      if (localUrl) {
+        URL.revokeObjectURL(localUrl)
+      }
     } finally {
       setSending(false)
     }
@@ -566,21 +581,28 @@ export function ChatWindow({
     setSending(true)
 
     const tempId = `temp-${Date.now()}`
+    const localUrl = selectedAttachment ? selectedAttachment.url : undefined
     const optimistic = {
       _id: tempId,
       content: input,
       sender: { _id: myId, full_name: currentUser?.full_name, avatar: currentUser?.avatar },
       createdAt: new Date().toISOString(),
       message_type: selectedAttachment ? selectedAttachment.type : 'text',
-      mediaUrl: selectedAttachment ? selectedAttachment.url : undefined,
-      media_url: selectedAttachment ? selectedAttachment.url : undefined,
+      mediaUrl: localUrl,
+      media_url: localUrl,
     }
 
     setMessages(prev => [...prev, optimistic])
     const sentText = input
     const attachment = selectedAttachment
     setInput('')
-    removeSelectedAttachment()
+    
+    // Clear selection state without revoking the URL
+    setSelectedAttachment(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+    
     emitTyping(false)
 
     try {
@@ -595,9 +617,15 @@ export function ChatWindow({
       }
       const data = res?.data || res
       setMessages(prev => prev.map(m => m._id === tempId ? { ...m, ...data, _id: data._id || tempId } : m))
+      if (localUrl) {
+        URL.revokeObjectURL(localUrl)
+      }
     } catch {
       toast.error('Message failed to send')
       setMessages(prev => prev.filter(m => m._id !== tempId))
+      if (localUrl) {
+        URL.revokeObjectURL(localUrl)
+      }
     } finally {
       setSending(false)
     }
