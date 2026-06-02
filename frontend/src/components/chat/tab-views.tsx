@@ -38,6 +38,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useDashboard } from '@/contexts/DashboardContext'
 import { useNavigate } from '@tanstack/react-router'
+import { useChats } from '@/contexts/AppContext'
 import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
@@ -769,6 +770,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
     showInfo,
     setShowInfo,
   } = useDashboard()
+  const { updateChatInList } = useChats()
   const myId = user?._id || user?.id
   const [chatLoading, setChatLoading] = useState(false)
 

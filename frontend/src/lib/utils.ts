@@ -15,7 +15,13 @@ const API_BASE = ((import.meta as any).env?.VITE_API_URL?.replace(/\/api\/v1\/?$
  */
 export function getSecureMediaUrl(url?: string | null): string | null {
   if (!url) return null
-  if (url.startsWith('blob:')) return null
+  if (url.startsWith('blob:')) return url
+  
+  if (url.includes('s3.filebase.com') || url.includes('filebase.com')) {
+    const encoded = encodeURIComponent(url)
+    return `${API_BASE}/api/v1/message/media/proxy?url=${encoded}`
+  }
+
   if (url.startsWith('http://') || url.startsWith('https://')) return url
   if (url.startsWith('/')) return `${API_BASE}${url}`
   return url

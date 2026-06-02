@@ -126,7 +126,8 @@ export function ChatList({
   const contactsWithoutChats = contacts.filter(con => !chatUserIds.has(con._id || con.id))
 
   const filteredChats = chats.filter(c => {
-    if (archivedIds.has(c._id || c.id)) return false
+    const isArchived = (c.archivedBy && currentUserId && c.archivedBy.includes(currentUserId)) || archivedIds.has(c._id || c.id)
+    if (isArchived) return false
     const name = getChatName(c, currentUserId)
     return name.toLowerCase().includes(search.toLowerCase())
   })
@@ -182,13 +183,36 @@ export function ChatList({
           updateChatInList(chatId, { latestMessage: null })
           toast.success('Chat cleared')
           break
-        case 'archive':
+        case 'archive': {
           const { toggleArchiveChat } = await import('@/lib/api')
-          await toggleArchiveChat(chatId)
+          const myId = currentUserId || ''
+          const chat = chats.find(c => (c._id || c.id) === chatId)
+          const updatedArchivedBy = [...(chat?.archivedBy || [])]
+          if (myId && !updatedArchivedBy.includes(myId)) {
+            updatedArchivedBy.push(myId)
+          }
+
+          // Optimistically update lists immediately in real-time
           setArchivedIds(prev => new Set([...prev, chatId]))
-          refreshChats()
-          toast.success('Chat archived')
+          updateChatInList(chatId, { archivedBy: updatedArchivedBy })
+
+          try {
+            await toggleArchiveChat(chatId)
+            toast.success('Chat archived')
+          } catch {
+            // Revert changes on error
+            setArchivedIds(prev => {
+              const next = new Set(prev)
+              next.delete(chatId)
+              return next
+            })
+            if (chat) {
+              updateChatInList(chatId, { archivedBy: chat.archivedBy || [] })
+            }
+            toast.error('Failed to archive chat')
+          }
           break
+        }
         case 'delete':
           await deleteChat(chatId)
           removeChatFromList(chatId)

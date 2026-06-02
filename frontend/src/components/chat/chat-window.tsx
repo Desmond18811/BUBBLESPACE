@@ -8,7 +8,7 @@ import {
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
-import { useSocket } from '@/contexts/AppContext'
+import { useSocket, useChats } from '@/contexts/AppContext'
 import {
   fetchMessages,
   sendTextMessage,
@@ -144,6 +144,7 @@ export function ChatWindow({
   setMessages: React.Dispatch<React.SetStateAction<any[]>>
 }) {
   const { socket, startCall } = useSocket()
+  const { chats, updateChatInList } = useChats()
   const myId = currentUser?._id || currentUser?.id
 
   const handleVoiceCall = () => {
@@ -768,7 +769,27 @@ export function ChatWindow({
                       <button onClick={async () => { await clearChat(chatId); setMessages([]); toast.success('Chat cleared'); setShowChatMenu(false) }} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 transition-colors">
                         <EyeOff className="size-4 text-black/40" /> Clear Chat
                       </button>
-                      <button className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 transition-colors">
+                      <button
+                        onClick={async () => {
+                          setShowChatMenu(false)
+                          try {
+                            const { toggleArchiveChat } = await import('@/lib/api')
+                            const myId = currentUser?._id || currentUser?.id || ''
+                            const chatObj = chats.find((c: any) => (c._id || c.id) === chatId)
+                            const updatedArchivedBy = [...(chatObj?.archivedBy || [])]
+                            if (myId && !updatedArchivedBy.includes(myId)) {
+                              updatedArchivedBy.push(myId)
+                            }
+                            updateChatInList(chatId, { archivedBy: updatedArchivedBy })
+                            toast.success('Chat archived')
+                            if (onClose) onClose()
+                            await toggleArchiveChat(chatId)
+                          } catch {
+                            toast.error('Failed to archive chat')
+                          }
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 transition-colors"
+                      >
                         <Archive className="size-4 text-black/40" /> Archive Chat
                       </button>
                       <hr className="my-1 border-black/5" />
@@ -914,7 +935,7 @@ export function ChatWindow({
                                      }}
                                    >
                                      <img
-                                       src={getSecureMediaUrl(msg.mediaUrl || msg.media_url) || ''}
+                                       src={getSecureMediaUrl(msg.mediaUrl || msg.media_url) || undefined}
                                        alt="media"
                                        className="max-w-[280px] max-h-[220px] rounded-lg object-cover cursor-pointer hover:opacity-95 transition-opacity"
                                        onClick={() => {
@@ -949,7 +970,7 @@ export function ChatWindow({
                                      }}
                                    >
                                      <video
-                                       src={getSecureMediaUrl(msg.mediaUrl || msg.media_url) || ''}
+                                       src={getSecureMediaUrl(msg.mediaUrl || msg.media_url) || undefined}
                                        controls
                                        className="max-w-[280px] max-h-[220px] rounded-lg object-cover"
                                      />
