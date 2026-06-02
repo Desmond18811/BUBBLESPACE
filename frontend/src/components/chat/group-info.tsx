@@ -148,11 +148,13 @@ function FilesCard({
   title,
   messages = [],
   onLightbox,
+  onClose,
 }: {
   conversation: Conversation
   title: string
   messages?: any[]
   onLightbox?: (images: string[], index: number) => void
+  onClose?: () => void
 }) {
   const conv = conversation as any
   const { videos, audio, files: fileCount, voice, imageUrls } = countMedia(messages)
@@ -172,7 +174,17 @@ function FilesCard({
   const hasContent = allImageUrls.length > 0 || fileRows.length > 0
 
   return (
-    <div className="rounded-3xl p-5" style={glass.card}>
+    <div className="rounded-3xl p-5 relative" style={glass.card}>
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 flex size-7 items-center justify-center rounded-lg transition-all hover:bg-black/5 active:scale-95 text-black/40 hover:text-purple"
+          type="button"
+          aria-label="Close"
+        >
+          <X className="size-4" />
+        </button>
+      )}
       <h2 className="text-[17px] font-bold text-ink mb-3">{title}</h2>
       {!hasContent ? (
         <p className="py-4 text-center text-xs text-ink-soft italic">No shared files yet</p>
@@ -223,12 +235,22 @@ function FilesCard({
 
 /* ── Group Members Card ──────────────────────────────────────────────────── */
 
-function MembersCard({ conversation }: { conversation: Conversation }) {
+function MembersCard({ conversation, onClose }: { conversation: Conversation; onClose?: () => void }) {
   const conv = conversation as any
   const members = conv.members || (conv.isGroupChat ? conv.users : []) || []
 
   return (
-    <div className="flex flex-col rounded-3xl p-5" style={glass.card}>
+    <div className="flex flex-col rounded-3xl p-5 relative" style={glass.card}>
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 flex size-7 items-center justify-center rounded-lg transition-all hover:bg-black/5 active:scale-95 text-black/40 hover:text-purple"
+          type="button"
+          aria-label="Close"
+        >
+          <X className="size-4" />
+        </button>
+      )}
       <h2 className="text-[17px] font-bold text-ink mb-3">Members</h2>
       <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
         {members.map((m: any) => (
@@ -253,7 +275,7 @@ function MembersCard({ conversation }: { conversation: Conversation }) {
 
 /* ── Contact Info Card ───────────────────────────────────────────────────── */
 
-function ContactCard({ conversation }: { conversation: any }) {
+function ContactCard({ conversation, onClose }: { conversation: any; onClose?: () => void }) {
   if (!conversation) return null
 
   const other = conversation.otherUser || conversation.contact || {}
@@ -280,7 +302,17 @@ function ContactCard({ conversation }: { conversation: any }) {
   ]
 
   return (
-    <div className="rounded-3xl p-5 text-center flex flex-col items-center" style={glass.card}>
+    <div className="rounded-3xl p-5 text-center flex flex-col items-center relative w-full" style={glass.card}>
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 flex size-7 items-center justify-center rounded-lg transition-all hover:bg-black/5 active:scale-95 text-black/40 hover:text-purple"
+          type="button"
+          aria-label="Close"
+        >
+          <X className="size-4" />
+        </button>
+      )}
       <div className="relative size-20 mb-3">
         <ChatAvatar src={avatarSrc} name={displayName} className="size-20 rounded-2xl" />
         <span className={cn(
@@ -355,17 +387,19 @@ export function GroupInfo({
               title="Group Info"
               messages={messages}
               onLightbox={(imgs, idx) => setLightboxState({ images: imgs, index: idx })}
+              onClose={onClose}
             />
-            <MembersCard conversation={conversation} />
+            <MembersCard conversation={conversation} onClose={onClose} />
           </>
         ) : (
           <>
-            <ContactCard conversation={conversation} />
+            <ContactCard conversation={conversation} onClose={onClose} />
             <FilesCard
               conversation={conversation}
               title="Shared Files"
               messages={messages}
               onLightbox={(imgs, idx) => setLightboxState({ images: imgs, index: idx })}
+              onClose={onClose}
             />
           </>
         )}

@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { Video, Phone, X } from 'lucide-react'
+import { createMeeting, addMeetingTranscriptChunk, endMeeting } from '@/lib/api'
 
 export function ZegoMeetingModal({ roomId, type, userId, userName, onClose }: {
   roomId: string
@@ -16,6 +17,8 @@ export function ZegoMeetingModal({ roomId, type, userId, userName, onClose }: {
   useEffect(() => {
     let active = true
     let zp: any = null
+    let recognition: any = null
+    let meetingDbId: string | null = null
 
     const appId = Number(import.meta.env.VITE_ZEGO_APP_ID)
     const serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET ?? ''
@@ -27,44 +30,116 @@ export function ZegoMeetingModal({ roomId, type, userId, userName, onClose }: {
       return
     }
 
-    import('@zegocloud/zego-uikit-prebuilt')
-      .then(({ ZegoUIKitPrebuilt }) => {
-        if (!active) return
-
-        const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
-          appId,
-          serverSecret,
+    const initZegoAndTranscript = async () => {
+      // 1. Create meeting record to get a database ID for transcript compilation
+      try {
+        const res = await createMeeting({
           roomId,
-          userId || `guest-${Date.now()}`,
-          userName || 'Guest'
-        )
-        zp = ZegoUIKitPrebuilt.create(kitToken)
-        if (!containerRef.current) return
-        zp.joinRoom({
-          container: containerRef.current,
-          scenario: {
-            mode:
-              type === 'video'
-                ? ZegoUIKitPrebuilt.VideoConference
-                : ZegoUIKitPrebuilt.GroupCall,
-          },
-          showPreJoinView: false,
-          turnOnCameraWhenJoining: type === 'video',
-          turnOnMicrophoneWhenJoining: true,
-          showLeavingView: false,
-          onLeaveRoom: onClose,
+          title: `${type === 'video' ? 'Video' : 'Voice'} Call`,
+          type: type === 'video' ? 'video' : 'voice',
         })
-        setZegoReady(true)
-      })
-      .catch((err) => {
-        console.error('[Zego] load error', err)
-        setZegoError('Failed to load ZegoCloud SDK. Check your network connection.')
-      })
+        meetingDbId = res?.meeting?._id || res?._id || null
+      } catch (err) {
+        console.warn('[Zego] Failed to create meeting record:', err)
+      }
+
+      // 2. Initialize Speech Recognition
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      if (SpeechRecognition) {
+        recognition = new SpeechRecognition()
+        recognition.continuous = true
+        recognition.interimResults = false
+        recognition.lang = 'en-US'
+
+        recognition.onresult = (event: any) => {
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              const text = event.results[i][0].transcript.trim()
+              if (!text) continue
+
+              const chunk = {
+                speaker: userName || 'Guest',
+                text,
+                timestamp: Date.now(),
+              }
+
+              if (meetingDbId) {
+                addMeetingTranscriptChunk(meetingDbId, chunk).catch(console.error)
+              }
+            }
+          }
+        }
+
+        recognition.onend = () => {
+          if (active) {
+            try { recognition.start() } catch (_) { }
+          }
+        }
+
+        try {
+          recognition.start()
+        } catch (e) {
+          console.warn('[Zego] Speech recognition failed to start:', e)
+        }
+      }
+
+      // 3. Load Zego Prebuilt
+      import('@zegocloud/zego-uikit-prebuilt')
+        .then(({ ZegoUIKitPrebuilt }) => {
+          if (!active) return
+
+          const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+            appId,
+            serverSecret,
+            roomId,
+            userId || `guest-${Date.now()}`,
+            userName || 'Guest'
+          )
+          zp = ZegoUIKitPrebuilt.create(kitToken)
+          if (!containerRef.current) return
+          zp.joinRoom({
+            container: containerRef.current,
+            scenario: {
+              mode:
+                type === 'video'
+                  ? ZegoUIKitPrebuilt.VideoConference
+                  : ZegoUIKitPrebuilt.GroupCall,
+            },
+            showPreJoinView: false,
+            turnOnCameraWhenJoining: type === 'video',
+            turnOnMicrophoneWhenJoining: true,
+            showLeavingView: false,
+            onLeaveRoom: () => {
+              if (recognition) {
+                try { recognition.stop() } catch (_) { }
+              }
+              if (meetingDbId) {
+                endMeeting(meetingDbId).catch(console.error)
+              }
+              onClose()
+            },
+          })
+          setZegoReady(true)
+        })
+        .catch((err) => {
+          console.error('[Zego] load error', err)
+          setZegoError('Failed to load ZegoCloud SDK. Check your network connection.')
+        })
+    }
+
+    initZegoAndTranscript()
 
     return () => {
       active = false
       if (zp) {
         try { zp.destroy() } catch { /* ignore */ }
+      }
+      if (recognition) {
+        try { recognition.stop() } catch (_) { }
+      }
+      if (meetingDbId) {
+        endMeeting(meetingDbId).catch(console.error)
       }
     }
   }, [roomId, type, userId, userName, onClose])

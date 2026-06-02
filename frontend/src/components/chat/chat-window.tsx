@@ -123,6 +123,7 @@ export function ChatWindow({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const shouldDiscardRef = useRef(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -318,6 +319,7 @@ export function ChatWindow({
   // --- Audio Recording Handlers ---
   const startRecording = async () => {
     try {
+      shouldDiscardRef.current = false
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const recorder = new MediaRecorder(stream)
       mediaRecorderRef.current = recorder
@@ -328,6 +330,11 @@ export function ChatWindow({
       }
 
       recorder.onstop = async () => {
+        if (shouldDiscardRef.current) {
+          stream.getTracks().forEach(t => t.stop())
+          return
+        }
+
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
         const file = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' })
 
@@ -548,7 +555,7 @@ export function ChatWindow({
                   }}
                   className={cn("hover:text-purple transition-colors p-1", isInfoOpen && "text-purple")}
                 >
-                  <Info className="size-5" />
+                  {isInfoOpen ? <X className="size-5 text-purple" /> : <Info className="size-5" />}
                 </button>
 
                 {/* Chat context menu */}
@@ -849,9 +856,24 @@ export function ChatWindow({
             </button>
             <div className="flex-1 min-w-0">
               {isRecording ? (
-                <div className="flex items-center gap-2 px-2 py-1">
-                  <div className="size-2 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-sm font-medium text-red-500">Recording... {formatDuration(recordingDuration)}</span>
+                <div className="flex items-center justify-between px-2 py-1 w-full">
+                  <div className="flex items-center gap-2">
+                    <div className="size-2.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-sm font-bold text-red-500 font-mono">
+                      Recording ({formatDuration(recordingDuration)})
+                    </span>
+                  </div>
+                  {/* Cancel Recording */}
+                  <button
+                    onClick={() => {
+                      shouldDiscardRef.current = true
+                      stopRecording()
+                    }}
+                    type="button"
+                    className="mr-3 text-black/40 hover:text-red-500 transition-colors flex items-center gap-1 text-xs font-semibold"
+                  >
+                    Cancel
+                  </button>
                 </div>
               ) : (
                 <input
@@ -880,18 +902,31 @@ export function ChatWindow({
                 </PopoverContent>
               </Popover>
 
-              {input.trim() || isRecording ? (
+              {input.trim() ? (
                 <button
                   disabled={sending}
-                  onClick={isRecording ? stopRecording : handleSend}
+                  onClick={handleSend}
                   className="flex size-9 items-center justify-center rounded-xl bg-purple text-white shadow-bubble shadow-purple/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
                 >
-                  {isRecording ? <X className="size-5" /> : <Send className="size-5" />}
+                  <Send className="size-5" />
+                </button>
+              ) : isRecording ? (
+                <button
+                  disabled={sending}
+                  onClick={() => {
+                    shouldDiscardRef.current = false
+                    stopRecording()
+                  }}
+                  className="flex size-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-bubble shadow-emerald-500/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                  title="Send recording"
+                >
+                  <Check className="size-5" />
                 </button>
               ) : (
                 <button
                   onClick={startRecording}
-                  className="text-black/40 hover:text-purple transition-colors active:scale-95"
+                  className="text-black/40 hover:text-purple transition-colors active:scale-95 p-1"
+                  title="Record voice message"
                 >
                   <Mic className="size-5" />
                 </button>
