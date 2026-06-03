@@ -244,7 +244,7 @@ export function Dashboard({
               </div>
 
               {/* Non-chat tab views — rendered via Outlet */}
-              <div className={cn("flex flex-1 overflow-hidden", showSidePanel && "hidden")}>
+              <div className={cn("flex flex-col flex-1 overflow-hidden", showSidePanel && "hidden")}>
                 <Outlet />
               </div>
             </div>

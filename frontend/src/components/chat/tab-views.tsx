@@ -65,7 +65,7 @@ function ViewHeader({ title, subtitle, action, isNarrow = false }: { title: stri
   const isMobile = useIsMobile()
   const { setIsMobileMenuOpen } = useDashboard()
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-black/5 bg-white/50 px-6 backdrop-blur-xl">
+    <header className="w-full flex h-16 shrink-0 items-center justify-between border-b border-black/10 bg-white/50 px-6 backdrop-blur-xl">
       <div className="flex items-center gap-3 min-w-0">
         {isMobile && (
           <button
@@ -286,7 +286,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
   )
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex h-full w-full flex-col bg-white">
       <ViewHeader
         title="Contacts"
         subtitle={`${contacts.length} connection${contacts.length !== 1 ? 's' : ''}`}
@@ -1049,6 +1049,9 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
 
 /* ---------------- Profile ---------------- */
 
+
+/* ---------------- Profile ---------------- */
+
 export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void }) {
   const isMobile = useIsMobile()
   const stats = [
@@ -1058,32 +1061,43 @@ export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void })
   ]
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full w-full flex-col bg-white">
       <ViewHeader title="Profile" subtitle="Manage your account" />
-      <div className={cn("flex-1 overflow-y-auto", isMobile ? "p-4" : "p-6 sm:p-10")}>
-        <div className={cn("mx-auto", isMobile ? "max-w-md" : "max-w-4xl")}>
-          <div className={cn("flex flex-col items-center rounded-3xl bg-purple-soft/50 text-center shadow-sm", isMobile ? "p-5" : "p-8 sm:p-10")}>
+      <div className="flex-1 overflow-y-auto bg-white">
+        <div className={cn(
+          "mx-auto flex flex-col gap-6",
+          isMobile ? "p-0 max-w-full" : "p-8 max-w-4xl"
+        )}>
+          {/* Hero card */}
+          <div className={cn(
+            "flex flex-col items-center bg-purple-soft/30 text-center shadow-sm w-full",
+            isMobile ? "p-6 rounded-none" : "p-12 rounded-3xl border border-black/5"
+          )}>
             <Image
               src={user?.avatar || '/placeholder.svg'}
               alt={user?.full_name || 'User'}
-              width={isMobile ? 80 : 128}
-              height={isMobile ? 80 : 128}
-              className={cn("rounded-3xl object-cover shadow-md", isMobile ? "size-20" : "size-32")}
+              width={isMobile ? 96 : 160}
+              height={isMobile ? 96 : 160}
+              className={cn("rounded-3xl object-cover shadow-md", isMobile ? "size-24" : "size-40")}
             />
-            <h2 className={cn("font-bold text-ink", isMobile ? "mt-5 text-[20px] leading-tight" : "mt-5 text-[26px]")}>
+            <h2 className={cn("font-bold text-ink", isMobile ? "mt-5 text-[22px] leading-tight" : "mt-6 text-[32px]")}>
               {user?.full_name}
             </h2>
-            <p className={cn("text-purple font-semibold", isMobile ? "text-[13px] mt-1" : "text-[15px] mt-1")}>@{user?.username}</p>
-            <p className={cn("text-ink-soft", isMobile ? "mt-1.5 text-[13px]" : "mt-1 text-[15px]")}>{user?.org_role || user?.role}</p>
-            <p className={cn("leading-relaxed text-ink-soft", isMobile ? "mt-4 max-w-lg text-[13px]" : "mt-4 max-w-lg text-[15px]")}>
+            <p className={cn("text-purple font-bold", isMobile ? "text-[14px] mt-1.5" : "text-[18px] mt-2")}>@{user?.username}</p>
+            <p className={cn("text-ink-soft font-semibold", isMobile ? "mt-1.5 text-[14px]" : "mt-1.5 text-[16px]")}>{user?.org_role || user?.role}</p>
+            <p className={cn("leading-relaxed text-ink-soft max-w-2xl mx-auto", isMobile ? "mt-4 text-[14px]" : "mt-4 text-[16px]")}>
               {user?.bio || 'No bio yet.'}
             </p>
 
-            <div className={cn("flex w-full items-center justify-around rounded-2xl bg-white", isMobile ? "mt-6 max-w-sm py-4 shadow-xs" : "mt-6 max-w-md py-5")}>
+            {/* Stats row */}
+            <div className={cn(
+              "flex w-full items-center justify-around rounded-2xl bg-white shadow-sm mx-auto",
+              isMobile ? "mt-6 max-w-sm py-4" : "mt-8 max-w-2xl py-6"
+            )}>
               {stats.map((s) => (
-                <div key={s.label} className="text-center">
-                  <p className={cn("font-bold text-ink", isMobile ? "text-[18px]" : "text-[22px]")}>{s.value}</p>
-                  <p className={cn("text-ink-soft", isMobile ? "text-[11px] font-medium mt-0.5" : "text-[13px] font-medium mt-1")}>{s.label}</p>
+                <div key={s.label} className="text-center px-6">
+                  <p className={cn("font-bold text-purple", isMobile ? "text-[20px]" : "text-[28px]")}>{s.value}</p>
+                  <p className={cn("text-ink-soft font-semibold uppercase tracking-wider", isMobile ? "text-[10px] mt-0.5" : "text-[12px] mt-1")}>{s.label}</p>
                 </div>
               ))}
             </div>
@@ -1091,35 +1105,56 @@ export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void })
             <button
               type="button"
               onClick={onEdit}
-              className={cn("flex items-center gap-2 rounded-xl bg-purple text-white transition-opacity hover:opacity-90", isMobile ? "mt-6 px-6 py-3 text-[13px] font-bold shadow-md shadow-purple/20" : "mt-6 px-6 py-3 text-[15px] font-semibold")}
+              className={cn(
+                "flex items-center gap-2 rounded-2xl bg-purple text-white transition-opacity hover:opacity-90 font-bold shadow-lg shadow-purple/20",
+                isMobile ? "mt-6 px-6 py-3 text-[14px]" : "mt-8 px-10 py-4 text-[16px]"
+              )}
             >
               <Pencil className="size-4" />
               Edit profile
             </button>
           </div>
 
-          <div className={cn("rounded-3xl bg-purple-soft/50", isMobile ? "mt-6 space-y-4 p-5 shadow-sm" : "mt-6 space-y-4 p-8")}>
-            <p className={cn("text-ink font-semibold border-b border-black/5 pb-3", isMobile ? "text-[14px]" : "text-[16px]")}>
+          {/* Contact details card */}
+          <div className={cn(
+            "bg-purple-soft/30 w-full",
+            isMobile ? "space-y-5 p-6 rounded-none shadow-sm" : "space-y-6 p-10 rounded-3xl border border-black/5"
+          )}>
+            <p className={cn("text-ink font-bold border-b border-black/10 pb-3", isMobile ? "text-[15px]" : "text-[18px]")}>
               Contact details
             </p>
-            <div className="flex items-center gap-3">
-              <Mail className={cn("text-purple shrink-0", isMobile ? "size-[18px]" : "size-[22px]")} />
-              <span className={cn("text-ink", isMobile ? "text-[13px] truncate" : "text-[15px]")}>{user?.email || 'N/A'}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Phone className={cn("text-purple shrink-0", isMobile ? "size-[18px]" : "size-[22px]")} />
-              <span className={cn("text-ink", isMobile ? "text-[13px] truncate" : "text-[15px]")}>{user?.phone_number || 'N/A'}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <MapPin className={cn("text-purple shrink-0", isMobile ? "size-[18px]" : "size-[22px]")} />
-              <span className={cn("text-ink", isMobile ? "text-[13px] truncate" : "text-[15px]")}>{user?.location?.city ? `${user.location.city}, ${user.location.country}` : 'N/A'}</span>
-            </div>
-            {user?.organization && (
-              <div className="flex items-center gap-3">
-                <Briefcase className={cn("text-purple shrink-0", isMobile ? "size-[18px]" : "size-[22px]")} />
-                <span className={cn("text-ink", isMobile ? "text-[13px] truncate" : "text-[15px]")}>{user.organization} ({user.org_role})</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
+                <Mail className="text-purple size-5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-ink-soft font-bold uppercase tracking-wider">Email</p>
+                  <p className="text-ink text-sm font-semibold truncate">{user?.email || 'N/A'}</p>
+                </div>
               </div>
-            )}
+              <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
+                <Phone className="text-purple size-5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-ink-soft font-bold uppercase tracking-wider">Phone</p>
+                  <p className="text-ink text-sm font-semibold truncate">{user?.phone_number || 'N/A'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
+                <MapPin className="text-purple size-5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-ink-soft font-bold uppercase tracking-wider">Location</p>
+                  <p className="text-ink text-sm font-semibold truncate">{user?.location?.city ? `${user.location.city}, ${user.location.country}` : 'N/A'}</p>
+                </div>
+              </div>
+              {user?.organization && (
+                <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
+                  <Briefcase className="text-purple size-5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-ink-soft font-bold uppercase tracking-wider">Organization</p>
+                    <p className="text-ink text-sm font-semibold truncate">{user.organization} ({user.org_role})</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1128,37 +1163,6 @@ export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void })
 }
 
 /* ---------------- Edit ---------------- */
-
-function Field({
-  label,
-  defaultValue,
-  textarea,
-}: {
-  label: string
-  defaultValue: string
-  textarea?: boolean
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">
-        {label}
-      </span>
-      {textarea ? (
-        <textarea
-          defaultValue={defaultValue}
-          rows={3}
-          className="w-full resize-none rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-        />
-      ) : (
-        <input
-          type="text"
-          defaultValue={defaultValue}
-          className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-        />
-      )}
-    </label>
-  )
-}
 
 export function EditView({
   user,
@@ -1246,295 +1250,234 @@ export function EditView({
     }
   }
 
+  // Shared input class
+  const inputCls = "w-full rounded-2xl bg-purple-soft px-4 py-3.5 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+  const labelCls = "mb-1.5 block text-[13px] font-medium text-ink-soft"
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full w-full flex-col bg-white">
       <ViewHeader title="Edit profile" subtitle="Update your information" />
-      <div className={cn("flex-1 overflow-y-auto", isMobile ? "p-2" : "p-6 sm:p-10")}>
+      <div className="flex-1 overflow-y-auto bg-white flex flex-col items-center">
         <form
           onSubmit={handleUpdate}
           className={cn(
-            "mx-auto w-full bg-purple-soft/30 rounded-3xl border border-black/5 shadow-sm space-y-6",
-            isMobile ? "p-4" : "max-w-4xl p-8 sm:p-12"
+            "bg-purple-soft/30 shadow-sm",
+            isMobile
+              ? "my-4 w-[calc(100%-2rem)] max-w-md rounded-2xl border border-black/5 p-6"
+              : "my-8 w-full max-w-4xl rounded-3xl border border-black/5 p-12"
           )}
         >
-          <div className="flex flex-col items-center justify-center text-center gap-2 mb-6">
+          {/* Avatar section */}
+          <div className="flex flex-col items-center justify-center text-center gap-2 mb-8">
             <div className="relative">
               <Image
                 src={user?.avatar || '/placeholder.svg'}
                 alt={user?.full_name || 'User'}
-                width={120}
-                height={120}
-                className="size-28 rounded-3xl object-cover shadow-md"
+                width={isMobile ? 100 : 136}
+                height={isMobile ? 100 : 136}
+                className={cn("rounded-3xl object-cover shadow-md", isMobile ? "size-24" : "size-34")}
               />
-              <label className="absolute -bottom-1 -right-1 flex size-9 cursor-pointer items-center justify-center rounded-full bg-purple text-white shadow-md">
-                <Camera className="size-4.5" />
+              <label className="absolute -bottom-1 -right-1 flex size-10 cursor-pointer items-center justify-center rounded-full bg-purple text-white shadow-md">
+                <Camera className="size-5" />
                 <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
               </label>
             </div>
-            <div className="mt-2">
-              <p className="text-[16px] font-bold text-ink">
-                Profile photo
-              </p>
-              <p className="text-[13px] text-ink-soft">
-                PNG or JPG, up to 5MB
-              </p>
+            <div className="mt-3">
+              <p className={cn("font-bold text-ink", isMobile ? "text-[16px]" : "text-[18px]")}>Profile photo</p>
+              <p className="text-[13px] text-ink-soft">PNG or JPG, up to 5MB</p>
             </div>
           </div>
 
-          <div className="w-full border-b border-black/10 my-6" />
+          <div className="w-full border-b border-black/10 mb-8" />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Full name</span>
-              <input
-                type="text"
-                value={formData.full_name}
-                onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Username</span>
-              <input
-                type="text"
-                value={formData.username}
-                onChange={e => setFormData({ ...formData, username: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-              />
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Organization</span>
-              <input
-                type="text"
-                value={formData.organization}
-                onChange={e => setFormData({ ...formData, organization: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Role</span>
-              <input
-                type="text"
-                value={formData.org_role}
-                onChange={e => setFormData({ ...formData, org_role: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-              />
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Email</span>
-              <input
-                disabled
-                type="email"
-                value={formData.email}
-                className="w-full rounded-2xl bg-purple-soft/50 px-4 py-3 text-[14px] text-ink-soft cursor-not-allowed outline-none"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Phone</span>
-              <input
-                type="text"
-                value={formData.phone_number}
-                onChange={e => setFormData({ ...formData, phone_number: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-              />
-            </label>
-          </div>
-
-          <label className="block">
-            <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Bio</span>
-            <textarea
-              rows={3}
-              value={formData.bio}
-              onChange={e => setFormData({ ...formData, bio: e.target.value })}
-              className="w-full resize-none rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-              placeholder="Tell us about yourself..."
-            />
-          </label>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Industry</span>
-              <input
-                type="text"
-                value={formData.org_industry}
-                onChange={e => setFormData({ ...formData, org_industry: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-                placeholder="e.g. Technology"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Company Size</span>
-              <select
-                value={formData.org_size}
-                onChange={e => setFormData({ ...formData, org_size: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40 appearance-none"
-              >
-                <option value="">Select size</option>
-                {['solo', '2-10', '11-50', '51-200', '201-500', '500+'].map(size => (
-                  <option key={size} value={size}>{size}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <label className="block">
-            <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Organization Invite Code</span>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={formData.inviteCode || ''}
-                onChange={e => setFormData({ ...formData, inviteCode: e.target.value })}
-                className="flex-1 rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-                placeholder="Enter 8-digit code"
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await joinOrganizationByInvite(formData.inviteCode);
-                    toast.success('Successfully joined organization!');
-                    window.location.reload();
-                  } catch (err: any) {
-                    toast.error(err.message || 'Failed to join');
-                  }
-                }}
-                className="px-6 rounded-2xl bg-purple text-white text-sm font-bold shadow-lg shadow-purple/10 hover:opacity-90 active:scale-95 transition-all"
-              >
-                Join
-              </button>
+          {/* Form fields */}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <label className="block">
+                <span className={labelCls}>Full name</span>
+                <input type="text" value={formData.full_name} onChange={e => setFormData({ ...formData, full_name: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Username</span>
+                <input type="text" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} className={inputCls} />
+              </label>
             </div>
-          </label>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <label className="block">
+                <span className={labelCls}>Organization</span>
+                <input type="text" value={formData.organization} onChange={e => setFormData({ ...formData, organization: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Role</span>
+                <input type="text" value={formData.org_role} onChange={e => setFormData({ ...formData, org_role: e.target.value })} className={inputCls} />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <label className="block">
+                <span className={labelCls}>Email</span>
+                <input disabled type="email" value={formData.email} className="w-full rounded-2xl bg-purple-soft/50 px-4 py-3.5 text-[14px] text-ink-soft cursor-not-allowed outline-none" />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Phone</span>
+                <input type="text" value={formData.phone_number} onChange={e => setFormData({ ...formData, phone_number: e.target.value })} className={inputCls} />
+              </label>
+            </div>
+
             <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">City</span>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={e => setFormData({ ...formData, city: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+              <span className={labelCls}>Bio</span>
+              <textarea
+                rows={4}
+                value={formData.bio}
+                onChange={e => setFormData({ ...formData, bio: e.target.value })}
+                className="w-full resize-none rounded-2xl bg-purple-soft px-4 py-3.5 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+                placeholder="Tell us about yourself..."
               />
             </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <label className="block">
+                <span className={labelCls}>Industry</span>
+                <input type="text" value={formData.org_industry} onChange={e => setFormData({ ...formData, org_industry: e.target.value })} className={inputCls} placeholder="e.g. Technology" />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Company Size</span>
+                <select value={formData.org_size} onChange={e => setFormData({ ...formData, org_size: e.target.value })} className={cn(inputCls, "appearance-none")}>
+                  <option value="">Select size</option>
+                  {['solo', '2-10', '11-50', '51-200', '201-500', '500+'].map(size => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
             <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Country</span>
-              <input
-                type="text"
-                value={formData.country}
-                onChange={e => setFormData({ ...formData, country: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-              />
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Website/Blog</span>
-              <input
-                type="url"
-                value={formData.blog}
-                onChange={e => setFormData({ ...formData, blog: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-                placeholder="https://..."
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Status Message</span>
-              <input
-                type="text"
-                value={formData.status_message}
-                onChange={e => setFormData({ ...formData, status_message: e.target.value })}
-                className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
-                placeholder="What's on your mind?"
-              />
-            </label>
-          </div>
-
-          <div className="pt-2">
-            <span className="mb-3 block text-[13px] font-medium text-ink-soft">
-              App Background
-            </span>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <button
-                type="button"
-                onClick={() => handleBgSelect('bubbles')}
-                className={cn(
-                  'flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
-                  bgType === 'bubbles'
-                    ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
-                    : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
-                )}
-              >
-                <div className="size-10 rounded-full bg-purple/10 flex items-center justify-center">
-                  <Sparkles className="size-5 text-purple" />
-                </div>
-                <span className="text-[12px] font-bold text-ink">Bubbles</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleBgSelect('light')}
-                className={cn(
-                  'flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
-                  bgType === 'light'
-                    ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
-                    : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
-                )}
-              >
-                <div className="size-12 overflow-hidden rounded-lg shadow-sm border border-black/5">
-                  <Image src="/themes/light.png" alt="Light" className="w-full h-full object-cover" />
-                </div>
-                <span className="text-[12px] font-bold text-ink">Light</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleBgSelect('dark')}
-                className={cn(
-                  'flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
-                  bgType === 'dark'
-                    ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
-                    : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
-                )}
-              >
-                <div className="size-12 overflow-hidden rounded-lg shadow-sm border border-black/5">
-                  <Image src="/themes/dark.png" alt="Dark" className="w-full h-full object-cover" />
-                </div>
-                <span className="text-[12px] font-bold text-ink">Dark</span>
-              </button>
-
-              <div className="relative group/custom">
+              <span className={labelCls}>Organization Invite Code</span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.inviteCode || ''}
+                  onChange={e => setFormData({ ...formData, inviteCode: e.target.value })}
+                  className={cn(inputCls, "flex-1")}
+                  placeholder="Enter 8-digit code"
+                />
                 <button
                   type="button"
+                  onClick={async () => {
+                    try {
+                      await joinOrganizationByInvite(formData.inviteCode);
+                      toast.success('Successfully joined organization!');
+                      window.location.reload();
+                    } catch (err: any) {
+                      toast.error(err.message || 'Failed to join');
+                    }
+                  }}
+                  className="px-7 rounded-2xl bg-purple text-white text-sm font-bold shadow-lg shadow-purple/10 hover:opacity-90 active:scale-95 transition-all"
+                >
+                  Join
+                </button>
+              </div>
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <label className="block">
+                <span className={labelCls}>City</span>
+                <input type="text" value={formData.city} onChange={e => setFormData({ ...formData, city: e.target.value })} className={inputCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Country</span>
+                <input type="text" value={formData.country} onChange={e => setFormData({ ...formData, country: e.target.value })} className={inputCls} />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <label className="block">
+                <span className={labelCls}>Website/Blog</span>
+                <input type="url" value={formData.blog} onChange={e => setFormData({ ...formData, blog: e.target.value })} className={inputCls} placeholder="https://..." />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Status Message</span>
+                <input type="text" value={formData.status_message} onChange={e => setFormData({ ...formData, status_message: e.target.value })} className={inputCls} placeholder="What's on your mind?" />
+              </label>
+            </div>
+
+            {/* App Background */}
+            <div className="pt-2">
+              <span className="mb-4 block text-[14px] font-semibold text-ink">App Background</span>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <button
+                  type="button"
+                  onClick={() => handleBgSelect('bubbles')}
                   className={cn(
-                    'w-full flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
-                    bgType === 'custom'
-                      ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
-                      : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+                    'flex flex-col items-center gap-3 rounded-2xl border-2 p-5 transition-all',
+                    bgType === 'bubbles' ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10' : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
                   )}
                 >
-                  <label className="cursor-pointer flex flex-col items-center gap-3 w-full">
-                    <div className="size-10 rounded-full bg-purple flex items-center justify-center text-white">
-                      <Camera className="size-5" />
-                    </div>
-                    <span className="text-[12px] font-bold text-ink">Custom</span>
-                    <input type="file" className="hidden" accept="image/*" onChange={handleBackgroundUpload} />
-                  </label>
+                  <div className="size-12 rounded-full bg-purple/10 flex items-center justify-center">
+                    <Sparkles className="size-6 text-purple" />
+                  </div>
+                  <span className="text-[13px] font-bold text-ink">Bubbles</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleBgSelect('light')}
+                  className={cn(
+                    'flex flex-col items-center gap-3 rounded-2xl border-2 p-5 transition-all',
+                    bgType === 'light' ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10' : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+                  )}
+                >
+                  <div className="size-14 overflow-hidden rounded-xl shadow-sm border border-black/5">
+                    <Image src="/themes/light.png" alt="Light" className="w-full h-full object-cover" />
+                  </div>
+                  <span className="text-[13px] font-bold text-ink">Light</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleBgSelect('dark')}
+                  className={cn(
+                    'flex flex-col items-center gap-3 rounded-2xl border-2 p-5 transition-all',
+                    bgType === 'dark' ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10' : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+                  )}
+                >
+                  <div className="size-14 overflow-hidden rounded-xl shadow-sm border border-black/5">
+                    <Image src="/themes/dark.png" alt="Dark" className="w-full h-full object-cover" />
+                  </div>
+                  <span className="text-[13px] font-bold text-ink">Dark</span>
+                </button>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    className={cn(
+                      'w-full flex flex-col items-center gap-3 rounded-2xl border-2 p-5 transition-all',
+                      bgType === 'custom' ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10' : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+                    )}
+                  >
+                    <label className="cursor-pointer flex flex-col items-center gap-3 w-full">
+                      <div className="size-12 rounded-full bg-purple flex items-center justify-center text-white">
+                        <Camera className="size-6" />
+                      </div>
+                      <span className="text-[13px] font-bold text-ink">Custom</span>
+                      <input type="file" className="hidden" accept="image/*" onChange={handleBackgroundUpload} />
+                    </label>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="pt-4 flex justify-center">
+          {/* Save button */}
+          <div className="pt-8 flex justify-center">
             <button
               type="submit"
               disabled={loading}
-              className="w-full md:max-w-md h-14 bg-purple text-white font-bold rounded-2xl shadow-lg shadow-purple/20 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+              className={cn(
+                "bg-purple text-white font-bold rounded-2xl shadow-lg shadow-purple/20 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50",
+                isMobile ? "w-full h-14 text-[15px]" : "w-full max-w-lg h-14 text-[16px]"
+              )}
             >
               {loading ? 'Saving...' : 'Save Changes'}
             </button>
@@ -1544,6 +1487,517 @@ export function EditView({
     </div>
   )
 }
+// export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void }) {
+//   const isMobile = useIsMobile()
+//   const stats = [
+//     { label: 'Chats', value: user?.postsCount || 0 },
+//     { label: 'Following', value: user?.followingCount || 0 },
+//     { label: 'Files', value: user?.sharedResources?.length || 0 },
+//   ]
+
+//   return (
+//     <div className="flex h-full flex-col bg-white">
+//       <ViewHeader title="Profile" subtitle="Manage your account" />
+//       <div className={cn("flex-1 overflow-y-auto bg-white flex flex-col items-center", isMobile ? "p-0" : "p-6 sm:p-10")}>
+//         <div className={cn("w-full flex flex-col gap-6", isMobile ? "max-w-full" : "max-w-3xl")}>
+//           <div className={cn("flex flex-col items-center bg-purple-soft/30 text-center shadow-sm w-full", isMobile ? "p-6 rounded-none" : "p-10 rounded-3xl border border-black/5")}>
+//             <Image
+//               src={user?.avatar || '/placeholder.svg'}
+//               alt={user?.full_name || 'User'}
+//               width={isMobile ? 96 : 144}
+//               height={isMobile ? 96 : 144}
+//               className={cn("rounded-3xl object-cover shadow-md", isMobile ? "size-24" : "size-36")}
+//             />
+//             <h2 className={cn("font-bold text-ink", isMobile ? "mt-5 text-[22px] leading-tight" : "mt-5 text-[30px]")}>
+//               {user?.full_name}
+//             </h2>
+//             <p className={cn("text-purple font-bold", isMobile ? "text-[14px] mt-1.5" : "text-[17px] mt-1.5")}>@{user?.username}</p>
+//             <p className={cn("text-ink-soft font-semibold", isMobile ? "mt-1.5 text-[14px]" : "mt-1.5 text-[16px]")}>{user?.org_role || user?.role}</p>
+//             <p className={cn("leading-relaxed text-ink-soft max-w-2xl mx-auto", isMobile ? "mt-4 text-[14px]" : "mt-4 text-[16px]")}>
+//               {user?.bio || 'No bio yet.'}
+//             </p>
+
+//             <div className={cn("flex w-full items-center justify-around rounded-2xl bg-white shadow-xs mx-auto", isMobile ? "mt-6 max-w-sm py-4" : "mt-8 max-w-xl py-6")}>
+//               {stats.map((s) => (
+//                 <div key={s.label} className="text-center">
+//                   <p className={cn("font-bold text-purple", isMobile ? "text-[20px]" : "text-[26px]")}>{s.value}</p>
+//                   <p className={cn("text-ink-soft font-semibold uppercase tracking-wider", isMobile ? "text-[10px] mt-0.5" : "text-[12px] mt-1")}>{s.label}</p>
+//                 </div>
+//               ))}
+//             </div>
+
+//             <button
+//               type="button"
+//               onClick={onEdit}
+//               className={cn("flex items-center gap-2 rounded-2xl bg-purple text-white transition-opacity hover:opacity-90 font-bold shadow-lg shadow-purple/20", isMobile ? "mt-6 px-6 py-3 text-[14px]" : "mt-8 px-8 py-3.5 text-[16px]")}
+//             >
+//               <Pencil className="size-4" />
+//               Edit profile
+//             </button>
+//           </div>
+
+//           <div className={cn("bg-purple-soft/30 w-full", isMobile ? "space-y-5 p-6 rounded-none shadow-sm" : "space-y-6 p-10 rounded-3xl border border-black/5")}>
+//             <p className={cn("text-ink font-bold border-b border-black/10 pb-3", isMobile ? "text-[15px]" : "text-[18px]")}>
+//               Contact details
+//             </p>
+//             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+//               <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
+//                 <Mail className="text-purple size-5 shrink-0" />
+//                 <div className="min-w-0">
+//                   <p className="text-[10px] text-ink-soft font-bold uppercase tracking-wider">Email</p>
+//                   <p className="text-ink text-sm font-semibold truncate">{user?.email || 'N/A'}</p>
+//                 </div>
+//               </div>
+//               <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
+//                 <Phone className="text-purple size-5 shrink-0" />
+//                 <div className="min-w-0">
+//                   <p className="text-[10px] text-ink-soft font-bold uppercase tracking-wider">Phone</p>
+//                   <p className="text-ink text-sm font-semibold truncate">{user?.phone_number || 'N/A'}</p>
+//                 </div>
+//               </div>
+//               <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
+//                 <MapPin className="text-purple size-5 shrink-0" />
+//                 <div className="min-w-0">
+//                   <p className="text-[10px] text-ink-soft font-bold uppercase tracking-wider">Location</p>
+//                   <p className="text-ink text-sm font-semibold truncate">{user?.location?.city ? `${user.location.city}, ${user.location.country}` : 'N/A'}</p>
+//                 </div>
+//               </div>
+//               {user?.organization && (
+//                 <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
+//                   <Briefcase className="text-purple size-5 shrink-0" />
+//                   <div className="min-w-0">
+//                     <p className="text-[10px] text-ink-soft font-bold uppercase tracking-wider">Organization</p>
+//                     <p className="text-ink text-sm font-semibold truncate">{user.organization} ({user.org_role})</p>
+//                   </div>
+//                 </div>
+//               )}
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   )
+// }
+
+// /* ---------------- Edit ---------------- */
+
+// function Field({
+//   label,
+//   defaultValue,
+//   textarea,
+// }: {
+//   label: string
+//   defaultValue: string
+//   textarea?: boolean
+// }) {
+//   return (
+//     <label className="block">
+//       <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">
+//         {label}
+//       </span>
+//       {textarea ? (
+//         <textarea
+//           defaultValue={defaultValue}
+//           rows={3}
+//           className="w-full resize-none rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//         />
+//       ) : (
+//         <input
+//           type="text"
+//           defaultValue={defaultValue}
+//           className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//         />
+//       )}
+//     </label>
+//   )
+// }
+
+// export function EditView({
+//   user,
+//   setUser,
+//   bgType,
+//   setBgType,
+// }: {
+//   user: any
+//   setUser: (u: any) => void
+//   bgType: string
+//   setBgType: (t: string) => void
+// }) {
+//   const isMobile = useIsMobile()
+//   const [loading, setLoading] = useState(false)
+//   const [formData, setFormData] = useState({
+//     full_name: user?.full_name || '',
+//     username: user?.username || '',
+//     org_role: user?.org_role || '',
+//     org_industry: user?.org_industry || '',
+//     org_size: user?.org_size || '',
+//     bio: user?.bio || '',
+//     email: user?.email || '',
+//     phone_number: user?.phone_number || '',
+//     organization: user?.organization || '',
+//     blog: user?.blog || '',
+//     status_message: user?.status_message || '',
+//     city: user?.location?.city || '',
+//     country: user?.location?.country || '',
+//     inviteCode: '',
+//   })
+
+//   const handleUpdate = async (e: React.FormEvent) => {
+//     e.preventDefault()
+//     setLoading(true)
+//     try {
+//       const payload = {
+//         ...formData,
+//         location: {
+//           city: formData.city,
+//           country: formData.country
+//         }
+//       }
+//       const res = await updateProfile(payload)
+//       setUser(res.data)
+//       toast.success('Profile updated successfully!')
+//     } catch (err: any) {
+//       toast.error(err.message || 'Update failed')
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+//     const file = e.target.files?.[0]
+//     if (!file) return
+//     try {
+//       const res = await uploadAvatar(file)
+//       setUser(res.data.user)
+//       toast.success('Avatar updated!')
+//     } catch (err: any) {
+//       toast.error('Avatar upload failed')
+//     }
+//   }
+
+//   const handleBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+//     const file = e.target.files?.[0]
+//     if (!file) return
+//     try {
+//       const res = await uploadBackground(file)
+//       setUser(res.data.user)
+//       setBgType('custom')
+//       toast.success('Custom background set!')
+//     } catch (err: any) {
+//       toast.error('Background upload failed')
+//     }
+//   }
+
+//   const handleBgSelect = async (type: string) => {
+//     setBgType(type)
+//     try {
+//       const res = await updateProfile({ app_background: type })
+//       setUser(res.data)
+//     } catch (err) {
+//       toast.error('Failed to update background preference')
+//     }
+//   }
+
+//   return (
+//     <div className="flex h-full flex-col bg-white">
+//       <ViewHeader title="Edit profile" subtitle="Update your information" />
+//       <div className={cn("flex-1 overflow-y-auto bg-white flex flex-col items-center", isMobile ? "p-4" : "p-6 sm:p-10")}>
+//         <form
+//           onSubmit={handleUpdate}
+//           className={cn(
+//             "w-full bg-purple-soft/30 shadow-sm space-y-6",
+//             isMobile 
+//               ? "p-6 rounded-2xl border border-black/5 max-w-full" 
+//               : "max-w-3xl p-10 sm:p-12 rounded-3xl border border-black/5"
+//           )}
+//         >
+//           <div className="flex flex-col items-center justify-center text-center gap-2 mb-6">
+//             <div className="relative">
+//               <Image
+//                 src={user?.avatar || '/placeholder.svg'}
+//                 alt={user?.full_name || 'User'}
+//                 width={120}
+//                 height={120}
+//                 className="size-28 rounded-3xl object-cover shadow-md"
+//               />
+//               <label className="absolute -bottom-1 -right-1 flex size-9 cursor-pointer items-center justify-center rounded-full bg-purple text-white shadow-md">
+//                 <Camera className="size-4.5" />
+//                 <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
+//               </label>
+//             </div>
+//             <div className="mt-2">
+//               <p className="text-[16px] font-bold text-ink">
+//                 Profile photo
+//               </p>
+//               <p className="text-[13px] text-ink-soft">
+//                 PNG or JPG, up to 5MB
+//               </p>
+//             </div>
+//           </div>
+
+//           <div className="w-full border-b border-black/10 my-6" />
+
+//           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Full name</span>
+//               <input
+//                 type="text"
+//                 value={formData.full_name}
+//                 onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//               />
+//             </label>
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Username</span>
+//               <input
+//                 type="text"
+//                 value={formData.username}
+//                 onChange={e => setFormData({ ...formData, username: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//               />
+//             </label>
+//           </div>
+
+//           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Organization</span>
+//               <input
+//                 type="text"
+//                 value={formData.organization}
+//                 onChange={e => setFormData({ ...formData, organization: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//               />
+//             </label>
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Role</span>
+//               <input
+//                 type="text"
+//                 value={formData.org_role}
+//                 onChange={e => setFormData({ ...formData, org_role: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//               />
+//             </label>
+//           </div>
+
+//           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Email</span>
+//               <input
+//                 disabled
+//                 type="email"
+//                 value={formData.email}
+//                 className="w-full rounded-2xl bg-purple-soft/50 px-4 py-3 text-[14px] text-ink-soft cursor-not-allowed outline-none"
+//               />
+//             </label>
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Phone</span>
+//               <input
+//                 type="text"
+//                 value={formData.phone_number}
+//                 onChange={e => setFormData({ ...formData, phone_number: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//               />
+//             </label>
+//           </div>
+
+//           <label className="block">
+//             <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Bio</span>
+//             <textarea
+//               rows={3}
+//               value={formData.bio}
+//               onChange={e => setFormData({ ...formData, bio: e.target.value })}
+//               className="w-full resize-none rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//               placeholder="Tell us about yourself..."
+//             />
+//           </label>
+
+//           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Industry</span>
+//               <input
+//                 type="text"
+//                 value={formData.org_industry}
+//                 onChange={e => setFormData({ ...formData, org_industry: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//                 placeholder="e.g. Technology"
+//               />
+//             </label>
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Company Size</span>
+//               <select
+//                 value={formData.org_size}
+//                 onChange={e => setFormData({ ...formData, org_size: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40 appearance-none"
+//               >
+//                 <option value="">Select size</option>
+//                 {['solo', '2-10', '11-50', '51-200', '201-500', '500+'].map(size => (
+//                   <option key={size} value={size}>{size}</option>
+//                 ))}
+//               </select>
+//             </label>
+//           </div>
+
+//           <label className="block">
+//             <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Organization Invite Code</span>
+//             <div className="flex gap-2">
+//               <input
+//                 type="text"
+//                 value={formData.inviteCode || ''}
+//                 onChange={e => setFormData({ ...formData, inviteCode: e.target.value })}
+//                 className="flex-1 rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//                 placeholder="Enter 8-digit code"
+//               />
+//               <button
+//                 type="button"
+//                 onClick={async () => {
+//                   try {
+//                     await joinOrganizationByInvite(formData.inviteCode);
+//                     toast.success('Successfully joined organization!');
+//                     window.location.reload();
+//                   } catch (err: any) {
+//                     toast.error(err.message || 'Failed to join');
+//                   }
+//                 }}
+//                 className="px-6 rounded-2xl bg-purple text-white text-sm font-bold shadow-lg shadow-purple/10 hover:opacity-90 active:scale-95 transition-all"
+//               >
+//                 Join
+//               </button>
+//             </div>
+//           </label>
+
+//           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">City</span>
+//               <input
+//                 type="text"
+//                 value={formData.city}
+//                 onChange={e => setFormData({ ...formData, city: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//               />
+//             </label>
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Country</span>
+//               <input
+//                 type="text"
+//                 value={formData.country}
+//                 onChange={e => setFormData({ ...formData, country: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//               />
+//             </label>
+//           </div>
+
+//           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Website/Blog</span>
+//               <input
+//                 type="url"
+//                 value={formData.blog}
+//                 onChange={e => setFormData({ ...formData, blog: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//                 placeholder="https://..."
+//               />
+//             </label>
+//             <label className="block">
+//               <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Status Message</span>
+//               <input
+//                 type="text"
+//                 value={formData.status_message}
+//                 onChange={e => setFormData({ ...formData, status_message: e.target.value })}
+//                 className="w-full rounded-2xl bg-purple-soft px-4 py-3 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-purple/40"
+//                 placeholder="What's on your mind?"
+//               />
+//             </label>
+//           </div>
+
+//           <div className="pt-2">
+//             <span className="mb-3 block text-[13px] font-medium text-ink-soft">
+//               App Background
+//             </span>
+//             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+//               <button
+//                 type="button"
+//                 onClick={() => handleBgSelect('bubbles')}
+//                 className={cn(
+//                   'flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
+//                   bgType === 'bubbles'
+//                     ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
+//                     : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+//                 )}
+//               >
+//                 <div className="size-10 rounded-full bg-purple/10 flex items-center justify-center">
+//                   <Sparkles className="size-5 text-purple" />
+//                 </div>
+//                 <span className="text-[12px] font-bold text-ink">Bubbles</span>
+//               </button>
+
+//               <button
+//                 type="button"
+//                 onClick={() => handleBgSelect('light')}
+//                 className={cn(
+//                   'flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
+//                   bgType === 'light'
+//                     ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
+//                     : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+//                 )}
+//               >
+//                 <div className="size-12 overflow-hidden rounded-lg shadow-sm border border-black/5">
+//                   <Image src="/themes/light.png" alt="Light" className="w-full h-full object-cover" />
+//                 </div>
+//                 <span className="text-[12px] font-bold text-ink">Light</span>
+//               </button>
+
+//               <button
+//                 type="button"
+//                 onClick={() => handleBgSelect('dark')}
+//                 className={cn(
+//                   'flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
+//                   bgType === 'dark'
+//                     ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
+//                     : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+//                 )}
+//               >
+//                 <div className="size-12 overflow-hidden rounded-lg shadow-sm border border-black/5">
+//                   <Image src="/themes/dark.png" alt="Dark" className="w-full h-full object-cover" />
+//                 </div>
+//                 <span className="text-[12px] font-bold text-ink">Dark</span>
+//               </button>
+
+//               <div className="relative group/custom">
+//                 <button
+//                   type="button"
+//                   className={cn(
+//                     'w-full flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all',
+//                     bgType === 'custom'
+//                       ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
+//                       : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+//                   )}
+//                 >
+//                   <label className="cursor-pointer flex flex-col items-center gap-3 w-full">
+//                     <div className="size-10 rounded-full bg-purple flex items-center justify-center text-white">
+//                       <Camera className="size-5" />
+//                     </div>
+//                     <span className="text-[12px] font-bold text-ink">Custom</span>
+//                     <input type="file" className="hidden" accept="image/*" onChange={handleBackgroundUpload} />
+//                   </label>
+//                 </button>
+//               </div>
+//             </div>
+//           </div>
+
+//           <div className="pt-4 flex justify-center">
+//             <button
+//               type="submit"
+//               disabled={loading}
+//               className="w-full md:max-w-md h-14 bg-purple text-white font-bold rounded-2xl shadow-lg shadow-purple/20 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+//             >
+//               {loading ? 'Saving...' : 'Save Changes'}
+//             </button>
+//           </div>
+//         </form>
+//       </div>
+//     </div>
+//   )
+// }
 
 /* ---------------- Meeting Room ---------------- */
 
