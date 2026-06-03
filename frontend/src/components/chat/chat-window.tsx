@@ -382,10 +382,10 @@ export function ChatWindow({
     if (!socket || !chatId) return
 
     // Emit socket typing
-    socket.emit('typing', { chatId, userId: myId })
+    emitTyping(true)
     if (typingTimer.current) clearTimeout(typingTimer.current)
     typingTimer.current = setTimeout(() => {
-      socket.emit('stop_typing', { chatId, userId: myId })
+      emitTyping(false)
     }, 2000)
 
     // AI Writing Suggestions
@@ -405,7 +405,7 @@ export function ChatWindow({
       } finally {
         setIsAiSuggesting(false)
       }
-    }, val.trim().length > 0 ? 800 : 200)
+    }, val.trim().length > 0 ? 300 : 200)
   }
 
   const handleSuggestionClick = (s: string) => {

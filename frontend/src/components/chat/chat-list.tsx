@@ -90,7 +90,7 @@ export function ChatList({
   onSelect: (id: string, chat: any) => void
   currentUserId?: string
 }) {
-  const { setIsMobileMenuOpen } = useDashboard()
+  const { setIsMobileMenuOpen, setActiveChat, setActiveChatId, activeChatId } = useDashboard()
   const { chats, loadingChats, refreshChats, updateChatInList, removeChatFromList } = useChats()
   const [search, setSearch] = useState('')
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -226,9 +226,16 @@ export function ChatList({
           break
         }
         case 'delete':
-          await deleteChat(chatId)
           removeChatFromList(chatId)
+          if (activeChatId === chatId) {
+            setActiveChat?.(null)
+            setActiveChatId?.(null)
+          }
           toast.success('Chat deleted')
+          deleteChat(chatId).catch(err => {
+            console.error('Failed to delete chat:', err)
+            refreshChats()
+          })
           break
         case 'block': {
           const chat = chats.find(c => (c._id || c.id) === chatId)

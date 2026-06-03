@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
 import { fetchAllUserChats } from '@/lib/api'
 import { Phone } from 'lucide-react'
-import { ZegoMeetingModal } from '@/components/chat/ZegoMeetingModal'
+import { LiveKitMeetingModal } from '@/components/chat/LiveKitMeetingModal'
 import { RingtonePlayer } from '@/lib/ringtone'
 import { toast } from 'sonner'
 
@@ -202,6 +202,35 @@ export function AppProvider({ children, user }: AppProviderProps) {
             }))
         })
 
+        sock?.on('new_chat', (chat: any) => {
+            const c = chat?.data || chat
+            setChats(prev => {
+                const exists = prev.some(existing => (existing._id || existing.id) === (c._id || c.id))
+                if (exists) return prev
+                return [c, ...prev]
+            })
+        })
+
+        sock?.on('chat_deleted', ({ chatId }: { chatId: string }) => {
+            setChats(prev => prev.filter(c => (c._id !== chatId && c.id !== chatId)))
+        })
+
+        sock?.on('message_reaction', ({ messageId, chatId, reactions }: { messageId: string, chatId: string, reactions: any[] }) => {
+            setChats(prev => prev.map(c => {
+                const cid = c._id || c.id
+                if (String(cid) === String(chatId) && c.latestMessage && (c.latestMessage._id === messageId || c.latestMessage.id === messageId)) {
+                    return {
+                        ...c,
+                        latestMessage: {
+                            ...c.latestMessage,
+                            reactions
+                        }
+                    }
+                }
+                return c
+            }))
+        })
+
         sock?.on('incoming_call', (data: { fromUserId: string; roomId: string; callerName?: string; callerAvatar?: string; type?: 'voice' | 'video' }) => {
             setCallState(prev => {
                 if (prev.status !== 'idle') {
@@ -257,6 +286,11 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('incoming_call')
             sock?.off('call_accepted')
             sock?.off('call_rejected')
+            sock?.off('new_message')
+            sock?.off('user_status_change')
+            sock?.off('new_chat')
+            sock?.off('chat_deleted')
+            sock?.off('message_reaction')
         }
     }, [user?.id, user?._id])
 
@@ -366,9 +400,9 @@ export function AppProvider({ children, user }: AppProviderProps) {
                   </div>
                 )}
 
-                {/* Zego Call Modal */}
+                {/* LiveKit Call Modal */}
                 {callState.status === 'in_call' && (
-                  <ZegoMeetingModal
+                  <LiveKitMeetingModal
                     roomId={callState.roomId}
                     type={callState.type}
                     userId={user?._id || user?.id || 'guest'}

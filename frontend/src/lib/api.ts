@@ -1558,3 +1558,10 @@ export const respondToMessageRequest = async (requestId: string, action: 'accept
     });
     return handleResponse(res);
 };
+
+export const getLiveKitToken = async (roomId: string) => {
+    const res = await fetch(`${BASE_URL}/meet/livekit-token?roomId=${encodeURIComponent(roomId)}`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
