@@ -305,7 +305,16 @@ export function ChatList({
                     const name = getChatName(chat, currentUserId)
                     const avatar = getChatAvatar(chat, currentUserId)
                     const unread = getUnread(chat)
-                    const preview = chat.latestMessage?.content || 'Say hello! 👋'
+                    let preview = chat.latestMessage?.content;
+                    if (!preview && chat.latestMessage) {
+                      if (chat.latestMessage.message_type === 'image') preview = '📷 Image';
+                      else if (chat.latestMessage.message_type === 'voice') preview = '🎤 Voice message';
+                      else if (chat.latestMessage.message_type === 'video') preview = '🎥 Video';
+                      else if (chat.latestMessage.message_type === 'file') preview = '📎 Attachment';
+                      else preview = 'Say hello! 👋';
+                    } else if (!preview) {
+                      preview = 'Say hello! 👋';
+                    }
                     const time = formatTime(chat.updatedAt || chat.latestMessage?.createdAt)
                     const selected = chatId === activeId
 
