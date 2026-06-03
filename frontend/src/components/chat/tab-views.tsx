@@ -317,7 +317,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
       />
 
       {isMobile && (
-        <div className="px-4 py-3 border-b border-black/5 flex items-center gap-2 bg-white shrink-0">
+        <div className="px-6 py-4 border-b border-black/5 flex items-center gap-2 bg-white shrink-0">
           <div className="relative flex-1">
             <input
               type="text"
@@ -878,6 +878,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
   const { updateChatInList } = useChats()
   const myId = user?._id || user?.id
   const [chatLoading, setChatLoading] = useState(false)
+  const isMobile = useIsMobile()
 
   // Fetch all chats and filter for archived ones
   const { data: archivedChatsRaw, isLoading, refetch } = useQuery({
@@ -920,8 +921,8 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
       {/* Left panel — archived chat list */}
       <div className={cn(
         "flex flex-col border-r border-black/5 transition-all duration-500 ease-in-out",
-        activeChat ? "w-[320px] shrink-0" : "w-full",
-        activeChat ? "" : "flex"
+        activeChat && !isMobile ? "w-[320px] shrink-0" : "w-full",
+        activeChat && isMobile ? "hidden" : "flex"
       )}>
         <ViewHeader
           title="Archive"
@@ -1031,7 +1032,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
           </div>
         </div>
       ) : (
-        <div className={cn("flex-1 items-center justify-center hidden md:flex")}>
+        <div className={cn("flex-1 items-center justify-center hidden md:flex", isMobile && "hidden")}>
           <div className="text-center p-8 max-w-sm">
             <div className="size-20 rounded-3xl bg-purple/10 flex items-center justify-center mb-4 mx-auto">
               <Archive className="size-10 text-purple/50" />
@@ -1248,32 +1249,30 @@ export function EditView({
   return (
     <div className="flex h-full flex-col">
       <ViewHeader title="Edit profile" subtitle="Update your information" />
-      <div className={cn("flex-1 overflow-y-auto", isMobile ? "p-4" : "p-6 sm:p-10")}>
+      <div className={cn("flex-1 overflow-y-auto", isMobile ? "p-2" : "p-6 sm:p-10")}>
         <form
           onSubmit={handleUpdate}
           className={cn(
-            "mx-auto",
-            isMobile
-              ? "max-w-md space-y-6 bg-purple-soft/30 p-5 rounded-3xl border border-black/5 shadow-sm"
-              : "max-w-3xl space-y-6"
+            "mx-auto w-full bg-purple-soft/30 rounded-3xl border border-black/5 shadow-sm space-y-6",
+            isMobile ? "p-4" : "max-w-4xl p-8 sm:p-12"
           )}
         >
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col items-center justify-center text-center gap-2 mb-6">
             <div className="relative">
               <Image
                 src={user?.avatar || '/placeholder.svg'}
                 alt={user?.full_name || 'User'}
-                width={80}
-                height={80}
-                className="size-20 rounded-3xl object-cover"
+                width={120}
+                height={120}
+                className="size-28 rounded-3xl object-cover shadow-md"
               />
-              <label className="absolute -bottom-1 -right-1 flex size-8 cursor-pointer items-center justify-center rounded-full bg-purple text-white">
-                <Camera className="size-4" />
+              <label className="absolute -bottom-1 -right-1 flex size-9 cursor-pointer items-center justify-center rounded-full bg-purple text-white shadow-md">
+                <Camera className="size-4.5" />
                 <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
               </label>
             </div>
-            <div>
-              <p className="text-[15px] font-semibold text-ink">
+            <div className="mt-2">
+              <p className="text-[16px] font-bold text-ink">
                 Profile photo
               </p>
               <p className="text-[13px] text-ink-soft">
@@ -1281,6 +1280,8 @@ export function EditView({
               </p>
             </div>
           </div>
+
+          <div className="w-full border-b border-black/10 my-6" />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="block">
@@ -1529,11 +1530,11 @@ export function EditView({
             </div>
           </div>
 
-          <div className="pt-4">
+          <div className="pt-4 flex justify-center">
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-14 bg-purple text-white font-bold rounded-2xl shadow-lg shadow-purple/20 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+              className="w-full md:max-w-md h-14 bg-purple text-white font-bold rounded-2xl shadow-lg shadow-purple/20 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
             >
               {loading ? 'Saving...' : 'Save Changes'}
             </button>
