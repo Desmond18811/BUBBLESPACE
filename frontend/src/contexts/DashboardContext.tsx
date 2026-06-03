@@ -15,6 +15,8 @@ interface DashboardContextType {
     setActiveChat: (chat: any) => void
     messages: any[]
     setMessages: React.Dispatch<React.SetStateAction<any[]>>
+    isMobileMenuOpen?: boolean
+    setIsMobileMenuOpen?: (open: boolean) => void
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined)

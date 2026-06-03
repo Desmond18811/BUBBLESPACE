@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Pin, Check, CheckCheck, MoreVertical, BellOff, Trash2, Archive, Shield, X, MessageSquarePlus } from 'lucide-react'
+import { Search, Pin, Check, CheckCheck, MoreVertical, BellOff, Trash2, Archive, Shield, X, MessageSquarePlus, Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { useChats } from '@/contexts/AppContext'
 import { muteChat, clearChat, toggleChatPin, deleteChat, blockUser } from '@/lib/api'
 import { toast } from 'sonner'
+import { useDashboard } from '@/contexts/DashboardContext'
 
 interface ContextMenuState {
   chatId: string
@@ -89,6 +90,7 @@ export function ChatList({
   onSelect: (id: string, chat: any) => void
   currentUserId?: string
 }) {
+  const { setIsMobileMenuOpen } = useDashboard()
   const { chats, loadingChats, refreshChats, updateChatInList, removeChatFromList } = useChats()
   const [search, setSearch] = useState('')
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -248,7 +250,15 @@ export function ChatList({
     <aside className="flex h-full flex-col bg-white">
       {/* Header with Archive Charts */}
       <div className="flex items-center justify-between px-4 pt-6 pb-2">
-        <h2 className="text-xl font-bold bg-linear-to-r from-purple to-purple/60 bg-clip-text text-transparent">Messages</h2>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsMobileMenuOpen?.(true)}
+            className="md:hidden flex size-9 items-center justify-center rounded-xl bg-purple/10 text-purple hover:bg-purple/20 transition-all"
+          >
+            <Menu className="size-5" />
+          </button>
+          <h2 className="text-xl font-bold bg-linear-to-r from-purple to-purple/60 bg-clip-text text-transparent">Messages</h2>
+        </div>
         <button
           onClick={() => navigate({ to: '/dashboard/archive' })}
           className="flex items-center gap-1.5 rounded-full bg-black/3 px-3 py-1.5 text-[11px] font-bold text-black/50 hover:bg-black/5 hover:text-black transition-all"

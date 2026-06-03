@@ -34,6 +34,7 @@ import {
   FileText,
   Zap,
   ClipboardList,
+  Menu,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useDashboard } from '@/contexts/DashboardContext'
@@ -41,6 +42,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useChats } from '@/contexts/AppContext'
 import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { updateProfile, uploadAvatar, uploadBackground, searchUsers, getMyContacts, addContact, getSuggestions, removeContact as removeContactApi, blockUser } from '@/lib/api'
 import { toast } from 'sonner'
@@ -60,11 +62,21 @@ const Image = ({ src, alt, className, ...rest }: React.ImgHTMLAttributes<HTMLIma
 
 
 function ViewHeader({ title, subtitle, action, isNarrow = false }: { title: string, subtitle?: string, action?: React.ReactNode, isNarrow?: boolean }) {
+  const { setIsMobileMenuOpen } = useDashboard()
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-black/5 bg-white/50 px-6 backdrop-blur-xl">
-      <div className="min-w-0">
-        <h1 className="truncate text-lg font-bold text-ink">{title}</h1>
-        {subtitle && !isNarrow && <p className="truncate text-[11px] font-medium text-ink-soft">{subtitle}</p>}
+      <div className="flex items-center gap-3 min-w-0">
+        <button
+          type="button"
+          onClick={() => setIsMobileMenuOpen?.(true)}
+          className="md:hidden flex size-9 items-center justify-center rounded-xl bg-purple/10 text-purple hover:bg-purple/20 transition-all shrink-0"
+        >
+          <Menu className="size-5" />
+        </button>
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-bold text-ink">{title}</h1>
+          {subtitle && !isNarrow && <p className="truncate text-[11px] font-medium text-ink-soft">{subtitle}</p>}
+        </div>
       </div>
       {action}
     </header>
@@ -193,6 +205,7 @@ function CallOverlay({
 export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
   const { startCall } = useSocket()
   const { user: currentUser } = useDashboard()
+  const isMobile = useIsMobile()
   const myId = currentUser?._id || currentUser?.id
   const [contacts, setContacts] = useState<any[]>([])
   const [suggestions, setSuggestions] = useState<any[]>([])
@@ -205,6 +218,8 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
     friend: any
     type: 'voice' | 'video'
   } | null>(null)
+
+  const effectiveNarrow = isNarrow || isMobile
 
   useEffect(() => {
     const load = async () => {
@@ -362,123 +377,153 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
       )}
 
       {/* Contacts Grid */}
-      <div className={cn("flex-1 overflow-y-auto", isNarrow ? "p-3" : "p-4 sm:p-6")}>
-        {loadingContacts ? (
-          <div className={cn("grid gap-3", isNarrow ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5")}>
-            {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="flex flex-col items-center gap-2 rounded-2xl bg-black/3 p-4 animate-pulse">
-                <div className="size-14 rounded-2xl bg-black/5" />
-                <div className="h-3 w-16 rounded-full bg-black/5" />
-                <div className="h-2.5 w-12 rounded-full bg-black/5" />
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-center">
-            <Users className="size-12 text-black/10 mb-3" />
-            <p className="text-sm text-black/40">No contacts yet</p>
-            <button onClick={() => setShowAddModal(true)} className="mt-3 text-sm font-semibold text-purple hover:underline">
-              Add your first contact →
-            </button>
-          </div>
-        ) : (
-          <div className={cn("grid gap-3", isNarrow ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5")}>
-            {filtered.map(contact => {
-              const cid = contact._id || contact.id
-              return (
-                <div
-                  key={cid}
-                  className={cn(
-                    "group relative flex border border-black/5 transition-all hover:border-purple/20 hover:shadow-lg hover:shadow-purple/5",
-                    isNarrow
-                      ? "flex-row items-center gap-3 rounded-2xl p-3 text-left"
-                      : "flex-col items-center gap-2 rounded-2xl p-4 text-center"
-                  )}
-                >
-                  <div className="relative">
-                    <ChatAvatar src={contact.avatar} name={contact.full_name || contact.username} className="size-14 rounded-2xl shadow-md" />
-                    {contact.isOnline && (
-                      <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
-                    )}
-                  </div>
-                  <div className={cn("min-w-0 flex-1", isNarrow ? "text-left" : "text-center")}>
-                    <p className={cn("truncate font-bold text-ink", isNarrow ? "text-sm" : "text-[13px]")}>
-                      {contact.full_name || contact.username}
-                    </p>
-                    <p className="truncate text-[10px] text-black/40">
-                      {isNarrow ? (contact.isOnline ? "Online" : "Away") : (contact.org_role || contact.status_message || '@' + (contact.username || ''))}
-                    </p>
-                  </div>
-
-                  {!isNarrow ? (
-                    <div className="flex items-center gap-1.5 w-full">
-                      <button
-                        onClick={() => onMessage?.(contact)}
-                        className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-purple/10 py-1.5 text-[11px] font-semibold text-purple hover:bg-purple hover:text-white transition-all"
-                      >
-                        <MessageSquare className="size-3" /> Chat
-                      </button>
-                      <button
-                        className="flex size-7 items-center justify-center rounded-lg border border-black/5 text-black/30 hover:text-purple hover:border-purple/20 transition-all"
-                        onClick={() => startCall && startCall(contact._id || contact.id, contact.full_name || contact.username, contact.avatar, 'voice')}
-                      >
-                        <Phone className="size-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => onMessage?.(contact)}
-                      className="absolute inset-0 z-10"
-                    />
-                  )}
-
-                  {/* Dropdown on hover */}
-                  <div className="absolute top-2 right-2 hidden group-hover:block">
-                    <div className="relative">
-                      <button className="flex size-6 items-center justify-center rounded-lg bg-white shadow-sm border border-black/5 text-black/30">
-                        <MoreVertical className="size-3" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Remove/Block buttons - always visible */}
-                  <div className="flex gap-1 justify-center mt-1.5">
-                    <button onClick={(e) => { e.stopPropagation(); handleRemove(cid) }} className="rounded-lg bg-black/5 px-2.5 py-1 text-[10px] font-medium text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
-                      Remove
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); handleBlock(cid) }} className="rounded-lg bg-black/5 px-2.5 py-1 text-[10px] font-medium text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
-                      Block
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Suggestions section */}
-        {suggestions.length > 0 && filtered.length > 0 && (
-          <div className="mt-8">
-            <h3 className="text-sm font-semibold text-black/40 uppercase tracking-wider mb-4">People You May Know</h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {suggestions.slice(0, 6).map(s => (
-                <div key={s._id || s.id} className="flex items-center gap-3 rounded-2xl border border-black/5 p-3 hover:border-purple/20 hover:shadow-sm transition-all">
-                  <ChatAvatar src={s.avatar} name={s.full_name || s.username} className="size-11 rounded-xl shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-black truncate">{s.full_name}</p>
-                    <p className="text-xs text-black/40">@{s.username}</p>
-                  </div>
-                  <button
-                    onClick={() => { setAddIdentifier(s.uniqueTag || s.username); setShowAddModal(true) }}
-                    className="shrink-0 flex size-8 items-center justify-center rounded-xl bg-purple/10 text-purple hover:bg-purple hover:text-white transition-all"
-                  >
-                    <UserPlus className="size-4" />
-                  </button>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center">
+        <div className={cn("w-full", !effectiveNarrow && "max-w-5xl mx-auto space-y-8")}>
+          {loadingContacts ? (
+            <div className={cn("grid gap-3", effectiveNarrow ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5")}>
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="flex flex-col items-center gap-2 rounded-2xl bg-black/3 p-4 animate-pulse">
+                  <div className="size-14 rounded-2xl bg-black/5" />
+                  <div className="h-3 w-16 rounded-full bg-black/5" />
+                  <div className="h-2.5 w-12 rounded-full bg-black/5" />
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full min-h-[360px] text-center max-w-md mx-auto py-12 px-4">
+              <div className="size-16 rounded-[24px] bg-purple-soft/50 flex items-center justify-center mb-4 shadow-sm animate-in zoom-in duration-300">
+                <Users className="size-8 text-purple/60" />
+              </div>
+              <h3 className="text-base font-bold text-ink">No Contacts Yet</h3>
+              <p className="text-xs text-ink-soft max-w-[280px] mt-1 mb-6 leading-relaxed">
+                Connect with colleagues by adding them to your contacts list to start messaging.
+              </p>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="rounded-2xl bg-purple px-6 py-3 text-xs font-bold text-white hover:bg-purple/90 transition-all shadow-md shadow-purple/20"
+              >
+                Add your first contact
+              </button>
+            </div>
+          ) : (
+            <div className={cn("grid gap-3", effectiveNarrow ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5")}>
+              {filtered.map(contact => {
+                const cid = contact._id || contact.id
+                return (
+                  <div
+                    key={cid}
+                    className={cn(
+                      "group relative flex border border-black/5 transition-all hover:border-purple/20 hover:shadow-lg hover:shadow-purple/5",
+                      effectiveNarrow
+                        ? "flex-row items-center justify-between gap-3 rounded-2xl p-3 text-left"
+                        : "flex-col items-center gap-2 rounded-2xl p-4 text-center"
+                    )}
+                  >
+                    {effectiveNarrow ? (
+                      <>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="relative">
+                            <ChatAvatar src={contact.avatar} name={contact.full_name || contact.username} className="size-12 rounded-xl shadow-md" />
+                            {contact.isOnline && (
+                              <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
+                            )}
+                          </div>
+                          <div className="min-w-0 text-left">
+                            <p className="truncate font-bold text-ink text-sm">
+                              {contact.full_name || contact.username}
+                            </p>
+                            <p className="truncate text-[10px] text-black/40">
+                              {contact.isOnline ? "Online" : "Away"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-1.5 shrink-0 z-20">
+                          <button onClick={(e) => { e.stopPropagation(); handleRemove(cid) }} className="rounded-lg bg-black/5 px-2.5 py-1.5 text-[10px] font-bold text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
+                            Remove
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleBlock(cid) }} className="rounded-lg bg-black/5 px-2.5 py-1.5 text-[10px] font-bold text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
+                            Block
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => onMessage?.(contact)}
+                          className="absolute inset-0 z-10 cursor-pointer"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <div className="relative">
+                          <ChatAvatar src={contact.avatar} name={contact.full_name || contact.username} className="size-14 rounded-2xl shadow-md" />
+                          {contact.isOnline && (
+                            <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
+                          )}
+                        </div>
+                        <div className="min-w-0 text-center">
+                          <p className="truncate font-bold text-ink text-[13px]">
+                            {contact.full_name || contact.username}
+                          </p>
+                          <p className="truncate text-[10px] text-black/40">
+                            {contact.org_role || contact.status_message || '@' + (contact.username || '')}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 w-full mt-1">
+                          <button
+                            onClick={() => onMessage?.(contact)}
+                            className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-purple/10 py-1.5 text-[11px] font-semibold text-purple hover:bg-purple hover:text-white transition-all"
+                          >
+                            <MessageSquare className="size-3" /> Chat
+                          </button>
+                          <button
+                            className="flex size-7 items-center justify-center rounded-lg border border-black/5 text-black/30 hover:text-purple hover:border-purple/20 transition-all"
+                            onClick={() => startCall && startCall(contact._id || contact.id, contact.full_name || contact.username, contact.avatar, 'voice')}
+                          >
+                            <Phone className="size-3" />
+                          </button>
+                        </div>
+
+                        <div className="flex gap-1 justify-center w-full mt-1.5">
+                          <button onClick={(e) => { e.stopPropagation(); handleRemove(cid) }} className="flex-1 rounded-lg bg-black/5 py-1 text-[10px] font-medium text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
+                            Remove
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleBlock(cid) }} className="flex-1 rounded-lg bg-black/5 py-1 text-[10px] font-medium text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
+                            Block
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Suggestions section */}
+          {suggestions.length > 0 && filtered.length > 0 && (
+            <div className="mt-8">
+              <h3 className="text-sm font-semibold text-black/40 uppercase tracking-wider mb-4">People You May Know</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {suggestions.slice(0, 6).map(s => (
+                  <div key={s._id || s.id} className="flex items-center gap-3 rounded-2xl border border-black/5 p-3 hover:border-purple/20 hover:shadow-sm transition-all">
+                    <ChatAvatar src={s.avatar} name={s.full_name || s.username} className="size-11 rounded-xl shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-black truncate">{s.full_name}</p>
+                      <p className="text-xs text-black/40">@{s.username}</p>
+                    </div>
+                    <button
+                      onClick={() => { setAddIdentifier(s.uniqueTag || s.username); setShowAddModal(true) }}
+                      className="shrink-0 flex size-8 items-center justify-center rounded-xl bg-purple/10 text-purple hover:bg-purple hover:text-white transition-all"
+                    >
+                      <UserPlus className="size-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {activeCall && (
@@ -862,26 +907,26 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
                   <div className="relative shrink-0">
                     <ChatAvatar src={avatar} name={name} className="size-12 rounded-xl shadow-sm" />
                   </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-bold text-ink text-[13px]">{name}</p>
-                        {chat.isGroupChat && (
-                          <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Group</span>
-                        )}
-                      </div>
-                      <p className="truncate text-[11px] text-ink-soft mt-0.5">
-                        {(() => {
-                          const lm = chat.latestMessage
-                          if (!lm) return 'No messages yet'
-                          if (lm.content) return lm.content
-                          if (lm.message_type === 'image') return '📷 Image'
-                          if (lm.message_type === 'voice') return '🎤 Voice message'
-                          if (lm.message_type === 'video') return '🎥 Video'
-                          if (lm.message_type === 'file' || lm.message_type === 'document') return '📎 Attachment'
-                          return 'No messages yet'
-                        })()}
-                      </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-bold text-ink text-[13px]">{name}</p>
+                      {chat.isGroupChat && (
+                        <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Group</span>
+                      )}
                     </div>
+                    <p className="truncate text-[11px] text-ink-soft mt-0.5">
+                      {(() => {
+                        const lm = chat.latestMessage
+                        if (!lm) return 'No messages yet'
+                        if (lm.content) return lm.content
+                        if (lm.message_type === 'image') return '📷 Image'
+                        if (lm.message_type === 'voice') return '🎤 Voice message'
+                        if (lm.message_type === 'video') return '🎥 Video'
+                        if (lm.message_type === 'file' || lm.message_type === 'document') return '📎 Attachment'
+                        return 'No messages yet'
+                      })()}
+                    </p>
+                  </div>
                   {/* Restore button */}
                   <button
                     onClick={async (e) => {
@@ -950,6 +995,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
 /* ---------------- Profile ---------------- */
 
 export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void }) {
+  const isMobile = useIsMobile()
   const stats = [
     { label: 'Chats', value: user?.postsCount || 0 }, // Assuming postsCount or similar for stats
     { label: 'Following', value: user?.followingCount || 0 },
@@ -957,32 +1003,32 @@ export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void })
   ]
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-white">
       <ViewHeader title="Profile" subtitle="Manage your account" />
-      <div className="flex-1 overflow-y-auto p-6 sm:p-8">
-        <div className="mx-auto max-w-2xl">
-          <div className="flex flex-col items-center rounded-3xl bg-purple-soft/50 p-6 text-center sm:p-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center">
+        <div className={cn("w-full my-auto", isMobile ? "max-w-md space-y-5" : "max-w-3xl space-y-6")}>
+          <div className={cn("flex flex-col items-center rounded-3xl bg-purple-soft/50 text-center shadow-sm", isMobile ? "p-5" : "p-8 sm:p-10 w-full")}>
             <Image
               src={user?.avatar || '/placeholder.svg'}
               alt={user?.full_name || 'User'}
-              width={112}
-              height={112}
-              className="size-28 rounded-3xl object-cover"
+              width={isMobile ? 80 : 128}
+              height={isMobile ? 80 : 128}
+              className={cn("rounded-3xl object-cover shadow-sm", isMobile ? "size-20" : "size-32")}
             />
-            <h2 className="mt-4 text-[22px] font-bold text-ink">
+            <h2 className={cn("font-bold text-ink", isMobile ? "mt-5 text-[20px] leading-tight" : "mt-4 text-[26px]")}>
               {user?.full_name}
             </h2>
-            <p className="text-[14px] text-purple">@{user?.username}</p>
-            <p className="mt-1 text-[14px] text-ink-soft">{user?.org_role || user?.role}</p>
-            <p className="mt-3 max-w-md text-[14px] leading-relaxed text-ink-soft">
+            <p className={cn("text-purple", isMobile ? "text-[13px] font-semibold mt-1" : "text-[15px] font-semibold")}>@{user?.username}</p>
+            <p className={cn("text-ink-soft", isMobile ? "mt-1.5 text-[13px]" : "mt-1 text-[15px]")}>{user?.org_role || user?.role}</p>
+            <p className={cn("leading-relaxed text-ink-soft", isMobile ? "mt-4 max-w-lg text-[13px]" : "mt-3 max-w-xl text-[15px]")}>
               {user?.bio || 'No bio yet.'}
             </p>
 
-            <div className="mt-5 flex w-full max-w-sm items-center justify-around rounded-2xl bg-white py-4">
+            <div className={cn("flex w-full items-center justify-around rounded-2xl bg-white", isMobile ? "mt-6 max-w-sm py-4 shadow-xs" : "mt-6 max-w-md py-4 shadow-xs")}>
               {stats.map((s) => (
                 <div key={s.label} className="text-center">
-                  <p className="text-[20px] font-bold text-ink">{s.value}</p>
-                  <p className="text-[12px] text-ink-soft">{s.label}</p>
+                  <p className={cn("font-bold text-ink", isMobile ? "text-[18px]" : "text-[22px]")}>{s.value}</p>
+                  <p className={cn("text-ink-soft", isMobile ? "text-[11px] font-medium mt-0.5" : "text-[13px]")}>{s.label}</p>
                 </div>
               ))}
             </div>
@@ -990,35 +1036,37 @@ export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void })
             <button
               type="button"
               onClick={onEdit}
-              className="mt-5 flex items-center gap-2 rounded-xl bg-purple px-5 py-2.5 text-[14px] font-medium text-white transition-opacity hover:opacity-90"
+              className={cn("flex items-center gap-2 rounded-xl bg-purple text-white transition-opacity hover:opacity-90", isMobile ? "mt-6 px-6 py-3 text-[13px] font-bold shadow-md shadow-purple/20" : "mt-6 px-6 py-3 text-[14px] font-semibold shadow-md shadow-purple/20")}
             >
               <Pencil className="size-4" />
               Edit profile
             </button>
           </div>
 
-          <div className="mt-5 space-y-3 rounded-3xl bg-purple-soft/50 p-6">
-            <p className="text-[15px] font-semibold text-ink">
+          <div className={cn("rounded-3xl bg-purple-soft/50", isMobile ? "mt-6 space-y-4 p-5 shadow-sm" : "mt-6 p-8 shadow-sm space-y-4")}>
+            <p className={cn("text-ink border-b border-black/5 pb-2", isMobile ? "text-[14px] font-bold" : "text-[16px] font-bold")}>
               Contact details
             </p>
-            <div className="flex items-center gap-3">
-              <Mail className="size-[20px] text-purple" />
-              <span className="text-[14px] text-ink">{user?.email || 'N/A'}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Phone className="size-[20px] text-purple" />
-              <span className="text-[14px] text-ink">{user?.phone_number || 'N/A'}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <MapPin className="size-[20px] text-purple" />
-              <span className="text-[14px] text-ink">{user?.location?.city ? `${user.location.city}, ${user.location.country}` : 'N/A'}</span>
-            </div>
-            {user?.organization && (
+            <div className={cn(isMobile ? "space-y-4" : "grid grid-cols-2 gap-6")}>
               <div className="flex items-center gap-3">
-                <Briefcase className="size-[20px] text-purple" />
-                <span className="text-[14px] text-ink">{user.organization} ({user.org_role})</span>
+                <Mail className={cn("text-purple shrink-0", isMobile ? "size-[18px]" : "size-[22px]")} />
+                <span className={cn("text-ink truncate", isMobile ? "text-[13px]" : "text-[15px]")}>{user?.email || 'N/A'}</span>
               </div>
-            )}
+              <div className="flex items-center gap-3">
+                <Phone className={cn("text-purple shrink-0", isMobile ? "size-[18px]" : "size-[22px]")} />
+                <span className={cn("text-ink truncate", isMobile ? "text-[13px]" : "text-[15px]")}>{user?.phone_number || 'N/A'}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <MapPin className={cn("text-purple shrink-0", isMobile ? "size-[18px]" : "size-[22px]")} />
+                <span className={cn("text-ink truncate", isMobile ? "text-[13px]" : "text-[15px]")}>{user?.location?.city ? `${user.location.city}, ${user.location.country}` : 'N/A'}</span>
+              </div>
+              {user?.organization && (
+                <div className="flex items-center gap-3">
+                  <Briefcase className={cn("text-purple shrink-0", isMobile ? "size-[18px]" : "size-[22px]")} />
+                  <span className={cn("text-ink truncate", isMobile ? "text-[13px]" : "text-[15px]")}>{user.organization} ({user.org_role})</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1070,6 +1118,7 @@ export function EditView({
   bgType: string
   setBgType: (t: string) => void
 }) {
+  const isMobile = useIsMobile()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     full_name: user?.full_name || '',
@@ -1145,11 +1194,19 @@ export function EditView({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-white">
       <ViewHeader title="Edit profile" subtitle="Update your information" />
-      <div className="flex-1 overflow-y-auto p-6 sm:p-8">
-        <form onSubmit={handleUpdate} className="mx-auto max-w-xl space-y-5">
-          <div className="flex items-center gap-4">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center">
+        <form
+          onSubmit={handleUpdate}
+          className={cn(
+            "w-full my-auto",
+            isMobile
+              ? "max-w-md space-y-6 bg-purple-soft/30 p-5 rounded-3xl border border-black/5 shadow-sm"
+              : "max-w-3xl space-y-6 bg-purple-soft/30 p-8 sm:p-10 rounded-3xl border border-black/5 shadow-sm"
+          )}
+        >
+          <div className={cn("flex items-center gap-4", isMobile && "flex-col text-center justify-center")}>
             <div className="relative">
               <Image
                 src={user?.avatar || '/placeholder.svg'}
@@ -1163,7 +1220,7 @@ export function EditView({
                 <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
               </label>
             </div>
-            <div>
+            <div className={cn(isMobile && "flex flex-col items-center")}>
               <p className="text-[15px] font-semibold text-ink">
                 Profile photo
               </p>
@@ -1764,6 +1821,8 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
   const [search, setSearch] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [collapsingFor, setCollapsingFor] = useState<string | null>(null)
+  const isMobile = useIsMobile()
+  const [searchActive, setSearchActive] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -1817,19 +1876,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
           subtitle="Everyone in your organization"
           isNarrow={!!activeChat}
           action={
-            <div className="flex items-center gap-2">
-              {!activeChat && (
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search coworkers..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="h-9 w-52 rounded-xl border border-black/5 bg-black/2 pl-9 pr-4 text-sm focus:border-purple/20 focus:bg-white focus:outline-none focus:ring-0"
-                  />
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/40" />
-                </div>
-              )}
+            isMobile ? (
               <button
                 onClick={() => navigate({ to: '/dashboard/archive' })}
                 className="flex h-9 items-center gap-1.5 rounded-xl border border-black/5 bg-white px-3 text-xs font-semibold text-black/50 hover:bg-black/5 hover:text-black/70 transition-all shrink-0"
@@ -1838,79 +1885,222 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
                 <Archive className="size-3.5" />
                 {!activeChat && <span>Archive Charts</span>}
               </button>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {!activeChat && (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search coworkers..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="h-9 w-52 rounded-xl border border-black/5 bg-black/2 pl-9 pr-4 text-sm focus:border-purple/20 focus:bg-white focus:outline-none focus:ring-0"
+                    />
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/40" />
+                  </div>
+                )}
+                <button
+                  onClick={() => navigate({ to: '/dashboard/archive' })}
+                  className="flex h-9 items-center gap-1.5 rounded-xl border border-black/5 bg-white px-3 text-xs font-semibold text-black/50 hover:bg-black/5 hover:text-black/70 transition-all shrink-0"
+                  title="Archive Charts"
+                >
+                  <Archive className="size-3.5" />
+                  {!activeChat && <span>Archive Charts</span>}
+                </button>
+              </div>
+            )
           }
         />
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {loading ? (
-            [1, 2, 3, 4].map(i => (
-              <div key={i} className="h-20 rounded-2xl bg-black/3 animate-pulse" />
-            ))
-          ) : coworkers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <Users className="mb-3 size-12 text-black/10" />
-              <p className="text-sm font-medium text-black/40">No coworkers found</p>
-              <p className="text-xs text-black/30 mt-1">Members of your organization will appear here</p>
-            </div>
-          ) : (
-            coworkers.map((worker) => {
-              const workerId = worker._id || worker.id
-              const isCollapsing = collapsingFor === workerId
-              const isActive = activeChatId === workerId || (activeChat?.users?.some((u: any) => (u._id || u.id) === workerId))
-              return (
-                <div
-                  key={workerId}
-                  onClick={() => !chatLoading && handleOpenChat(worker)}
-                  className={cn(
-                    "group flex items-center gap-3 rounded-[22px] border p-3 transition-all duration-200 cursor-pointer",
-                    isCollapsing
-                      ? "scale-[0.97] opacity-60 border-purple/30 shadow-inner"
-                      : isActive
-                        ? "border-purple/30 bg-purple/5 shadow-sm"
-                        : "border-black/5 bg-white hover:border-purple/20 hover:shadow-md"
-                  )}
-                >
-                  <div className="relative shrink-0">
-                    <ChatAvatar
-                      src={worker.avatar}
-                      name={worker.full_name || worker.username}
-                      className="size-12 rounded-xl shadow-sm"
-                    />
-                    {worker.isOnline && (
-                      <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-emerald-400" />
+        {!isMobile ? (
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {loading ? (
+              [1, 2, 3, 4].map(i => (
+                <div key={i} className="h-20 rounded-2xl bg-black/3 animate-pulse" />
+              ))
+            ) : coworkers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <Users className="mb-3 size-12 text-black/10" />
+                <p className="text-sm font-medium text-black/40">No coworkers found</p>
+                <p className="text-xs text-black/30 mt-1">Members of your organization will appear here</p>
+              </div>
+            ) : (
+              coworkers.map((worker) => {
+                const workerId = worker._id || worker.id
+                const isCollapsing = collapsingFor === workerId
+                const isActive = activeChatId === workerId || (activeChat?.users?.some((u: any) => (u._id || u.id) === workerId))
+                return (
+                  <div
+                    key={workerId}
+                    onClick={() => !chatLoading && handleOpenChat(worker)}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-[22px] border p-3 transition-all duration-200 cursor-pointer",
+                      isCollapsing
+                        ? "scale-[0.97] opacity-60 border-purple/30 shadow-inner"
+                        : isActive
+                          ? "border-purple/30 bg-purple/5 shadow-sm"
+                          : "border-black/5 bg-white hover:border-purple/20 hover:shadow-md"
                     )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-bold text-ink text-[13px]">{worker.full_name || worker.username}</p>
-                      {(worker.org_role || worker.organization) && (
-                        <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                          {worker.org_role || worker.organization}
-                        </span>
+                  >
+                    <div className="relative shrink-0">
+                      <ChatAvatar
+                        src={worker.avatar}
+                        name={worker.full_name || worker.username}
+                        className="size-12 rounded-xl shadow-sm"
+                      />
+                      {worker.isOnline && (
+                        <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-emerald-400" />
                       )}
                     </div>
-                    <p className="text-[11px] text-ink-soft mt-0.5 truncate">
-                      @{worker.username}{worker.status_message ? ` · "${worker.status_message}"` : ''}
-                    </p>
-                  </div>
 
-                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); if (!chatLoading) handleOpenChat(worker) }}
-                      disabled={chatLoading}
-                      className="flex h-8 items-center gap-1.5 rounded-xl bg-purple px-3 text-[11px] font-bold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm disabled:opacity-60"
-                    >
-                      {isCollapsing ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
-                      {isCollapsing ? '…' : 'Message'}
-                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-bold text-ink text-[13px]">{worker.full_name || worker.username}</p>
+                        {(worker.org_role || worker.organization) && (
+                          <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                            {worker.org_role || worker.organization}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-ink-soft mt-0.5 truncate">
+                        @{worker.username}{worker.status_message ? ` · "${worker.status_message}"` : ''}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (!chatLoading) handleOpenChat(worker) }}
+                        disabled={chatLoading}
+                        className="flex h-8 items-center gap-1.5 rounded-xl bg-purple px-3 text-[11px] font-bold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm disabled:opacity-60"
+                      >
+                        {isCollapsing ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
+                        {isCollapsing ? '…' : 'Message'}
+                      </button>
+                    </div>
                   </div>
+                )
+              })
+            )}
+          </div>
+        ) : !searchActive && !search ? (
+          <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
+            <div className="size-16 rounded-[24px] bg-purple-soft/50 flex items-center justify-center mb-4 shadow-sm animate-in zoom-in duration-300">
+              <Briefcase className="size-8 text-purple/60" />
+            </div>
+            <h3 className="text-base font-bold text-ink">Collaboration Workroom</h3>
+            <p className="text-xs text-ink-soft max-w-[240px] mt-1 mb-6">Find and connect with colleagues in your organization</p>
+
+            <div
+              onClick={() => setSearchActive(true)}
+              className="w-full max-w-sm flex items-center gap-3 rounded-2xl border border-black/10 bg-black/2 px-4 py-3.5 hover:border-purple/30 hover:bg-white hover:shadow-md cursor-pointer transition-all duration-200"
+            >
+              <Search className="size-4 text-black/40" />
+              <span className="text-sm text-black/30">Search coworkers...</span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col h-full overflow-hidden">
+            {/* Search Input bar */}
+            <div className="p-4 border-b border-black/5 flex items-center gap-2 bg-white shrink-0">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Search coworkers..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-10 w-full rounded-2xl border border-black/10 bg-black/2 pl-10 pr-10 text-sm focus:border-purple/30 focus:bg-white focus:outline-none transition-all"
+                  autoFocus
+                />
+                <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-black/40" />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-black/30 hover:text-black"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => { setSearchActive(false); setSearch(''); }}
+                className="text-xs font-bold text-purple hover:underline px-2"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {/* List area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {loading ? (
+                [1, 2, 3, 4].map(i => (
+                  <div key={i} className="h-20 rounded-2xl bg-black/3 animate-pulse" />
+                ))
+              ) : coworkers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <Users className="mb-3 size-12 text-black/10" />
+                  <p className="text-sm font-medium text-black/40">No coworkers found</p>
+                  <p className="text-xs text-black/30 mt-1">Try another name or search term</p>
                 </div>
-              )
-            })
-          )}
-        </div>
+              ) : (
+                coworkers.map((worker) => {
+                  const workerId = worker._id || worker.id
+                  const isCollapsing = collapsingFor === workerId
+                  const isActive = activeChatId === workerId || (activeChat?.users?.some((u: any) => (u._id || u.id) === workerId))
+                  return (
+                    <div
+                      key={workerId}
+                      onClick={() => !chatLoading && handleOpenChat(worker)}
+                      className={cn(
+                        "group flex items-center gap-3 rounded-[22px] border p-3 transition-all duration-200 cursor-pointer",
+                        isCollapsing
+                          ? "scale-[0.97] opacity-60 border-purple/30 shadow-inner"
+                          : isActive
+                            ? "border-purple/30 bg-purple/5 shadow-sm"
+                            : "border-black/5 bg-white hover:border-purple/20 hover:shadow-md"
+                      )}
+                    >
+                      <div className="relative shrink-0">
+                        <ChatAvatar
+                          src={worker.avatar}
+                          name={worker.full_name || worker.username}
+                          className="size-12 rounded-xl shadow-sm"
+                        />
+                        {worker.isOnline && (
+                          <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-emerald-400" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-bold text-ink text-[13px]">{worker.full_name || worker.username}</p>
+                          {(worker.org_role || worker.organization) && (
+                            <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                              {worker.org_role || worker.organization}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-ink-soft mt-0.5 truncate">
+                          @{worker.username}{worker.status_message ? ` · "${worker.status_message}"` : ''}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); if (!chatLoading) handleOpenChat(worker) }}
+                          disabled={chatLoading}
+                          className="flex h-8 items-center gap-1.5 rounded-xl bg-purple px-3 text-[11px] font-bold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm disabled:opacity-60"
+                        >
+                          {isCollapsing ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
+                          {isCollapsing ? '…' : 'Message'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
 

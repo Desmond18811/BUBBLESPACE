@@ -24,7 +24,7 @@ type NavItem = {
   active?: boolean
 }
 
-const navItems: NavItem[] = [
+export const navItems: NavItem[] = [
   { id: 'all', label: 'All chats', icon: MessageSquare },
   { id: 'work', label: 'Work', icon: FolderClosed },
   { id: 'friends', label: 'Friends', icon: Users },
@@ -32,7 +32,7 @@ const navItems: NavItem[] = [
   { id: 'archive', label: 'Archived', icon: Archive },
 ]
 
-const bottomItems: NavItem[] = [
+export const bottomItems: NavItem[] = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'edit', label: 'Edit settings', icon: SlidersHorizontal },
 ]
@@ -107,7 +107,7 @@ export function NavSidebar({
   const totalUnread = unreadData?.count || 0
 
   return (
-    <nav className="flex w-[88px] shrink-0 flex-col items-center py-6">
+    <nav className="hidden md:flex w-[88px] shrink-0 flex-col items-center py-6">
       {/* Logo */}
       <div className="mb-8 flex size-10 items-center justify-center">
         <BubblespaceLogo className="size-9 text-white" />

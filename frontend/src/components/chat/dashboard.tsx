@@ -1,12 +1,12 @@
 import React, { useState } from 'react'
-import { useNavigate, Outlet } from '@tanstack/react-router'
+import { useNavigate, Outlet, Link } from '@tanstack/react-router'
 import { DashboardProvider } from '@/contexts/DashboardContext'
-import { NavSidebar } from '@/components/chat/nav-sidebar'
+import { NavSidebar, navItems, bottomItems } from '@/components/chat/nav-sidebar'
 import { ChatList } from '@/components/chat/chat-list'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { cn } from '@/lib/utils'
-import { Loader2 } from 'lucide-react'
+import { Loader2, X, LogOut } from 'lucide-react'
 import {
   FriendsView,
   ArchiveView,
@@ -17,10 +17,12 @@ import {
   WorkView,
 } from '@/components/chat/tab-views'
 import { SetupProfileView } from '@/components/chat/setup-profile-view'
-import { getMyProfile, accessOrCreateChat } from '@/lib/api'
+import { getMyProfile, accessOrCreateChat, getUnreadChatCount } from '@/lib/api'
 import { AppProvider } from '@/contexts/AppContext'
 import { MessageOverlay } from '@/components/chat/message-overlay'
 import { toast } from 'sonner'
+import { BubblespaceLogo } from '@/components/logo'
+import { ChatAvatar } from '@/components/chat/chat-avatar'
 
 import { useQuery } from '@tanstack/react-query'
 
@@ -41,6 +43,29 @@ export function Dashboard({
   const [overlayUser, setOverlayUser] = useState<any>(null)
   const [overlayWorkCard, setOverlayWorkCard] = useState(false)
   const [messages, setMessages] = useState<any[]>([])
+
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  React.useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)')
+    setIsMobile(media.matches)
+    const listener = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    media.addEventListener('change', listener)
+    return () => media.removeEventListener('change', listener)
+  }, [])
+
+  React.useEffect(() => {
+    setIsMobileMenuOpen(false)
+  }, [activeTab])
+
+  const { data: unreadData } = useQuery({
+    queryKey: ['unreadCount'],
+    queryFn: getUnreadChatCount,
+    refetchInterval: 10000,
+  })
+  const totalUnread = unreadData?.count || 0
+
 
   const SIDE_PANEL_TABS = ['all']
   const showSidePanel = SIDE_PANEL_TABS.includes(activeTab)
@@ -139,111 +164,221 @@ export function Dashboard({
     return <SetupProfileView user={user} onComplete={() => { }} />
   }
 
+  const dashboardContextValue = {
+    user,
+    onMessage: handleOpenFullChat,
+    isNarrow: !!activeChatId,
+    setUser: () => refetchProfile(),
+    bgType,
+    setBgType,
+    showInfo,
+    setShowInfo,
+    activeChatId,
+    setActiveChatId,
+    activeChat,
+    setActiveChat,
+    messages,
+    setMessages,
+    isMobileMenuOpen,
+    setIsMobileMenuOpen,
+  }
+
   return (
     <AppProvider user={user}>
-      <div className="relative z-10 flex h-[min(960px,92vh)] w-full max-w-[1760px] items-stretch gap-5 2xl:h-[min(1080px,88vh)] font-poppins">
-        {/* App container */}
-        <div
-          className="flex flex-1 gap-1 rounded-[36px] bg-app-dark p-3 shadow-2xl transition-all duration-500 overflow-hidden"
-          style={{
-            backgroundImage: user?.app_background === 'custom' && user?.custom_background
-              ? `url(${user.custom_background})`
-              : 'none',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        >
-          <NavSidebar activeTab={activeTab} user={user} onLogout={handleLogout} />
+      <DashboardProvider value={dashboardContextValue}>
+        <div className="relative z-10 flex h-screen md:h-[min(960px,92vh)] w-full max-w-[1760px] items-stretch gap-0 md:gap-5 2xl:h-[min(1080px,88vh)] font-poppins">
+          {/* App container */}
+          <div
+            className="flex flex-1 gap-1 rounded-none md:rounded-[36px] bg-transparent md:bg-app-dark p-0 md:p-3 shadow-none md:shadow-2xl transition-all duration-500 overflow-hidden"
+            style={{
+              backgroundImage: (!isMobile && user?.app_background === 'custom' && user?.custom_background)
+                ? `url(${user.custom_background})`
+                : 'none',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          >
+            <NavSidebar activeTab={activeTab} user={user} onLogout={handleLogout} />
 
-          <div className="flex flex-1 overflow-hidden rounded-[26px] bg-white relative transition-all duration-300">
-            {/* Always mount the chat list + window but only show when on 'all' tab */}
-            <div className={cn("flex flex-1 overflow-hidden", !showSidePanel && "hidden")}>
-              <div className={cn("hidden md:block w-[360px] shrink-0 border-r border-black/5", activeChatId && "block w-full md:w-[360px]")}>
-                <ChatList
-                  activeId={activeChatId}
-                  onSelect={(id, chat) => {
-                    setActiveChatId(id)
-                    setActiveChat(chat)
-                  }}
-                  currentUserId={user?._id || user?.id}
-                />
-              </div>
-              <div className={cn("flex-1 overflow-hidden relative", !activeChatId && "hidden md:block")}>
-                {activeChatId && activeChat ? (
-                  <ChatWindow
-                    chatId={activeChatId}
-                    chat={activeChat}
-                    currentUser={user}
-                    messages={messages}
-                    setMessages={setMessages}
-                    isInfoOpen={showInfo}
-                    onShowInfo={() => setShowInfo(!showInfo)}
-                    onStartMeeting={() => setIsInMeeting(true)}
-                    onClose={() => {
-                      setActiveChatId(null)
-                      setActiveChat(null)
+            <div className="flex flex-1 overflow-hidden rounded-none md:rounded-[26px] bg-white relative transition-all duration-300">
+              {/* Always mount the chat list + window but only show when on 'all' tab */}
+              <div className={cn("flex flex-1 overflow-hidden", !showSidePanel && "hidden")}>
+                <div className={cn("border-r border-black/5 shrink-0 transition-all duration-300", activeChatId ? "hidden md:block w-[360px]" : "w-full md:w-[360px]")}>
+                  <ChatList
+                    activeId={activeChatId}
+                    onSelect={(id, chat) => {
+                      setActiveChatId(id)
+                      setActiveChat(chat)
                     }}
+                    currentUserId={user?._id || user?.id}
                   />
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center text-center p-8">
-                    <div className="size-20 rounded-3xl bg-purple/10 flex items-center justify-center mb-4">
-                      <svg className="size-10 text-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                      </svg>
+                </div>
+                <div className={cn("overflow-hidden relative", activeChatId ? "flex flex-1 w-full" : "hidden md:block md:flex-1")}>
+                  {activeChatId && activeChat ? (
+                    <ChatWindow
+                      chatId={activeChatId}
+                      chat={activeChat}
+                      currentUser={user}
+                      messages={messages}
+                      setMessages={setMessages}
+                      isInfoOpen={showInfo}
+                      onShowInfo={() => setShowInfo(!showInfo)}
+                      onStartMeeting={() => setIsInMeeting(true)}
+                      onClose={() => {
+                        setActiveChatId(null)
+                        setActiveChat(null)
+                      }}
+                    />
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center text-center p-8">
+                      <div className="size-20 rounded-3xl bg-purple/10 flex items-center justify-center mb-4">
+                        <svg className="size-10 text-purple" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                        </svg>
+                      </div>
+                      <h2 className="text-xl font-bold text-black mb-2">Select a conversation</h2>
+                      <p className="text-sm text-black/40 max-w-xs">Choose a chat from the left panel or start a new one with a colleague</p>
                     </div>
-                    <h2 className="text-xl font-bold text-black mb-2">Select a conversation</h2>
-                    <p className="text-sm text-black/40 max-w-xs">Choose a chat from the left panel or start a new one with a colleague</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Non-chat tab views — rendered via Outlet */}
-            <div className={cn("flex-1 overflow-hidden", showSidePanel && "hidden")}>
-              <DashboardProvider value={{
-                user,
-                onMessage: handleOpenFullChat,
-                isNarrow: !!activeChatId,
-                setUser: () => refetchProfile(),
-                bgType,
-                setBgType,
-                showInfo,
-                setShowInfo,
-                activeChatId,
-                setActiveChatId,
-                activeChat,
-                setActiveChat,
-                messages,
-                setMessages
-              }}>
+              {/* Non-chat tab views — rendered via Outlet */}
+              <div className={cn("flex flex-1 overflow-hidden", showSidePanel && "hidden")}>
                 <Outlet />
-              </DashboardProvider>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Right info panel */}
-        {isInfoVisible && (
-          <aside className="w-[360px] shrink-0 flex flex-col gap-4 overflow-y-auto max-h-full animate-in slide-in-from-right duration-300 custom-scrollbar pr-1">
-            <GroupInfo
-              key={activeChatId}
-              conversation={activeChat}
-              messages={messages}
-              onClose={() => setShowInfo(false)}
+          {/* Right info panel */}
+          {isInfoVisible && (
+            <aside className="w-[360px] shrink-0 flex flex-col gap-4 overflow-y-auto max-h-full animate-in slide-in-from-right duration-300 custom-scrollbar pr-1">
+              <GroupInfo
+                key={activeChatId}
+                conversation={activeChat}
+                messages={messages}
+                onClose={() => setShowInfo(false)}
+              />
+            </aside>
+          )}
+
+          {/* Message Overlay for Work/Friends messaging */}
+          {overlayUser && (
+            <MessageOverlay
+              user={user}
+              targetUser={overlayUser}
+              workCardInfo={overlayWorkCard}
+              onClose={() => setOverlayUser(null)}
             />
-          </aside>
-        )}
+          )}
 
-        {/* Message Overlay for Work/Friends messaging */}
-        {overlayUser && (
-          <MessageOverlay
-            user={user}
-            targetUser={overlayUser}
-            workCardInfo={overlayWorkCard}
-            onClose={() => setOverlayUser(null)}
-          />
-        )}
-      </div>
+          {/* Mobile Navigation Drawer */}
+          {isMobile && isMobileMenuOpen && (
+            <div className="fixed inset-0 z-50 flex md:hidden">
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
+                onClick={() => setIsMobileMenuOpen(false)}
+              />
+              {/* Drawer Content */}
+              <div
+                className="relative flex w-72 max-w-xs flex-col bg-app-dark p-6 text-white shadow-2xl transition-transform duration-300 animate-in slide-in-from-left"
+              >
+                {/* Drawer Header */}
+                <div className="flex items-center justify-between pb-6 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <BubblespaceLogo className="size-8 text-white" />
+                    <span className="text-lg font-bold tracking-tight">Bubblespace</span>
+                  </div>
+                  <button
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="rounded-xl p-1.5 hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+                  >
+                    <X className="size-5" />
+                  </button>
+                </div>
+
+                {/* Navigation Items */}
+                <div className="flex-1 overflow-y-auto py-6 space-y-2">
+                  {navItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive = item.id === activeTab
+                    const badge = (item.id === 'all' || item.id === 'work') ? totalUnread : 0
+
+                    return (
+                      <Link
+                        key={item.id}
+                        to={`/dashboard/${item.id === 'all' ? 'all' : item.id}`}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={cn(
+                          'flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-all duration-200',
+                          isActive
+                            ? 'bg-white/15 border border-white/10 shadow-lg'
+                            : 'hover:bg-white/5 text-white/70 hover:text-white'
+                        )}
+                      >
+                        <Icon className="size-5" />
+                        <span className="text-sm font-semibold flex-1">{item.label}</span>
+                        {badge > 0 && (
+                          <span className="flex min-w-[20px] h-5 items-center justify-center rounded-full bg-accent-orange px-1.5 text-[10px] font-bold text-white shadow-sm">
+                            {badge}
+                          </span>
+                        )}
+                      </Link>
+                    )
+                  })}
+
+                  <div className="my-4 h-px bg-white/10" />
+
+                  {bottomItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive = item.id === activeTab
+                    return (
+                      <Link
+                        key={item.id}
+                        to={`/dashboard/${item.id === 'edit' ? 'edit-profile' : item.id}`}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={cn(
+                          'flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-all duration-200',
+                          isActive
+                            ? 'bg-white/15 border border-white/10 shadow-lg'
+                            : 'hover:bg-white/5 text-white/70 hover:text-white'
+                        )}
+                      >
+                        {item.id === 'profile' ? (
+                          <ChatAvatar
+                            src={user?.avatar}
+                            name={user?.full_name || 'User'}
+                            className="size-5 rounded-md"
+                          />
+                        ) : (
+                          <Icon className="size-5" />
+                        )}
+                        <span className="text-sm font-semibold">{item.label}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+
+                {/* Drawer Footer */}
+                <div className="pt-4 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false)
+                      handleLogout()
+                    }}
+                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 hover:bg-white/5 text-white/70 hover:text-white transition-colors"
+                  >
+                    <LogOut className="size-5 text-white/70" />
+                    <span className="text-sm font-semibold">Log out</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </DashboardProvider>
     </AppProvider>
   )
 }

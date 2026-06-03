@@ -17,11 +17,11 @@ function DashboardPage() {
 
     return (
         <main
-            className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas p-5 lg:p-8"
+            className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas p-0 md:p-5 lg:p-8"
         >
             <div
                 className={cn(
-                    "fixed inset-0 pointer-events-none transition-opacity duration-1000",
+                    "hidden md:block fixed inset-0 pointer-events-none transition-opacity duration-1000",
                     bgType === 'topographic' && "topographic-bg-refined"
                 )}
                 style={{
@@ -34,7 +34,11 @@ function DashboardPage() {
                     backgroundPosition: 'center',
                 }}
             />
-            {bgType === 'bubbles' && <BubbleBackground />}
+            {bgType === 'bubbles' && (
+                <div className="hidden md:block">
+                    <BubbleBackground />
+                </div>
+            )}
             <Dashboard bgType={bgType} setBgType={setBgType} activeTab={activeTab} />
         </main>
     );
