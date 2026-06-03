@@ -123,11 +123,21 @@ export function ChatList({
     }
   })
 
-  const contactsWithoutChats = contacts.filter(con => !chatUserIds.has(con._id || con.id))
+  const contactsWithoutChats = contacts.filter(con => {
+    const conId = con._id || con.id
+    // Don't show yourself in contacts
+    if (conId === currentUserId) return false
+    return !chatUserIds.has(conId)
+  })
 
   const filteredChats = chats.filter(c => {
     const isArchived = (c.archivedBy && currentUserId && c.archivedBy.includes(currentUserId)) || archivedIds.has(c._id || c.id)
     if (isArchived) return false
+    // Filter out self-chats (1:1 chats where both participants are you)
+    if (!c.isGroupChat && c.users?.length === 2) {
+      const other = c.users.find((u: any) => (u._id || u.id) !== currentUserId)
+      if (!other) return false // both users are you — hide this chat
+    }
     const name = getChatName(c, currentUserId)
     return name.toLowerCase().includes(search.toLowerCase())
   })

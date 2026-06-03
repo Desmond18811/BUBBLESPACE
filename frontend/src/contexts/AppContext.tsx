@@ -172,8 +172,20 @@ export function AppProvider({ children, user }: AppProviderProps) {
                 const idx = prev.findIndex(c => (c._id || c.id) === String(chatId))
                 if (idx === -1) return prev
                 const updated = [...prev]
-                const preview = m?.content || 'New message'
-                updated[idx] = { ...updated[idx], latestMessage: { content: preview }, updatedAt: new Date().toISOString() }
+                // Build a human-friendly preview even for media messages
+                let preview = m?.content
+                if (!preview) {
+                    if (m?.message_type === 'image') preview = '📷 Image'
+                    else if (m?.message_type === 'voice') preview = '🎤 Voice message'
+                    else if (m?.message_type === 'video') preview = '🎥 Video'
+                    else if (m?.message_type === 'file' || m?.message_type === 'document') preview = '📎 Attachment'
+                    else preview = '💬 New message'
+                }
+                updated[idx] = {
+                    ...updated[idx],
+                    latestMessage: { content: preview, message_type: m?.message_type || 'text' },
+                    updatedAt: new Date().toISOString()
+                }
                 // Move to top
                 const chat = updated.splice(idx, 1)[0]
                 return [chat, ...updated]

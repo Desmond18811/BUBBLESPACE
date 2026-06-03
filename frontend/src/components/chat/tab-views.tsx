@@ -192,6 +192,8 @@ function CallOverlay({
 
 export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
   const { startCall } = useSocket()
+  const { user: currentUser } = useDashboard()
+  const myId = currentUser?._id || currentUser?.id
   const [contacts, setContacts] = useState<any[]>([])
   const [suggestions, setSuggestions] = useState<any[]>([])
   const [loadingContacts, setLoadingContacts] = useState(true)
@@ -212,14 +214,17 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
           getMyContacts().catch(() => ({ data: [] })),
           getSuggestions().catch(() => ({ data: [], users: [] })),
         ])
-        setContacts(contactsRes?.data || [])
-        setSuggestions(suggestRes?.data || suggestRes?.users || [])
+        // Filter out self from contacts and suggestions
+        const allContacts = (contactsRes?.data || []).filter((c: any) => (c._id || c.id) !== myId)
+        const allSuggestions = (suggestRes?.data || suggestRes?.users || []).filter((s: any) => (s._id || s.id) !== myId)
+        setContacts(allContacts)
+        setSuggestions(allSuggestions)
       } finally {
         setLoadingContacts(false)
       }
     }
     load()
-  }, [])
+  }, [myId])
 
   const handleAddFriend = async () => {
     if (!addIdentifier.trim()) return
@@ -436,18 +441,14 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                     </div>
                   </div>
 
-                  {/* Quick remove/block in hover state */}
-                  <div className="absolute inset-0 rounded-2xl overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <div className="absolute bottom-0 inset-x-0 bg-linear-to-t from-white/90 via-white/50 to-transparent pt-6 pb-2 px-2 pointer-events-auto">
-                      <div className="flex gap-1 justify-center">
-                        <button onClick={() => handleRemove(cid)} className="rounded-lg bg-black/5 px-2 py-1 text-[10px] text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
-                          Remove
-                        </button>
-                        <button onClick={() => handleBlock(cid)} className="rounded-lg bg-black/5 px-2 py-1 text-[10px] text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
-                          Block
-                        </button>
-                      </div>
-                    </div>
+                  {/* Remove/Block buttons - always visible */}
+                  <div className="flex gap-1 justify-center mt-1.5">
+                    <button onClick={(e) => { e.stopPropagation(); handleRemove(cid) }} className="rounded-lg bg-black/5 px-2.5 py-1 text-[10px] font-medium text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
+                      Remove
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); handleBlock(cid) }} className="rounded-lg bg-black/5 px-2.5 py-1 text-[10px] font-medium text-black/50 hover:bg-red-50 hover:text-red-500 transition-colors">
+                      Block
+                    </button>
                   </div>
                 </div>
               )
@@ -539,7 +540,12 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   })
 
   const activeRooms = callLogsData?.rooms || []
-  const coworkers = coworkerData || []
+  // Filter out self from coworkers so you can't call yourself
+  const coworkers = (coworkerData || []).filter((w: any) => {
+    const wId = w._id || w.id
+    const myId = currentUser?._id || currentUser?.id
+    return wId !== myId
+  })
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-white rounded-[26px]">
@@ -805,7 +811,6 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
     try {
       setActiveChatId(chat._id || chat.id)
       setActiveChat(chat)
-      setMessages([])
     } finally {
       setChatLoading(false)
     }
@@ -857,17 +862,26 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
                   <div className="relative shrink-0">
                     <ChatAvatar src={avatar} name={name} className="size-12 rounded-xl shadow-sm" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-bold text-ink text-[13px]">{name}</p>
-                      {chat.isGroupChat && (
-                        <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Group</span>
-                      )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-bold text-ink text-[13px]">{name}</p>
+                        {chat.isGroupChat && (
+                          <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Group</span>
+                        )}
+                      </div>
+                      <p className="truncate text-[11px] text-ink-soft mt-0.5">
+                        {(() => {
+                          const lm = chat.latestMessage
+                          if (!lm) return 'No messages yet'
+                          if (lm.content) return lm.content
+                          if (lm.message_type === 'image') return '📷 Image'
+                          if (lm.message_type === 'voice') return '🎤 Voice message'
+                          if (lm.message_type === 'video') return '🎥 Video'
+                          if (lm.message_type === 'file' || lm.message_type === 'document') return '📎 Attachment'
+                          return 'No messages yet'
+                        })()}
+                      </p>
                     </div>
-                    <p className="truncate text-[11px] text-ink-soft mt-0.5">
-                      {chat.latestMessage?.content || 'No messages yet'}
-                    </p>
-                  </div>
                   {/* Restore button */}
                   <button
                     onClick={async (e) => {
@@ -913,7 +927,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
               messages={messages}
               setMessages={setMessages}
               onClose={() => { setActiveChat(null); setActiveChatId(null); setShowInfo(false) }}
-              onShowInfo={() => setShowInfo(v => !v)}
+              onShowInfo={() => setShowInfo(!showInfo)}
             />
           </div>
         </div>
@@ -1757,7 +1771,9 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
       try {
         setLoading(true)
         const res = await searchUsers(search)
-        setCoworkers(res.users || [])
+        // Filter out self so you can't message yourself
+        const myId = currentUser?._id || currentUser?.id
+        setCoworkers((res.users || []).filter((w: any) => (w._id || w.id) !== myId))
       } catch (err) {
         console.error('Failed to fetch coworkers:', err)
         toast.error('Failed to load coworkers')
@@ -1779,7 +1795,6 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
       if (!chat.users && worker) chat.users = [currentUser, worker]
       setActiveChat(chat)
       setActiveChatId(chat.id || chat._id)
-      setMessages([])
       setShowInfo(false)
     } catch {
       toast.error('Failed to open chat')
@@ -1911,7 +1926,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
               messages={messages}
               setMessages={setMessages}
               onClose={() => { setActiveChat(null); setActiveChatId(null); setShowInfo(false) }}
-              onShowInfo={() => setShowInfo(v => !v)}
+              onShowInfo={() => setShowInfo(!showInfo)}
             />
           </div>
         </div>

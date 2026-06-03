@@ -120,7 +120,6 @@ export function Dashboard({
       const chat = res?.conversation || res?.data?.conversation || res?.data || res
       setActiveChatId(chat.id || chat._id)
       setActiveChat(chat)
-      setMessages([])
       navigate({ to: '/dashboard/all' })
     } catch (err) {
       console.error('Failed to open chat:', err)

@@ -56,6 +56,12 @@ function formatDate(dateStr?: string) {
   return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })
 }
 
+// Normalize a message from the API: backend returns `id` but we use `_id` everywhere
+const normalizeMsg = (m: any): any => {
+  if (!m) return m
+  return { ...m, _id: m._id || m.id }
+}
+
 function VoiceBubble({ msg, own }: { msg: any; own: boolean }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -217,7 +223,7 @@ export function ChatWindow({
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevChatId = useRef<string | null>(null)
 
-  // Fetch messages when chat changes
+  // Fetch messages and reset state when chat changes (only chatId triggers this)
   useEffect(() => {
     if (!chatId) {
       setLoading(false)
@@ -231,26 +237,34 @@ export function ChatWindow({
     discardRecordedAudio()
     setSelectedAttachment(null)
     setLightboxImageIndex(null)
-    // onShowInfo sidebar reset handled by Dashboard/Prop update if desired, 
-    // but here we just ensure we call it if we want it closed on chat change.
     if (isInfoOpen) onShowInfo?.()
 
     fetchMessages(chatId)
-      .then(res => setMessages(res?.messages || res?.data || []))
-      .catch(err => toast.error('Could not load messages'))
+      .then(res => {
+        // Backend returns a plain array; some endpoints wrap in { messages } or { data }
+        const raw = Array.isArray(res) ? res : (res?.messages || res?.data || [])
+        setMessages(raw.map(normalizeMsg))
+      })
+      .catch(() => toast.error('Could not load messages'))
       .finally(() => setLoading(false))
 
     markMessagesRead(chatId).catch(() => { })
 
-    if (prevChatId.current) socket?.emit('leave_room', prevChatId.current)
-    socket?.emit('join_room', chatId)
+    // Trigger initial AI suggestions
+    handleInputChange('')
+  }, [chatId]) // ← only chatId: socket reconnects must NOT trigger a full reload
+
+  // Manage socket room membership separately so reconnects don't wipe messages
+  useEffect(() => {
+    if (!chatId || !socket) return
+    if (prevChatId.current && prevChatId.current !== chatId) {
+      socket.emit('leave_room', prevChatId.current)
+    }
+    socket.emit('join_room', chatId)
     prevChatId.current = chatId
 
-    // Trigger initial AI suggestions if input is empty
-    handleInputChange('')
-
     return () => {
-      socket?.emit('leave_room', chatId)
+      socket.emit('leave_room', chatId)
     }
   }, [chatId, socket])
 
@@ -288,8 +302,9 @@ export function ChatWindow({
       if (String(mChatId) !== String(chatId)) return
 
       setMessages(prev => {
+        const normalized = normalizeMsg(m)
         // 1. Exact ID match check
-        if (prev.find(p => p._id === m._id)) return prev
+        if (prev.find(p => p._id === normalized._id)) return prev
 
         // 2. Optimistic match check: find temp message with same content from same sender
         const senderId = m.sender?._id || m.sender?.id || m.sender
@@ -303,11 +318,11 @@ export function ChatWindow({
           )
           if (tempMatch) {
             // Replace the temp message with the real one
-            return prev.map(p => p._id === tempMatch._id ? m : p)
+            return prev.map(p => p._id === tempMatch._id ? normalized : p)
           }
         }
 
-        return [...prev, m]
+        return [...prev, normalized]
       })
       markMessagesRead(chatId).catch(() => { })
     }

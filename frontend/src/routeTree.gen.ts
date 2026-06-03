@@ -112,9 +112,9 @@ const DashboardRoute = DashboardImport.update({
     DashboardArchiveRoute,
     DashboardProfileRoute,
     DashboardEditProfileRoute,
-])
+] as any) as any
 
-export const routeTree = rootRoute.addChildren([
+export const routeTree = (rootRoute as any).addChildren([
     IndexRoute,
     LoginRoute,
     SignupRoute,
@@ -124,4 +124,28 @@ export const routeTree = rootRoute.addChildren([
     VerifyOtpRoute,
     GoogleCallbackRoute,
     NotFoundRoute,
-])
+] as any) as any
+
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/': any
+    '/login': any
+    '/signup': any
+    '/dashboard': any
+    '/forgot-password': any
+    '/reset-password': any
+    '/verify-otp': any
+    '/google-callback': any
+    '/404': any
+    '/dashboard/': any
+    '/dashboard/all': any
+    '/dashboard/work': any
+    '/dashboard/friends': any
+    '/dashboard/calls': any
+    '/dashboard/archive': any
+    '/dashboard/profile': any
+    '/dashboard/edit-profile': any
+  }
+}
+
+

@@ -35,9 +35,7 @@ function DashboardPage() {
                 }}
             />
             {bgType === 'bubbles' && <BubbleBackground />}
-            <Dashboard bgType={bgType} setBgType={setBgType} activeTab={activeTab}>
-                <Outlet />
-            </Dashboard>
+            <Dashboard bgType={bgType} setBgType={setBgType} activeTab={activeTab} />
         </main>
     );
 }
