@@ -183,7 +183,19 @@ export function AppProvider({ children, user }: AppProviderProps) {
                 }
                 updated[idx] = {
                     ...updated[idx],
-                    latestMessage: { content: preview, message_type: m?.message_type || 'text' },
+                    latestMessage: {
+                        id: m._id || m.id,
+                        content: preview,
+                        message_type: m?.message_type || 'text',
+                        sender: m.sender ? {
+                            id: m.sender.id || m.sender._id || m.sender,
+                            full_name: m.sender.full_name || null,
+                            avatar: m.sender.avatar || null
+                        } : null,
+                        sentAt: m.createdAt || new Date().toISOString(),
+                        readBy: m.readBy || [],
+                        isRead: m.isRead ?? false
+                    },
                     updatedAt: new Date().toISOString()
                 }
                 // Move to top
@@ -213,6 +225,31 @@ export function AppProvider({ children, user }: AppProviderProps) {
 
         sock?.on('chat_deleted', ({ chatId }: { chatId: string }) => {
             setChats(prev => prev.filter(c => (c._id !== chatId && c.id !== chatId)))
+        })
+
+        sock?.on('messages_read', ({ chatId, userId }: { chatId: string, userId: string }) => {
+            setChats(prev => prev.map(c => {
+                const cid = c._id || c.id
+                if (String(cid) === String(chatId) && c.latestMessage) {
+                    const senderId = c.latestMessage.sender?.id || c.latestMessage.sender?._id || c.latestMessage.sender
+                    if (String(senderId) !== String(userId)) {
+                        const readBy = Array.isArray(c.latestMessage.readBy) ? [...c.latestMessage.readBy] : []
+                        const exists = readBy.some((r: any) => String(r.id || r._id || r) === String(userId))
+                        if (!exists) {
+                            readBy.push(userId)
+                        }
+                        return {
+                            ...c,
+                            latestMessage: {
+                                ...c.latestMessage,
+                                readBy,
+                                isRead: true
+                            }
+                        }
+                    }
+                }
+                return c
+            }))
         })
 
         sock?.on('message_reaction', ({ messageId, chatId, reactions }: { messageId: string, chatId: string, reactions: any[] }) => {
@@ -290,6 +327,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('user_status_change')
             sock?.off('new_chat')
             sock?.off('chat_deleted')
+            sock?.off('messages_read')
             sock?.off('message_reaction')
         }
     }, [user?.id, user?._id])

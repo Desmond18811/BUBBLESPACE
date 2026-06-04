@@ -194,6 +194,20 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, onClose }:
               token={token}
               serverUrl={serverUrl}
               connect={true}
+              options={{
+                videoCaptureDefaults: {
+                  resolution: {
+                    width: 1280,
+                    height: 720,
+                    frameRate: 30,
+                  },
+                },
+                publishDefaults: {
+                  videoSimulcast: true,
+                  videoCodec: 'vp8',
+                  dtx: true,
+                }
+              }}
               onDisconnected={handleDisconnected}
               className="h-full"
             >

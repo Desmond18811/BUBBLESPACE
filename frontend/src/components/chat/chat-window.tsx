@@ -342,6 +342,22 @@ export function ChatWindow({
       setMessages(prev => prev.map(p => p._id === data?.messageId ? { ...p, reactions: data.reactions } : p))
     }
 
+    const onMessagesRead = ({ chatId: cid, userId }: any) => {
+      if (cid === chatId && userId !== myId) {
+        setMessages(prev => prev.map(msg => {
+          if (msg.sender?._id !== userId && msg.sender !== userId) {
+            const readBy = Array.isArray(msg.readBy) ? [...msg.readBy] : [];
+            const exists = readBy.some((r: any) => String(r.id || r._id || r) === String(userId));
+            if (!exists) {
+              readBy.push(userId);
+            }
+            return { ...msg, readBy };
+          }
+          return msg;
+        }))
+      }
+    }
+
     const onTypingStart = ({ fromUserId, chatId: cid }: any) => {
       if (cid === chatId && fromUserId !== myId) {
         setTyping(true)
@@ -357,6 +373,7 @@ export function ChatWindow({
     socket.on('message_updated', onMsgUpdated)
     socket.on('message_deleted', onMsgDeleted)
     socket.on('message_reaction', onMsgReaction)
+    socket.on('messages_read', onMessagesRead)
     socket.on('typing_start', onTypingStart)
     socket.on('typing_stop', onTypingStop)
 
@@ -365,6 +382,7 @@ export function ChatWindow({
       socket.off('message_updated', onMsgUpdated)
       socket.off('message_deleted', onMsgDeleted)
       socket.off('message_reaction', onMsgReaction)
+      socket.off('messages_read', onMessagesRead)
       socket.off('typing_start', onTypingStart)
       socket.off('typing_stop', onTypingStop)
     }
