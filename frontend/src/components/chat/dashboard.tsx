@@ -25,6 +25,7 @@ import { BubblespaceLogo } from '@/components/logo'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 
 import { useQuery } from '@tanstack/react-query'
+import { useTheme } from 'next-themes'
 
 export function Dashboard({
   bgType,
@@ -98,13 +99,20 @@ export function Dashboard({
 
   const user = userData
 
+  const { setTheme } = useTheme()
+
   React.useEffect(() => {
     if (user) {
-      if (user.app_background && user.app_background !== 'custom') {
+      if (user.app_background) {
         setBgType(user.app_background)
+        if (user.app_background === 'dark') {
+          setTheme('dark')
+        } else {
+          setTheme('light')
+        }
       }
     }
-  }, [user, setBgType])
+  }, [user, setBgType, setTheme])
 
   // Security: Prevent unauthorized chat access
   React.useEffect(() => {

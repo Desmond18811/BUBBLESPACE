@@ -392,14 +392,25 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
       <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
         {members.map((m: any) => (
           <div key={m._id || m.id || m.name}
-            className="flex items-center gap-3 rounded-xl px-1.5 py-1.5 hover:bg-purple/5">
+            className="flex items-start gap-3 rounded-xl px-1.5 py-1.5 hover:bg-purple/5">
             <ChatAvatar src={m.avatar || m.profile_image} name={m.full_name || m.username || '?'}
-              className="size-9 rounded-xl shrink-0" />
+              className="size-9 rounded-xl shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-ink truncate">{m.full_name || m.username || m.name}</p>
-              {(m.role || m.org_role) && <p className="text-[11px] text-ink-soft truncate">{m.role || m.org_role}</p>}
+              <div className="flex items-center gap-1.5">
+                <p className="text-[13px] font-bold text-ink truncate">{m.full_name || m.name || m.username}</p>
+                {m.username && <span className="text-[10px] font-semibold text-purple shrink-0">@{m.username}</span>}
+              </div>
+              <p className="text-[10px] text-ink-soft truncate flex items-center gap-1 mt-0.5 leading-tight">
+                <span className="font-medium">{m.org_role || m.role || 'Member'}</span>
+                {(m.organization || m.company) && (
+                  <>
+                    <span className="opacity-60">•</span>
+                    <span className="truncate">{m.organization || m.company}</span>
+                  </>
+                )}
+              </p>
             </div>
-            {m.isOnline && <span className="size-2 rounded-full bg-emerald-400 shrink-0" />}
+            {m.isOnline && <span className="size-2 rounded-full bg-emerald-400 shrink-0 mt-2" />}
           </div>
         ))}
         {members.length === 0 && (

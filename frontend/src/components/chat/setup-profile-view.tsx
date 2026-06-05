@@ -572,6 +572,9 @@ export function SetupProfileView({
                                             <div>
                                                 <h3 className="font-bold text-ink text-sm">Avatar Photo</h3>
                                                 <p className="text-xs text-ink-soft mt-1">Upload a professional photo for notifications.</p>
+                                                {user?.username && (
+                                                    <p className="text-xs text-purple font-bold mt-1.5 bg-purple/10 px-2 py-0.5 rounded-md inline-block">@{user.username}</p>
+                                                )}
                                             </div>
                                         </div>
 

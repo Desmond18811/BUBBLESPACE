@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Pin, Check, CheckCheck, MoreVertical, BellOff, Trash2, Archive, Shield, X, MessageSquarePlus, Menu } from 'lucide-react'
+import { Search, Pin, Check, CheckCheck, MoreVertical, BellOff, Trash2, Archive, Shield, X, MessageSquarePlus, Menu, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { useChats } from '@/contexts/AppContext'
 import { muteChat, clearChat, toggleChatPin, deleteChat, blockUser } from '@/lib/api'
 import { toast } from 'sonner'
 import { useDashboard } from '@/contexts/DashboardContext'
+import { CreateGroupModal } from './create-group-modal'
 
 interface ContextMenuState {
   chatId: string
@@ -97,6 +98,7 @@ export function ChatList({
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set())
   const [contacts, setContacts] = useState<any[]>([])
   const [loadingContacts, setLoadingContacts] = useState(false)
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -275,11 +277,11 @@ export function ChatList({
           <h2 className="text-xl font-bold bg-linear-to-r from-purple to-purple/60 bg-clip-text text-transparent">Messages</h2>
         </div>
         <button
-          onClick={() => navigate({ to: '/dashboard/archive' })}
-          className="flex items-center gap-1.5 rounded-full bg-black/3 px-3 py-1.5 text-[11px] font-bold text-black/50 hover:bg-black/5 hover:text-black transition-all"
+          onClick={() => setShowCreateGroupModal(true)}
+          className="flex items-center gap-1.5 rounded-full bg-purple/10 px-3 py-1.5 text-[11px] font-bold text-purple hover:bg-purple/20 transition-all cursor-pointer"
         >
-          <Archive className="size-3.5" />
-          Archive Charts
+          <Plus className="size-3.5" />
+          Create Group
         </button>
       </div>
 
@@ -468,6 +470,19 @@ export function ChatList({
           position={{ x: contextMenu.x, y: contextMenu.y }}
           onClose={() => setContextMenu(null)}
           onAction={handleAction}
+        />
+      )}
+
+      {showCreateGroupModal && (
+        <CreateGroupModal
+          onClose={() => setShowCreateGroupModal(false)}
+          onSuccess={async (newChat) => {
+            await refreshChats()
+            const id = newChat.id || newChat._id
+            setActiveChatId(id)
+            setActiveChat(newChat)
+            navigate({ to: `/dashboard/chat/${id}` })
+          }}
         />
       )}
     </aside>

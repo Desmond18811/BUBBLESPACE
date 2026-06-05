@@ -44,6 +44,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useDashboard } from '@/contexts/DashboardContext'
 import { useNavigate } from '@tanstack/react-router'
 import { useChats } from '@/contexts/AppContext'
+import { useTheme } from 'next-themes'
+import { CreateGroupModal } from './create-group-modal'
 import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -252,13 +254,16 @@ function CallOverlay({
 
 export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
   const { startCall } = useSocket()
-  const { user: currentUser } = useDashboard()
+  const { user: currentUser, setActiveChat, setActiveChatId } = useDashboard()
+  const { refreshChats } = useChats()
+  const navigate = useNavigate()
   const isMobile = useIsMobile()
   const myId = currentUser?._id || currentUser?.id
   const [contacts, setContacts] = useState<any[]>([])
   const [suggestions, setSuggestions] = useState<any[]>([])
   const [loadingContacts, setLoadingContacts] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false)
   const [addIdentifier, setAddIdentifier] = useState('')
   const [addLoading, setAddLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -351,8 +356,16 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
               </div>
               <button
                 type="button"
+                onClick={() => setShowCreateGroupModal(true)}
+                className="flex items-center gap-2 rounded-xl bg-purple/10 border border-purple/20 px-4 py-2 text-[13px] font-bold text-purple transition-all hover:bg-purple/20 cursor-pointer"
+              >
+                <Plus className="size-4" />
+                <span>Create Group</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 rounded-xl bg-purple px-4 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+                className="flex items-center gap-2 rounded-xl bg-purple px-4 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90 cursor-pointer"
               >
                 <UserPlus className="size-4" />
                 <span className="hidden sm:inline">Add Friend</span>
@@ -382,14 +395,24 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
               </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
-            className="flex h-10 items-center justify-center gap-2 rounded-2xl bg-purple px-4 text-xs font-bold text-white transition-opacity hover:opacity-90 shrink-0"
-          >
-            <UserPlus className="size-4" />
-            <span>Add Friend</span>
-          </button>
+          <div className="flex gap-2 w-full">
+            <button
+              type="button"
+              onClick={() => setShowCreateGroupModal(true)}
+              className="flex-1 flex h-10 items-center justify-center gap-2 rounded-2xl bg-purple/10 border border-purple/20 text-xs font-bold text-purple transition-all hover:bg-purple/20 cursor-pointer"
+            >
+              <Plus className="size-4" />
+              <span>Create Group</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="flex-1 flex h-10 items-center justify-center gap-2 rounded-2xl bg-purple px-4 text-xs font-bold text-white transition-opacity hover:opacity-90 cursor-pointer"
+            >
+              <UserPlus className="size-4" />
+              <span>Add Friend</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -633,6 +656,19 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
           friend={activeCall.friend}
           type={activeCall.type}
           onEnd={() => setActiveCall(null)}
+        />
+      )}
+
+      {showCreateGroupModal && (
+        <CreateGroupModal
+          onClose={() => setShowCreateGroupModal(false)}
+          onSuccess={async (newChat) => {
+            await refreshChats()
+            const id = newChat.id || newChat._id
+            setActiveChatId(id)
+            setActiveChat(newChat)
+            navigate({ to: `/dashboard/chat/${id}` })
+          }}
         />
       )}
     </div>
@@ -1247,6 +1283,7 @@ export function EditView({
   setBgType: (t: string) => void
 }) {
   const isMobile = useIsMobile()
+  const { setTheme } = useTheme()
   const [loading, setLoading] = useState(false)
   const [selectedCountryCode, setSelectedCountryCode] = useState(() => {
     const phone = user?.phone_number || ''
@@ -1317,8 +1354,9 @@ export function EditView({
     if (!file) return
     try {
       const res = await uploadBackground(file)
-      setUser(res.data.user)
-      setBgType('custom')
+      const u = res.data.user || res.data
+      setUser(u)
+      setBgType(u.app_background || 'custom')
       toast.success('Custom background set!')
     } catch (err: any) {
       toast.error('Background upload failed')
@@ -1327,6 +1365,11 @@ export function EditView({
 
   const handleBgSelect = async (type: string) => {
     setBgType(type)
+    if (type === 'dark') {
+      setTheme('dark')
+    } else {
+      setTheme('light')
+    }
     try {
       const res = await updateProfile({ app_background: type })
       setUser(res.data)
@@ -2485,12 +2528,14 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
     showInfo,
     setShowInfo,
   } = useDashboard()
+  const { refreshChats } = useChats()
   const isNarrow = narrowProp ?? contextNarrow
   const [coworkers, setCoworkers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [collapsingFor, setCollapsingFor] = useState<string | null>(null)
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false)
   const isMobile = useIsMobile()
   const [searchActive, setSearchActive] = useState(false)
   const navigate = useNavigate()
@@ -2548,12 +2593,12 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
           action={
             isMobile ? (
               <button
-                onClick={() => navigate({ to: '/dashboard/archive' })}
-                className="flex h-9 items-center gap-1.5 rounded-xl border border-black/5 bg-white px-3 text-xs font-semibold text-black/50 hover:bg-black/5 hover:text-black/70 transition-all shrink-0"
-                title="Archive Charts"
+                onClick={() => setShowCreateGroupModal(true)}
+                className="flex h-9 items-center gap-1.5 rounded-xl border border-purple/20 bg-purple/10 px-3 text-xs font-semibold text-purple hover:bg-purple/20 transition-all shrink-0 cursor-pointer"
+                title="Create Group"
               >
-                <Archive className="size-3.5" />
-                {!activeChat && <span>Archive Charts</span>}
+                <Plus className="size-3.5" />
+                {!activeChat && <span>Create Group</span>}
               </button>
             ) : (
               <div className="flex items-center gap-2">
@@ -2570,12 +2615,12 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
                   </div>
                 )}
                 <button
-                  onClick={() => navigate({ to: '/dashboard/archive' })}
-                  className="flex h-9 items-center gap-1.5 rounded-xl border border-black/5 bg-white px-3 text-xs font-semibold text-black/50 hover:bg-black/5 hover:text-black/70 transition-all shrink-0"
-                  title="Archive Charts"
+                  onClick={() => setShowCreateGroupModal(true)}
+                  className="flex h-9 items-center gap-1.5 rounded-xl border border-purple/20 bg-purple/10 px-3 text-xs font-semibold text-purple hover:bg-purple/20 transition-all shrink-0 cursor-pointer"
+                  title="Create Group"
                 >
-                  <Archive className="size-3.5" />
-                  {!activeChat && <span>Archive Charts</span>}
+                  <Plus className="size-3.5" />
+                  {!activeChat && <span>Create Group</span>}
                 </button>
               </div>
             )
@@ -2703,6 +2748,19 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
             <p className="text-sm text-black/40">Select a colleague to start a conversation.</p>
           </div>
         </div>
+      )}
+
+      {showCreateGroupModal && (
+        <CreateGroupModal
+          onClose={() => setShowCreateGroupModal(false)}
+          onSuccess={async (newChat) => {
+            await refreshChats()
+            const id = newChat.id || newChat._id
+            setActiveChatId(id)
+            setActiveChat(newChat)
+            navigate({ to: `/dashboard/chat/${id}` })
+          }}
+        />
       )}
     </div>
   )

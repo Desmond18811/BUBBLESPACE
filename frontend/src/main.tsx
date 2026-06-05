@@ -10,7 +10,7 @@ const router = getRouter()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ThemeProvider attribute="class" forcedTheme="light" enableSystem={false}>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <Toaster position="top-center" richColors />
       <RouterProvider router={router} />
     </ThemeProvider>

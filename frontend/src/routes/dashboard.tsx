@@ -30,7 +30,8 @@ function DashboardPage() {
                             bgType === 'light' ? "url('/themes/light.png')" :
                                 bgType === 'dark' ? "url('/themes/dark.png')" :
                                     bgType === 'glass' ? "radial-gradient(circle at top left, #c084fc 0%, #a78bfa 35%, #e879f9 75%, #f472b6 100%)" :
-                                        "url('/topographic_bg_v2_1780147871964.png')",
+                                        (bgType && (bgType.startsWith('/') || bgType.startsWith('http') || bgType.startsWith('data:'))) ? `url('${bgType}')` :
+                                            "url('/topographic_bg_v2_1780147871964.png')",
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                 }}
