@@ -19,6 +19,7 @@ import { Route as DashboardArchiveImport } from './routes/dashboard/archive'
 import { Route as DashboardProfileImport } from './routes/dashboard/profile'
 import { Route as DashboardEditProfileImport } from './routes/dashboard/edit-profile'
 import { Route as SetupProfileImport } from './routes/setup-profile'
+import { Route as DashboardChatImport } from './routes/dashboard/chat.$chatId'
 
 const IndexRoute = IndexImport.update({
     path: '/',
@@ -101,6 +102,11 @@ const DashboardEditProfileRoute = DashboardEditProfileImport.update({
     getParentRoute: () => DashboardRoute,
 } as any)
 
+const DashboardChatRoute = DashboardChatImport.update({
+    path: '/chat/$chatId',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
 const DashboardRoute = DashboardImport.update({
     path: '/dashboard',
     getParentRoute: () => rootRoute,
@@ -113,6 +119,7 @@ const DashboardRoute = DashboardImport.update({
     DashboardArchiveRoute,
     DashboardProfileRoute,
     DashboardEditProfileRoute,
+    DashboardChatRoute,
 ] as any) as any
 
 const SetupProfileRoute = SetupProfileImport.update({
@@ -153,6 +160,7 @@ declare module '@tanstack/react-router' {
     '/dashboard/archive': any
     '/dashboard/profile': any
     '/dashboard/edit-profile': any
+    '/dashboard/chat/$chatId': any
   }
 }
 
