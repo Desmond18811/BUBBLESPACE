@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
+import { Bot } from 'lucide-react'
 
 interface AvatarProps {
     src?: string | null
@@ -18,8 +19,11 @@ export function ChatAvatar({ src, name, className }: AvatarProps) {
         .toUpperCase()
         .slice(0, 2)
 
-    const resolvedSrc = getSecureMediaUrl(src)
+    const isBlackIcon = src === 'black' || src === '#000000'
+    const resolvedSrc = isBlackIcon ? null : getSecureMediaUrl(src)
     const hasImage = resolvedSrc && !imageError
+
+    const isAida = (name || '').toLowerCase().includes('aida')
 
     if (hasImage) {
         return (
@@ -32,9 +36,22 @@ export function ChatAvatar({ src, name, className }: AvatarProps) {
         )
     }
 
+    if (isAida) {
+        return (
+            <div className={cn(
+                "flex items-center justify-center rounded-full bg-gradient-to-br from-purple to-purple-dark text-white font-semibold shrink-0",
+                className
+            )}>
+                <Bot className="size-[55%]" />
+            </div>
+        )
+    }
+
     return (
         <div className={cn(
-            "flex items-center justify-center rounded-full bg-purple/10 text-purple font-semibold shrink-0 uppercase",
+            isBlackIcon
+                ? "flex items-center justify-center rounded-full bg-black text-white font-semibold shrink-0 uppercase"
+                : "flex items-center justify-center rounded-full bg-purple/10 text-purple font-semibold shrink-0 uppercase",
             className
         )}>
             {initials}

@@ -43,6 +43,7 @@ import { Track } from 'livekit-client'
 import '@livekit/components-styles'
 import { useSocket } from '@/contexts/AppContext'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
+import { toast } from 'sonner'
 
 interface TranscriptEntry {
   speaker: string
@@ -104,6 +105,30 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
       socket?.off('meeting_transcript_chunk', handleTranscriptChunk)
     }
   }, [socket, roomId])
+
+  // Join meeting room and listen for meeting_ended
+  useEffect(() => {
+    if (!socket || !roomId) return
+
+    socket.emit('join_room', roomId)
+    console.log(`[Meeting Room] Joined room: ${roomId}`)
+
+    const handleMeetingEnded = (data: { roomId: string }) => {
+      if (data.roomId === roomId) {
+        console.log('[Meeting Room] Call ended by other participant')
+        toast.info('Meeting has been ended')
+        onClose()
+      }
+    }
+
+    socket.on('meeting_ended', handleMeetingEnded)
+
+    return () => {
+      socket.emit('leave_room', roomId)
+      socket.off('meeting_ended', handleMeetingEnded)
+      console.log(`[Meeting Room] Left room: ${roomId}`)
+    }
+  }, [socket, roomId, onClose])
 
   useEffect(() => {
     let active = true
@@ -198,6 +223,9 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
       }
       if (meetingDbId) {
         endMeeting(meetingDbId).catch(console.error)
+      }
+      if (socket && roomId) {
+        socket.emit('meeting_ended', { roomId })
       }
     }
   }, [roomId, type, userId, userName, socket, permissionsGranted])

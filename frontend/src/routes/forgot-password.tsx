@@ -4,7 +4,7 @@ import { forgotPassword, resetPassword } from "@/lib/api";
 import { toast } from "sonner";
 import { BubblespaceLogo } from "@/components/logo";
 import { motion } from "motion/react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { PasswordValidator, getPasswordRequirements } from "@/components/auth/password-validator";
 
 export const Route = createFileRoute("/forgot-password")({
@@ -16,6 +16,7 @@ function ForgotPasswordPage() {
     const [otp, setOtp] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [step, setStep] = useState(1); // 1: Email, 2: OTP + New Password
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
@@ -119,14 +120,23 @@ function ForgotPasswordPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-1">New Password</label>
-                                    <input
-                                        type="password"
-                                        required
-                                        className="w-full bg-background border border-border rounded-2xl px-4 py-4 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10 pointer-events-auto"
-                                        placeholder="••••••••"
-                                        value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            required
+                                            className="w-full bg-background border border-border rounded-2xl pl-4 pr-12 py-4 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10 pointer-events-auto"
+                                            placeholder="••••••••"
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none z-20"
+                                        >
+                                            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                        </button>
+                                    </div>
                                     <PasswordValidator password={newPassword} />
                                 </div>
                             </div>

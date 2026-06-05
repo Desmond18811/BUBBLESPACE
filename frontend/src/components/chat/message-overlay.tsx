@@ -38,11 +38,12 @@ interface Msg {
 
 // ── Liquid Glass Contact Card (floats outside the chat container) ──────────
 function LiquidGlassContactCard({ user, onClose, onExpand }: { user: any; onClose: () => void; onExpand?: () => void }) {
+    const isUserAdmin = user.role === 'admin'
     const infoRows = [
         { icon: Briefcase, label: 'Organization', value: user.organization || user.company || 'No organization' },
         { icon: AtSign, label: 'Username', value: user.username ? `@${user.username}` : '@unknown' },
         { icon: User, label: 'Role', value: user.org_role || user.role || 'Member' },
-        ...(user.location?.city ? [{ icon: MapPin, label: 'Location', value: `${user.location.city}, ${user.location.country || ''}` }] : []),
+        ...(isUserAdmin && user.location?.city ? [{ icon: MapPin, label: 'Location', value: `${user.location.city}, ${user.location.country || ''}` }] : []),
         ...(user.bio ? [{ icon: Info, label: 'Bio', value: user.bio }] : []),
     ]
 
@@ -87,7 +88,7 @@ function LiquidGlassContactCard({ user, onClose, onExpand }: { user: any; onClos
                 </div>
                 <h3 className="font-bold text-[15px] text-ink leading-tight">{user.full_name || user.username}</h3>
                 <p className="text-[12px] font-medium text-purple mt-0.5">{user.org_role || user.role || 'Team Member'}</p>
-                {user.status_message && (
+                {isUserAdmin && user.status_message && (
                     <p className="text-[11px] text-ink-soft mt-1 italic px-2">"{user.status_message}"</p>
                 )}
             </div>

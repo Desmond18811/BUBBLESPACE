@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate, Outlet, Link } from '@tanstack/react-router'
+import { useNavigate, Outlet, Link, useLocation } from '@tanstack/react-router'
 import { DashboardProvider } from '@/contexts/DashboardContext'
 import { NavSidebar, navItems, bottomItems } from '@/components/chat/nav-sidebar'
 import { ChatList } from '@/components/chat/chat-list'
@@ -39,6 +39,9 @@ export function Dashboard({
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [activeChat, setActiveChat] = useState<any>(null)
   const navigate = useNavigate()
+  const location = useLocation()
+  const isChatRoute = location.pathname.includes('/dashboard/chat/')
+  const routeChatId = isChatRoute ? location.pathname.split('/').pop() : null
   const [showInfo, setShowInfo] = useState(true)
   const [overlayUser, setOverlayUser] = useState<any>(null)
   const [overlayWorkCard, setOverlayWorkCard] = useState(false)
@@ -68,8 +71,20 @@ export function Dashboard({
 
 
   const SIDE_PANEL_TABS = ['all']
-  const showSidePanel = SIDE_PANEL_TABS.includes(activeTab)
-  const isInfoVisible = !!(showInfo && !isInMeeting && activeChat && (activeTab === 'all' || activeTab === 'friends' || activeTab === 'work' || activeTab === 'archive'))
+  const showSidePanel = SIDE_PANEL_TABS.includes(activeTab) || isChatRoute
+
+  React.useEffect(() => {
+    if (routeChatId) {
+      if (routeChatId !== activeChatId) {
+        setActiveChatId(routeChatId)
+      }
+    } else if (activeTab === 'all' && activeChatId) {
+      setActiveChatId(null)
+      setActiveChat(null)
+    }
+  }, [routeChatId, activeTab])
+
+  const isInfoVisible = !!(showInfo && !isInMeeting && activeChat && (activeTab === 'all' || activeTab === 'friends' || activeTab === 'work' || activeTab === 'archive' || isChatRoute))
 
   // Use React Query for profile fetching with caching
   const { data: userData, isLoading: loadingProfile, refetch: refetchProfile } = useQuery({
@@ -143,14 +158,26 @@ export function Dashboard({
     try {
       const res = await accessOrCreateChat(targetUser._id || targetUser.id)
       const chat = res?.conversation || res?.data?.conversation || res?.data || res
-      setActiveChatId(chat.id || chat._id)
+      const id = chat.id || chat._id
+      setActiveChatId(id)
       setActiveChat(chat)
-      navigate({ to: '/dashboard/all' })
+      navigate({ to: `/dashboard/chat/${id}` })
     } catch (err) {
       console.error('Failed to open chat:', err)
       toast.error('Failed to start conversation')
     }
   }
+
+  // Redirect to setup-profile if onboarding is incomplete
+  React.useEffect(() => {
+    if (user) {
+      if (!user.onboardingComplete && location.pathname !== '/setup-profile') {
+        navigate({ to: '/setup-profile' })
+      } else if (user.onboardingComplete && location.pathname === '/setup-profile') {
+        navigate({ to: '/dashboard/all' })
+      }
+    }
+  }, [user, location.pathname])
 
   if (loadingProfile) {
     return (
@@ -161,7 +188,11 @@ export function Dashboard({
   }
 
   if (user && !user.onboardingComplete) {
-    return <SetupProfileView user={user} onComplete={() => { }} />
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-canvas">
+        <Loader2 className="h-10 w-10 animate-spin text-purple" />
+      </div>
+    )
   }
 
   const dashboardContextValue = {
@@ -198,7 +229,7 @@ export function Dashboard({
               backgroundPosition: 'center',
             }}
           >
-            <NavSidebar activeTab={activeTab} user={user} onLogout={handleLogout} />
+            <NavSidebar activeTab={isChatRoute ? 'all' : activeTab} user={user} onLogout={handleLogout} />
 
             <div className="flex flex-1 overflow-hidden rounded-none md:rounded-[26px] bg-white relative transition-all duration-300">
               {/* Always mount the chat list + window but only show when on 'all' tab */}
@@ -209,6 +240,7 @@ export function Dashboard({
                     onSelect={(id, chat) => {
                       setActiveChatId(id)
                       setActiveChat(chat)
+                      navigate({ to: `/dashboard/chat/${id}` })
                     }}
                     currentUserId={user?._id || user?.id}
                   />
@@ -227,6 +259,7 @@ export function Dashboard({
                       onClose={() => {
                         setActiveChatId(null)
                         setActiveChat(null)
+                        navigate({ to: '/dashboard/all' })
                       }}
                     />
                   ) : (
@@ -302,7 +335,7 @@ export function Dashboard({
                 <div className="flex-1 overflow-y-auto py-6 space-y-2">
                   {navItems.map((item) => {
                     const Icon = item.icon
-                    const isActive = item.id === activeTab
+                    const isActive = item.id === (isChatRoute ? 'all' : activeTab)
                     const badge = (item.id === 'all' || item.id === 'work') ? totalUnread : 0
 
                     return (

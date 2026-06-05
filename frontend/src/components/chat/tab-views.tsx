@@ -35,6 +35,10 @@ import {
   Zap,
   ClipboardList,
   Menu,
+  Calendar,
+  Plus,
+  Trash2,
+  Clock,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useDashboard } from '@/contexts/DashboardContext'
@@ -44,7 +48,7 @@ import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
-import { updateProfile, uploadAvatar, uploadBackground, searchUsers, getMyContacts, addContact, getSuggestions, removeContact as removeContactApi, blockUser } from '@/lib/api'
+import { updateProfile, uploadAvatar, uploadBackground, searchUsers, getMyContacts, addContact, getSuggestions, removeContact as removeContactApi, blockUser, fetchTasks, createTaskFull, updateTaskFull, deleteTaskFull, fetchAiDescription } from '@/lib/api'
 import { toast } from 'sonner'
 import {
   profile,
@@ -56,9 +60,51 @@ import { GroupInfo } from '@/components/chat/group-info'
 import { useSocket } from '@/contexts/AppContext'
 import { MessageOverlay } from '@/components/chat/message-overlay'
 import { ZegoMeetingModal } from '@/components/chat/ZegoMeetingModal'
+import { countries } from '@/lib/countries'
 
 // Next.js Image polyfill for Vite
 const Image = ({ src, alt, className, ...rest }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string; alt?: string; width?: number; height?: number }) => <img src={src} alt={alt} className={className} {...rest} />
+
+const INDUSTRIES = [
+  "Technology & Software",
+  "Healthcare & Life Sciences",
+  "Finance & Banking",
+  "Education & E-Learning",
+  "Retail & E-commerce",
+  "Real Estate & Construction",
+  "Manufacturing & Logistics",
+  "Media & Entertainment",
+  "Marketing & Advertising",
+  "Professional Services & Consulting",
+  "Hospitality & Tourism",
+  "Energy & Utilities",
+  "Non-Profit & Government",
+  "Other"
+];
+
+const OFFICE_ROLES = [
+  "Intern",
+  "Associate",
+  "Specialist",
+  "Analyst",
+  "Coordinator",
+  "Developer",
+  "Engineer",
+  "Designer",
+  "Manager",
+  "Team Lead",
+  "Project Manager",
+  "Director",
+  "Vice President (VP)",
+  "Chief Technology Officer (CTO)",
+  "Chief Product Officer (CPO)",
+  "Chief Operating Officer (COO)",
+  "Chief Marketing Officer (CMO)",
+  "Chief Financial Officer (CFO)",
+  "Chief Executive Officer (CEO)",
+  "Founder"
+];
+
 
 
 function ViewHeader({ title, subtitle, action, isNarrow = false }: { title: string, subtitle?: string, action?: React.ReactNode, isNarrow?: boolean }) {
@@ -475,7 +521,9 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                       {contact.full_name || contact.username}
                     </p>
                     <p className="truncate text-[10px] text-black/40">
-                      {effectiveNarrow ? (contact.isOnline ? "Online" : "Away") : (contact.org_role || contact.status_message || '@' + (contact.username || ''))}
+                      {effectiveNarrow 
+                        ? (contact.isOnline ? "Online" : "Away") 
+                        : (contact.org_role || (contact.role === 'admin' ? contact.status_message : null) || '@' + (contact.username || ''))}
                     </p>
                   </div>
 
@@ -598,6 +646,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   const [selectionStep, setSelectionStep] = useState<'none' | 'source' | 'type'>('none')
   const [activeMeeting, setActiveMeeting] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(null)
   const { user: currentUser } = useDashboard()
+  const [callsTab, setCallsTab] = useState<'meet' | 'calendar'>('meet')
 
   const generateRoomId = () => `bubble-${Math.random().toString(36).slice(2, 11)}`
 
@@ -650,125 +699,153 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
     <div className="flex h-full w-full overflow-hidden bg-white rounded-[26px]">
       <div className="flex flex-1 flex-col overflow-hidden border-r border-black/5 bg-white">
         <ViewHeader
-          title="Calls & Meet"
-          subtitle="Experience seamless communication"
+          title={callsTab === 'meet' ? "Calls & Meet" : "Business Calendar"}
+          subtitle={callsTab === 'meet' ? "Experience seamless communication" : "Organize organization events and team meetings"}
           action={
-            <button
-              onClick={() => setSelectionStep('source')}
-              className="rounded-xl bg-purple px-5 py-2 text-sm font-bold text-white shadow-lg shadow-purple/20 transition-all hover:opacity-90 active:scale-95"
-            >
-              Start New Meeting
-            </button>
+            callsTab === 'meet' ? (
+              <button
+                onClick={() => setSelectionStep('source')}
+                className="rounded-xl bg-purple px-5 py-2 text-sm font-bold text-white shadow-lg shadow-purple/20 transition-all hover:opacity-90 active:scale-95"
+              >
+                Start New Meeting
+              </button>
+            ) : null
           }
         />
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8">
-          {/* Active Rooms */}
-          <section>
-            <div className="mb-4 flex items-center justify-between px-2">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-black/30 italic">Live Collaborative Spaces</h3>
-              <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-bold text-emerald-600">
-                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                {activeRooms.length} ACTIVE ROOMS
+        {/* Tab switcher navigation */}
+        <div className="flex border-b border-black/5 px-6 bg-white gap-6">
+          <button
+            onClick={() => setCallsTab('meet')}
+            className={cn(
+              "pb-3 pt-2 text-sm font-bold border-b-2 transition-all relative",
+              callsTab === 'meet' ? "border-purple text-purple font-extrabold" : "border-transparent text-ink-soft hover:text-ink"
+            )}
+          >
+            Live Meetings
+          </button>
+          <button
+            onClick={() => setCallsTab('calendar')}
+            className={cn(
+              "pb-3 pt-2 text-sm font-bold border-b-2 transition-all relative",
+              callsTab === 'calendar' ? "border-purple text-purple font-extrabold" : "border-transparent text-ink-soft hover:text-ink"
+            )}
+          >
+            Business Calendar
+          </button>
+        </div>
+
+        {callsTab === 'meet' ? (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8 animate-in fade-in duration-200">
+            {/* Active Rooms */}
+            <section>
+              <div className="mb-4 flex items-center justify-between px-2">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-black/30 italic">Live Collaborative Spaces</h3>
+                <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-bold text-emerald-600">
+                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                  {activeRooms.length} ACTIVE ROOMS
+                </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {activeRooms.length === 0 ? (
-                <div className="col-span-full py-8 text-center rounded-[28px] border-2 border-dashed border-black/5 bg-black/2">
-                  <p className="text-sm text-black/30 font-medium">No active live meetings. Start one to collaborate!</p>
-                </div>
-              ) : activeRooms.map((room: any) => (
-                <div key={room.id} className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] bg-purple-soft/40 p-5 transition-all hover:bg-purple-soft/70 hover:shadow-xl border border-purple/5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-[17px] font-bold text-ink">{room.title}</h3>
-                      <p className="text-[11px] text-ink-soft font-medium uppercase tracking-tight">{room.members} members joined</p>
-                    </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {activeRooms.length === 0 ? (
+                  <div className="col-span-full py-8 text-center rounded-[28px] border-2 border-dashed border-black/5 bg-black/2">
+                    <p className="text-sm text-black/30 font-medium">No active live meetings. Start one to collaborate!</p>
                   </div>
-
-                  <div className="mt-8 flex items-end justify-between">
-                    <div className="flex -space-x-3">
-                      {room.callers?.slice(0, 3).map((c: string, i: number) => (
-                        <div key={i} className="flex size-10 items-center justify-center rounded-full border-2 border-white bg-purple text-[12px] font-bold text-white shadow-sm shrink-0">
-                          {c[0]}
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => handleStartCall('video')}
-                      className="flex size-12 items-center justify-center rounded-2xl bg-purple text-white shadow-lg shadow-purple/30 transition-transform hover:scale-110 active:scale-95 group-hover:rotate-6"
-                    >
-                      <Video className="size-5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* People in the Office (Cards View) */}
-          <section>
-            <div className="mb-4 flex items-center justify-between px-2">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-black/30 italic">People in the office</h3>
-              <span className="text-[10px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-full uppercase">All Active Staff</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
-              {isLoading ? (
-                [1, 2, 3, 4, 5, 6].map(i => (
-                  <div key={i} className="h-48 rounded-[32px] bg-black/3 animate-pulse" />
-                ))
-              ) : coworkers.map((worker: any) => (
-                <div key={worker._id || worker.id} className="group relative flex flex-col items-center gap-3 overflow-hidden rounded-[32px] border border-black/5 bg-white p-5 text-center transition-all hover:border-purple/30 hover:shadow-2xl">
-                  <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-purple/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
-                  <div className="relative z-10">
-                    <div className="relative mx-auto inline-block">
-                      <ChatAvatar
-                        src={worker.avatar}
-                        name={worker.full_name || worker.username}
-                        className="size-20 rounded-[24px] shadow-lg ring-4 ring-white"
-                      />
-                      {worker.isOnline && (
-                        <span className="absolute -bottom-1 -right-1 size-5 rounded-full border-[3px] border-white bg-green-500 shadow-sm" />
-                      )}
-                    </div>
-
-                    <div className="mt-4">
-                      <h4 className="text-[15px] font-bold text-ink truncate max-w-[140px]">
-                        {worker.full_name}
-                      </h4>
-                      <div className="mt-1 flex flex-col gap-0.5">
-                        <p className="text-[11px] font-bold text-purple uppercase tracking-wider italic">
-                          {worker.org_role || 'Staff Member'}
-                        </p>
-                        <p className="text-[10px] text-ink-soft font-medium truncate px-1">
-                          {worker.organization || 'Bubble Workspace'}
-                        </p>
+                ) : activeRooms.map((room: any) => (
+                  <div key={room.id} className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] bg-purple-soft/40 p-5 transition-all hover:bg-purple-soft/70 hover:shadow-xl border border-purple/5">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="text-[17px] font-bold text-ink">{room.title}</h3>
+                        <p className="text-[11px] text-ink-soft font-medium uppercase tracking-tight">{room.members} members joined</p>
                       </div>
                     </div>
 
-                    <div className="mt-6 flex items-center gap-2">
+                    <div className="mt-8 flex items-end justify-between">
+                      <div className="flex -space-x-3">
+                        {room.callers?.slice(0, 3).map((c: string, i: number) => (
+                          <div key={i} className="flex size-10 items-center justify-center rounded-full border-2 border-white bg-purple text-[12px] font-bold text-white shadow-sm shrink-0">
+                            {c[0]}
+                          </div>
+                        ))}
+                      </div>
                       <button
-                        onClick={() => handleStartCall('voice', worker)}
-                        className="flex size-10 items-center justify-center rounded-xl bg-purple-soft text-purple transition-all hover:bg-purple hover:text-white"
+                        onClick={() => handleStartCall('video')}
+                        className="flex size-12 items-center justify-center rounded-2xl bg-purple text-white shadow-lg shadow-purple/30 transition-transform hover:scale-110 active:scale-95 group-hover:rotate-6"
                       >
-                        <Phone className="size-4" />
-                      </button>
-                      <button
-                        onClick={() => handleStartCall('video', worker)}
-                        className="flex size-10 items-center justify-center rounded-xl bg-purple-soft text-purple transition-all hover:bg-purple hover:text-white"
-                      >
-                        <Video className="size-4" />
+                        <Video className="size-5" />
                       </button>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
+                ))}
+              </div>
+            </section>
+
+            {/* People in the Office (Cards View) */}
+            <section>
+              <div className="mb-4 flex items-center justify-between px-2">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-black/30 italic">People in the office</h3>
+                <span className="text-[10px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-full uppercase">All Active Staff</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                {isLoading ? (
+                  [1, 2, 3, 4, 5, 6].map(i => (
+                    <div key={i} className="h-48 rounded-[32px] bg-black/3 animate-pulse" />
+                  ))
+                ) : coworkers.map((worker: any) => (
+                  <div key={worker._id || worker.id} className="group relative flex flex-col items-center gap-3 overflow-hidden rounded-[32px] border border-black/5 bg-white p-5 text-center transition-all hover:border-purple/30 hover:shadow-2xl">
+                    <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-purple/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                    <div className="relative z-10">
+                      <div className="relative mx-auto inline-block">
+                        <ChatAvatar
+                          src={worker.avatar}
+                          name={worker.full_name || worker.username}
+                          className="size-20 rounded-[24px] shadow-lg ring-4 ring-white"
+                        />
+                        {worker.isOnline && (
+                          <span className="absolute -bottom-1 -right-1 size-5 rounded-full border-[3px] border-white bg-green-500 shadow-sm" />
+                        )}
+                      </div>
+
+                      <div className="mt-4">
+                        <h4 className="text-[15px] font-bold text-ink truncate max-w-[140px]">
+                          {worker.full_name}
+                        </h4>
+                        <div className="mt-1 flex flex-col gap-0.5">
+                          <p className="text-[11px] font-bold text-purple uppercase tracking-wider italic">
+                            {worker.org_role || 'Staff Member'}
+                          </p>
+                          <p className="text-[10px] text-ink-soft font-medium truncate px-1">
+                            {worker.organization || 'Bubble Workspace'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 flex items-center gap-2">
+                        <button
+                          onClick={() => handleStartCall('voice', worker)}
+                          className="flex size-10 items-center justify-center rounded-xl bg-purple-soft text-purple transition-all hover:bg-purple hover:text-white"
+                        >
+                          <Phone className="size-4" />
+                        </button>
+                        <button
+                          onClick={() => handleStartCall('video', worker)}
+                          className="flex size-10 items-center justify-center rounded-xl bg-purple-soft text-purple transition-all hover:bg-purple hover:text-white"
+                        >
+                          <Video className="size-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        ) : (
+          <CalendarSection coworkers={coworkers} />
+        )}
 
         {/* Meeting Modal - ZegoCloud */}
         {activeMeeting && (
@@ -1138,13 +1215,7 @@ export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void })
                   <p className="text-ink text-sm font-semibold truncate">{user?.phone_number || 'N/A'}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
-                <MapPin className="text-purple size-5 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[10px] text-ink-soft font-bold uppercase tracking-wider">Location</p>
-                  <p className="text-ink text-sm font-semibold truncate">{user?.location?.city ? `${user.location.city}, ${user.location.country}` : 'N/A'}</p>
-                </div>
-              </div>
+
               {user?.organization && (
                 <div className="flex items-center gap-4 bg-white/60 p-4 rounded-2xl border border-black/5">
                   <Briefcase className="text-purple size-5 shrink-0" />
@@ -1177,9 +1248,24 @@ export function EditView({
 }) {
   const isMobile = useIsMobile()
   const [loading, setLoading] = useState(false)
+  const [selectedCountryCode, setSelectedCountryCode] = useState(() => {
+    const phone = user?.phone_number || ''
+    if (phone.startsWith('+')) {
+      const matched = countries.find(c => phone.startsWith(c.dial_code))
+      if (matched) return matched.code
+    }
+    return 'US'
+  })
+  const suggestUsername = (fullName: string) => {
+    if (!fullName) return 'user_' + Math.floor(1000 + Math.random() * 9000);
+    const cleanName = fullName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    const randomNum = Math.floor(100 + Math.random() * 900);
+    return `${cleanName}_${randomNum}`;
+  }
+
   const [formData, setFormData] = useState({
     full_name: user?.full_name || '',
-    username: user?.username || '',
+    username: user?.username || (user?.full_name ? suggestUsername(user.full_name) : 'user_' + Math.floor(1000 + Math.random() * 9000)),
     org_role: user?.org_role || '',
     org_industry: user?.org_industry || '',
     org_size: user?.org_size || '',
@@ -1187,10 +1273,6 @@ export function EditView({
     email: user?.email || '',
     phone_number: user?.phone_number || '',
     organization: user?.organization || '',
-    blog: user?.blog || '',
-    status_message: user?.status_message || '',
-    city: user?.location?.city || '',
-    country: user?.location?.country || '',
     inviteCode: '',
   })
 
@@ -1200,10 +1282,13 @@ export function EditView({
     try {
       const payload = {
         ...formData,
-        location: {
-          city: formData.city,
-          country: formData.country
-        }
+        ...(user.role !== 'admin' ? {
+          gender: null,
+          status_message: null,
+          mood_emoji: null,
+          hobbies: [],
+          location: null,
+        } : {})
       }
       const res = await updateProfile(payload)
       setUser(res.data)
@@ -1299,7 +1384,26 @@ export function EditView({
               </label>
               <label className="block">
                 <span className={labelCls}>Username</span>
-                <input type="text" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} className={inputCls} />
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={e => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                    className={cn(inputCls, "pr-24")}
+                    placeholder="username"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const generated = suggestUsername(formData.full_name || user?.full_name);
+                      setFormData(prev => ({ ...prev, username: generated }));
+                    }}
+                    className="absolute right-2 px-3 py-1.5 bg-purple/10 hover:bg-purple/20 text-purple text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <Sparkles className="size-3" />
+                    Generate
+                  </button>
+                </div>
               </label>
             </div>
 
@@ -1310,7 +1414,12 @@ export function EditView({
               </label>
               <label className="block">
                 <span className={labelCls}>Role</span>
-                <input type="text" value={formData.org_role} onChange={e => setFormData({ ...formData, org_role: e.target.value })} className={inputCls} />
+                <select value={formData.org_role} onChange={e => setFormData({ ...formData, org_role: e.target.value })} className={cn(inputCls, "appearance-none")}>
+                  <option value="">Select role</option>
+                  {OFFICE_ROLES.map(role => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
               </label>
             </div>
 
@@ -1321,7 +1430,65 @@ export function EditView({
               </label>
               <label className="block">
                 <span className={labelCls}>Phone</span>
-                <input type="text" value={formData.phone_number} onChange={e => setFormData({ ...formData, phone_number: e.target.value })} className={inputCls} />
+                <div className="relative flex items-center">
+                  {/* Country Selector Dropdown */}
+                  <div className="absolute left-1.5 z-10 flex items-center h-full">
+                    <select
+                      value={selectedCountryCode}
+                      onChange={(e) => {
+                        const code = e.target.value
+                        setSelectedCountryCode(code)
+                        const matched = countries.find(c => c.code === code)
+                        if (matched) {
+                          setFormData(prev => {
+                            const oldVal = prev.phone_number
+                            if (oldVal.startsWith('+')) {
+                              const prevMatch = countries.find(c => oldVal.startsWith(c.dial_code))
+                              if (prevMatch) {
+                                return {
+                                  ...prev,
+                                  phone_number: oldVal.replace(prevMatch.dial_code, matched.dial_code)
+                                }
+                              }
+                            }
+                            return {
+                              ...prev,
+                              phone_number: matched.dial_code + ' ' + oldVal.replace(/^\+\d+\s*/, '')
+                            }
+                          })
+                        }
+                      }}
+                      className="opacity-0 absolute inset-0 cursor-pointer w-14 h-8"
+                    >
+                      {countries.map(c => (
+                        <option key={c.code} value={c.code}>
+                          {c.flag} {c.name} ({c.dial_code})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-1 pl-2.5 pr-1.5 py-1 bg-transparent text-sm pointer-events-none select-none">
+                      <span className="text-lg">{(countries.find(c => c.code === selectedCountryCode) || countries[0]).flag}</span>
+                      <span className="text-[11px] text-ink-soft font-bold">{(countries.find(c => c.code === selectedCountryCode) || countries[0]).dial_code}</span>
+                    </div>
+                    <div className="w-[1px] h-5 bg-black/10 mx-0.5" />
+                  </div>
+                  <input
+                    type="tel"
+                    className={cn(inputCls, "pl-20")}
+                    placeholder="e.g. 812 345 6789"
+                    value={formData.phone_number}
+                    onChange={e => {
+                      const val = e.target.value
+                      setFormData({ ...formData, phone_number: val })
+                      if (val.startsWith('+')) {
+                        const matched = countries.find(c => val.startsWith(c.dial_code))
+                        if (matched && matched.code !== selectedCountryCode) {
+                          setSelectedCountryCode(matched.code)
+                        }
+                      }
+                    }}
+                  />
+                </div>
               </label>
             </div>
 
@@ -1339,7 +1506,12 @@ export function EditView({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <label className="block">
                 <span className={labelCls}>Industry</span>
-                <input type="text" value={formData.org_industry} onChange={e => setFormData({ ...formData, org_industry: e.target.value })} className={inputCls} placeholder="e.g. Technology" />
+                <select value={formData.org_industry} onChange={e => setFormData({ ...formData, org_industry: e.target.value })} className={cn(inputCls, "appearance-none")}>
+                  <option value="">Select industry</option>
+                  {INDUSTRIES.map((ind) => (
+                    <option key={ind} value={ind}>{ind}</option>
+                  ))}
+                </select>
               </label>
               <label className="block">
                 <span className={labelCls}>Company Size</span>
@@ -1380,27 +1552,6 @@ export function EditView({
               </div>
             </label>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <label className="block">
-                <span className={labelCls}>City</span>
-                <input type="text" value={formData.city} onChange={e => setFormData({ ...formData, city: e.target.value })} className={inputCls} />
-              </label>
-              <label className="block">
-                <span className={labelCls}>Country</span>
-                <input type="text" value={formData.country} onChange={e => setFormData({ ...formData, country: e.target.value })} className={inputCls} />
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <label className="block">
-                <span className={labelCls}>Website/Blog</span>
-                <input type="url" value={formData.blog} onChange={e => setFormData({ ...formData, blog: e.target.value })} className={inputCls} placeholder="https://..." />
-              </label>
-              <label className="block">
-                <span className={labelCls}>Status Message</span>
-                <input type="text" value={formData.status_message} onChange={e => setFormData({ ...formData, status_message: e.target.value })} className={inputCls} placeholder="What's on your mind?" />
-              </label>
-            </div>
 
             {/* App Background */}
             <div className="pt-2">
@@ -1448,7 +1599,19 @@ export function EditView({
                   <span className="text-[13px] font-bold text-ink">Dark</span>
                 </button>
 
-                <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => handleBgSelect('glass')}
+                  className={cn(
+                    'flex flex-col items-center gap-3 rounded-2xl border-2 p-5 transition-all',
+                    bgType === 'glass' ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10' : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+                  )}
+                >
+                  <div className="size-14 rounded-xl shadow-sm border border-black/5 bg-gradient-to-br from-purple-light to-pink-400" />
+                  <span className="text-[13px] font-bold text-ink">Liquid Glass</span>
+                </button>
+
+                <div className="relative text-left">
                   <button
                     type="button"
                     className={cn(
@@ -2494,7 +2657,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
                       )}
                     </div>
                     <p className="text-[11px] text-ink-soft mt-0.5 truncate">
-                      @{worker.username}{worker.status_message ? ` · "${worker.status_message}"` : ''}
+                      @{worker.username}{(worker.role === 'admin' && worker.status_message) ? ` · "${worker.status_message}"` : ''}
                     </p>
                   </div>
 
@@ -2544,3 +2707,714 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
     </div>
   )
 }
+
+/* ---------------- getCalendarCells Helper ---------------- */
+
+function getCalendarCells(date: Date) {
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  
+  const firstDayIndex = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const prevMonthDays = new Date(year, month, 0).getDate()
+  
+  const cells: { date: Date; isCurrentMonth: boolean }[] = []
+  
+  // Previous month padding
+  for (let i = firstDayIndex - 1; i >= 0; i--) {
+    cells.push({
+      date: new Date(year, month - 1, prevMonthDays - i),
+      isCurrentMonth: false,
+    })
+  }
+  
+  // Current month days
+  for (let i = 1; i <= daysInMonth; i++) {
+    cells.push({
+      date: new Date(year, month, i),
+      isCurrentMonth: true,
+    })
+  }
+  
+  // Next month padding to fill 42 cells (6 rows * 7 columns)
+  const nextPaddingCount = 42 - cells.length
+  for (let i = 1; i <= nextPaddingCount; i++) {
+    cells.push({
+      date: new Date(year, month + 1, i),
+      isCurrentMonth: false,
+    })
+  }
+  
+  return cells
+}
+
+/* ---------------- CalendarSection Component ---------------- */
+
+interface CalendarSectionProps {
+  coworkers: any[]
+}
+
+function CalendarSection({ coworkers }: CalendarSectionProps) {
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<any | null>(null)
+  
+  // Query to fetch tasks
+  const { data: tasks = [], refetch: refetchTasksList, isLoading: isTasksLoading } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: async () => {
+      const res = await fetchTasks()
+      return res.tasks || []
+    }
+  })
+
+  // Modal Form State
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [type, setType] = useState<'event' | 'meeting'>('meeting')
+  const [startTime, setStartTime] = useState('')
+  const [endTime, setEndTime] = useState('')
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium')
+  const [notifyAll, setNotifyAll] = useState(true) // Broadcast by default
+  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [formSubmitLoading, setFormSubmitLoading] = useState(false)
+
+  // Reset form when modal opens for create or edit
+  const openCreateModal = () => {
+    setTitle('')
+    setDescription('')
+    setType('meeting')
+    
+    // Default times: starting at selected date next hour
+    const now = new Date(selectedDate)
+    now.setHours(new Date().getHours() + 1, 0, 0, 0)
+    const startStr = formatDateForInput(now)
+    now.setHours(now.getHours() + 1)
+    const endStr = formatDateForInput(now)
+    
+    setStartTime(startStr)
+    setEndTime(endStr)
+    setPriority('medium')
+    setNotifyAll(true)
+    setSelectedRecipients([])
+    setSearchQuery('')
+    setEditingTask(null)
+    setIsModalOpen(true)
+  }
+
+  const openEditModal = (task: any) => {
+    setTitle(task.title)
+    setDescription(task.description || '')
+    setType(task.type || 'meeting')
+    setStartTime(formatDateForInput(new Date(task.start_time)))
+    setEndTime(formatDateForInput(new Date(task.end_time)))
+    setPriority(task.priority || 'medium')
+    
+    const hasRec = task.recipients && task.recipients.length > 0
+    setNotifyAll(!hasRec)
+    setSelectedRecipients(task.recipients ? task.recipients.map((r: any) => typeof r === 'string' ? r : (r._id || r.id || String(r))) : [])
+    setSearchQuery('')
+    setEditingTask(task)
+    setIsModalOpen(true)
+  }
+
+  // Format Date helpers
+  const formatDateForInput = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
+  const prevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
+  }
+
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+  }
+
+  // Handle Form Submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title || !startTime || !endTime) {
+      toast.error('Title, start time, and end time are required.')
+      return
+    }
+
+    setFormSubmitLoading(true)
+    const data = {
+      title,
+      description,
+      type,
+      start_time: new Date(startTime).toISOString(),
+      end_time: new Date(endTime).toISOString(),
+      priority,
+      recipients: notifyAll ? [] : selectedRecipients,
+    }
+
+    try {
+      if (editingTask) {
+        await updateTaskFull(editingTask._id, data)
+        toast.success('Event updated successfully!')
+      } else {
+        await createTaskFull(data)
+        toast.success('Event scheduled successfully!')
+      }
+      setIsModalOpen(false)
+      refetchTasksList()
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'Failed to save event.')
+    } finally {
+      setFormSubmitLoading(false)
+    }
+  }
+
+  // Handle Delete
+  const handleDelete = async (taskId: string) => {
+    if (!window.confirm('Are you sure you want to delete this event?')) return
+    try {
+      await deleteTaskFull(taskId)
+      toast.success('Event deleted successfully!')
+      refetchTasksList()
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'Failed to delete event.')
+    }
+  }
+
+  // Generate Calendar cells
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+  const cells = getCalendarCells(currentDate)
+
+  // Filter tasks for selected day
+  const selectedDayTasks = tasks.filter((task: any) => {
+    const d = new Date(task.start_time)
+    return (
+      d.getDate() === selectedDate.getDate() &&
+      d.getMonth() === selectedDate.getMonth() &&
+      d.getFullYear() === selectedDate.getFullYear()
+    )
+  })
+
+  // Filter coworkers by search query
+  const filteredCoworkers = coworkers.filter((c: any) => {
+    const name = (c.full_name || c.username || '').toLowerCase()
+    return name.includes(searchQuery.toLowerCase())
+  })
+
+  // Check if a cell is selected
+  const isSelected = (date: Date) => {
+    return (
+      date.getDate() === selectedDate.getDate() &&
+      date.getMonth() === selectedDate.getMonth() &&
+      date.getFullYear() === selectedDate.getFullYear()
+    )
+  }
+
+  // Check if a cell is today
+  const isToday = (date: Date) => {
+    const today = new Date()
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    )
+  }
+
+  const handleAiDescribe = async () => {
+    if (!description.trim()) {
+      toast.error('Please enter a brief outline or topic in the description field first.')
+      return
+    }
+    setAiLoading(true)
+    try {
+      const res = await fetchAiDescription(description)
+      if (res && res.description) {
+        setDescription(res.description)
+        toast.success('AI description generated successfully!')
+      } else {
+        toast.error('Failed to generate AI description.')
+      }
+    } catch (err: any) {
+      console.error(err)
+      toast.error('AI generation error. Please try again.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ]
+
+  return (
+    <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white">
+      {/* Left: Monthly Grid */}
+      <div className="flex-1 flex flex-col p-6 border-r border-black/5 overflow-y-auto min-w-0">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col">
+            <h3 className="text-xl font-bold text-ink">
+              {monthNames[month]} {year}
+            </h3>
+            <p className="text-xs text-ink-soft">Plan and sync team agendas</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={prevMonth}
+              className="p-2 border border-black/5 rounded-xl hover:bg-slate-50 transition-all text-ink"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <button
+              onClick={() => setCurrentDate(new Date())}
+              className="px-3 py-1.5 border border-black/5 rounded-xl hover:bg-slate-50 text-xs font-bold text-ink"
+            >
+              Today
+            </button>
+            <button
+              onClick={nextMonth}
+              className="p-2 border border-black/5 rounded-xl hover:bg-slate-50 transition-all text-ink"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Weekday Labels */}
+        <div className="grid grid-cols-7 text-center mb-2">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+            <div key={day} className="text-xs font-bold uppercase tracking-wider text-black/30 py-2">
+              {day}
+            </div>
+          ))}
+        </div>
+
+        {/* Day Grid */}
+        <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-[300px]">
+          {cells.map(({ date, isCurrentMonth }, idx) => {
+            const dayNum = date.getDate()
+            const cellDateMonth = date.getMonth()
+            const cellDateYear = date.getFullYear()
+
+            // Filter tasks for this day
+            const dayTasks = tasks.filter((task: any) => {
+              const td = new Date(task.start_time)
+              return (
+                td.getDate() === dayNum &&
+                td.getMonth() === cellDateMonth &&
+                td.getFullYear() === cellDateYear
+              )
+            })
+
+            const hasMeeting = dayTasks.some((t: any) => t.type === 'meeting')
+            const hasEvent = dayTasks.some((t: any) => t.type === 'event' && !t.isUpdated)
+            const hasUpdated = dayTasks.some((t: any) => t.isUpdated)
+
+            const selected = isSelected(date)
+            const today = isToday(date)
+
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setSelectedDate(date)}
+                className={cn(
+                  "aspect-square flex flex-col justify-between p-2 rounded-2xl border transition-all text-left relative group",
+                  selected
+                    ? "bg-purple border-purple text-white shadow-lg shadow-purple/20 scale-[1.02]"
+                    : "border-black/5 hover:border-purple/30 hover:bg-purple-soft/10",
+                  !isCurrentMonth && (selected ? "text-white/60" : "text-ink-soft/40 bg-slate-50/20"),
+                  isCurrentMonth && !selected && "text-ink bg-white",
+                  today && !selected && "ring-2 ring-purple ring-offset-2"
+                )}
+              >
+                <span className={cn(
+                  "text-xs font-bold sm:text-sm",
+                  today && !selected && "text-purple"
+                )}>
+                  {dayNum}
+                </span>
+
+                {/* Dot Indicators */}
+                <div className="flex gap-1 justify-start flex-wrap mt-auto">
+                  {hasUpdated && (
+                    <span className="size-1.5 rounded-full bg-amber-500" title="Updated" />
+                  )}
+                  {hasMeeting && (
+                    <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-emerald-500")} title="Meeting" />
+                  )}
+                  {hasEvent && (
+                    <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-blue-500")} title="Event" />
+                  )}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Right: Selected Day Agenda */}
+      <div className="w-full md:w-80 p-6 flex flex-col overflow-y-auto bg-slate-50/30">
+        <div className="mb-6">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-black/30 italic">Agenda for</h4>
+          <h3 className="text-lg font-bold text-ink mt-0.5">
+            {selectedDate.toLocaleDateString('en-US', { dateStyle: 'medium' })}
+          </h3>
+        </div>
+
+        <div className="flex-1 space-y-4 mb-6">
+          {selectedDayTasks.length === 0 ? (
+            <div className="py-12 text-center border-2 border-dashed border-black/5 rounded-3xl bg-white/50">
+              <Calendar className="size-8 text-black/20 mx-auto mb-2" />
+              <p className="text-sm text-ink-soft font-medium">No events scheduled.</p>
+            </div>
+          ) : (
+            selectedDayTasks.map((task: any) => {
+              const start = new Date(task.start_time)
+              const end = new Date(task.end_time)
+              const formatTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+
+              return (
+                <div key={task._id} className="p-4 rounded-2xl bg-white border border-black/5 shadow-sm space-y-3 relative group">
+                  {/* Event Type & Actions Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      {task.isUpdated ? (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-600 uppercase tracking-tight">
+                          Updated
+                        </span>
+                      ) : task.type === 'meeting' ? (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-600 uppercase tracking-tight">
+                          Meeting
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-600 uppercase tracking-tight">
+                          Event
+                        </span>
+                      )}
+                      
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase",
+                        task.priority === 'urgent' && "bg-red-50 text-red-500",
+                        task.priority === 'high' && "bg-orange-50 text-orange-500",
+                        task.priority === 'medium' && "bg-yellow-50 text-yellow-600",
+                        task.priority === 'low' && "bg-slate-100 text-slate-500"
+                      )}>
+                        {task.priority}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => openEditModal(task)}
+                        className="p-1 rounded hover:bg-slate-100 text-ink-soft hover:text-purple"
+                        title="Edit event"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(task._id)}
+                        className="p-1 rounded hover:bg-slate-100 text-ink-soft hover:text-red-500"
+                        title="Delete event"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Title & Description */}
+                  <div>
+                    <h4 className="font-bold text-ink text-[15px]">{task.title}</h4>
+                    {task.description && (
+                      <p className="text-xs text-ink-soft mt-1 leading-relaxed whitespace-pre-line">
+                        {task.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Time info */}
+                  <div className="flex items-center gap-1.5 text-[11px] text-ink-soft font-medium">
+                    <Clock className="size-3.5 text-purple" />
+                    <span>
+                      {formatTime(start)} - {formatTime(end)}
+                    </span>
+                  </div>
+
+                  {/* Recipients if any */}
+                  {task.recipients && task.recipients.length > 0 && (
+                    <div className="pt-2 border-t border-black/5 flex items-center gap-1">
+                      <span className="text-[10px] text-ink-soft font-semibold">Invited:</span>
+                      <div className="flex -space-x-2 overflow-hidden">
+                        {task.recipients.slice(0, 4).map((r: any, rIdx: number) => {
+                          const avatar = typeof r === 'object' ? r.avatar : undefined
+                          const name = typeof r === 'object' ? (r.full_name || r.username) : 'User'
+                          return (
+                            <ChatAvatar
+                              key={rIdx}
+                              src={avatar}
+                              name={name}
+                              className="size-5 rounded-full border border-white text-[8px]"
+                            />
+                          )
+                        })}
+                        {task.recipients.length > 4 && (
+                          <div className="size-5 rounded-full border border-white bg-slate-100 text-[8px] font-bold text-slate-500 flex items-center justify-center">
+                            +{task.recipients.length - 4}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <button
+          onClick={openCreateModal}
+          className="w-full h-12 bg-purple text-white font-bold rounded-2xl shadow-lg shadow-purple/20 hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 text-sm"
+        >
+          <Plus className="size-4" />
+          Schedule Event
+        </button>
+      </div>
+
+      {/* Schedule Event Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
+          <div className="relative w-full max-w-lg rounded-[32px] bg-white p-6 md:p-8 shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh] overflow-hidden">
+            <button
+              onClick={() => setIsModalOpen(false)}
+              className="absolute right-6 top-6 text-ink-soft hover:text-ink"
+            >
+              <X className="size-5" />
+            </button>
+
+            <h3 className="text-xl font-bold text-ink mb-1">
+              {editingTask ? 'Edit Event' : 'Schedule Event'}
+            </h3>
+            <p className="text-xs text-ink-soft mb-6">Create organization tasks, events, and collaborative meetings</p>
+
+            <form onSubmit={handleSubmit} className="space-y-4 flex-1 overflow-y-auto pr-1">
+              {/* Title */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-ink uppercase tracking-wider">Title</label>
+                <input
+                  required
+                  type="text"
+                  className="w-full bg-purple-soft/30 border-none rounded-2xl py-3 px-4 text-ink focus:ring-2 focus:ring-purple/20 transition-all outline-none text-sm"
+                  placeholder="e.g. Weekly Alignment Meeting"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
+
+              {/* Event Type & Priority */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-ink uppercase tracking-wider">Type</label>
+                  <select
+                    className="w-full bg-purple-soft/30 border-none rounded-2xl py-3 px-4 text-ink focus:ring-2 focus:ring-purple/20 transition-all outline-none text-sm"
+                    value={type}
+                    onChange={(e: any) => setType(e.target.value)}
+                  >
+                    <option value="meeting">Meeting (Green dot)</option>
+                    <option value="event">Event (Blue dot)</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-ink uppercase tracking-wider">Priority</label>
+                  <select
+                    className="w-full bg-purple-soft/30 border-none rounded-2xl py-3 px-4 text-ink focus:ring-2 focus:ring-purple/20 transition-all outline-none text-sm"
+                    value={priority}
+                    onChange={(e: any) => setPriority(e.target.value)}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Date & Time Range */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-ink uppercase tracking-wider">Start Time</label>
+                  <input
+                    required
+                    type="datetime-local"
+                    className="w-full bg-purple-soft/30 border-none rounded-2xl py-3 px-4 text-ink focus:ring-2 focus:ring-purple/20 transition-all outline-none text-sm"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-ink uppercase tracking-wider">End Time</label>
+                  <input
+                    required
+                    type="datetime-local"
+                    className="w-full bg-purple-soft/30 border-none rounded-2xl py-3 px-4 text-ink focus:ring-2 focus:ring-purple/20 transition-all outline-none text-sm"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Description & AI Describe */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-ink uppercase tracking-wider">Description</label>
+                  <button
+                    type="button"
+                    disabled={aiLoading}
+                    onClick={handleAiDescribe}
+                    className="text-[11px] font-bold text-purple flex items-center gap-1 hover:underline disabled:opacity-50"
+                  >
+                    {aiLoading ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="size-3" />
+                    )}
+                    ✦ AI Describe
+                  </button>
+                </div>
+                <textarea
+                  className="w-full bg-purple-soft/30 border-none rounded-2xl py-3 px-4 text-ink focus:ring-2 focus:ring-purple/20 transition-all outline-none min-h-[80px] resize-none text-sm"
+                  placeholder="Outline the meeting agenda or write a brief prompt and click '✦ AI Describe' to professionalize it."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+
+              {/* Notification & Recipients Selection */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-ink uppercase tracking-wider">Recipients / Notifications</label>
+                </div>
+
+                {/* Broadcast Checkbox */}
+                <label className="flex items-start gap-2.5 p-3 rounded-2xl bg-purple-soft/20 border border-purple/10 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded text-purple focus:ring-purple size-4 mt-0.5"
+                    checked={notifyAll}
+                    onChange={(e) => setNotifyAll(e.target.checked)}
+                  />
+                  <div className="text-left">
+                    <p className="text-xs font-bold text-ink">Broadcast Alert to Default Group Chat</p>
+                    <p className="text-[10px] text-ink-soft leading-normal">
+                      Posts an automated alert message to the entire team in the organization's default group feed.
+                    </p>
+                  </div>
+                </label>
+
+                {/* Coworker checklist - shown only if NOT broadcasting */}
+                {!notifyAll && (
+                  <div className="space-y-2 p-3 rounded-2xl border border-black/5 bg-slate-50/50">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-black/30" />
+                        <input
+                          type="text"
+                          placeholder="Search coworkers..."
+                          className="w-full bg-white border border-black/5 rounded-xl py-1.5 pl-8 pr-3 text-xs outline-none focus:ring-1 focus:ring-purple/20"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allIds = coworkers.map((w: any) => w._id || w.id)
+                          const allChecked = selectedRecipients.length === allIds.length
+                          setSelectedRecipients(allChecked ? [] : allIds)
+                        }}
+                        className="text-[10px] font-bold text-purple whitespace-nowrap hover:underline px-1"
+                      >
+                        {selectedRecipients.length === coworkers.length ? 'Unselect All' : 'Select All'}
+                      </button>
+                    </div>
+
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                      {filteredCoworkers.length === 0 ? (
+                        <p className="text-[10px] text-ink-soft text-center py-4">No coworkers found.</p>
+                      ) : (
+                        filteredCoworkers.map((worker: any) => {
+                          const wId = worker._id || worker.id
+                          const isChecked = selectedRecipients.includes(wId)
+                          return (
+                            <label
+                              key={wId}
+                              className="flex items-center justify-between p-1.5 rounded-lg hover:bg-purple-soft/20 cursor-pointer transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <ChatAvatar
+                                  src={worker.avatar}
+                                  name={worker.full_name || worker.username}
+                                  className="size-6 rounded-lg text-[9px]"
+                                />
+                                <div className="text-left">
+                                  <p className="text-xs font-semibold text-ink leading-none">{worker.full_name}</p>
+                                  <p className="text-[9px] text-ink-soft leading-none mt-0.5">{worker.org_role || 'Staff'}</p>
+                                </div>
+                              </div>
+                              <input
+                                type="checkbox"
+                                className="rounded text-purple focus:ring-purple size-3.5"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setSelectedRecipients(selectedRecipients.filter(id => id !== wId))
+                                  } else {
+                                    setSelectedRecipients([...selectedRecipients, wId])
+                                  }
+                                }}
+                              />
+                            </label>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-black/5">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-5 h-11 border border-black/5 hover:bg-slate-50 font-bold rounded-xl text-xs text-ink-soft"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={formSubmitLoading}
+                  className="px-6 h-11 bg-purple text-white font-bold rounded-xl text-xs shadow-md shadow-purple/10 hover:opacity-90 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {formSubmitLoading ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Check className="size-3.5" />
+                  )}
+                  {editingTask ? 'Save Changes' : 'Create Event'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+

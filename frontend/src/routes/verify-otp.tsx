@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { verifyOTP, resendOTP } from "@/lib/api";
 import { toast } from "sonner";
@@ -7,18 +7,23 @@ import { motion } from "motion/react";
 import { ArrowLeft } from "lucide-react";
 
 export const Route = createFileRoute("/verify-otp")({
+    validateSearch: (search: Record<string, unknown>) => {
+        return {
+            email: (search.email as string) || undefined,
+        };
+    },
     component: VerifyOTPPage,
 });
 
 function VerifyOTPPage() {
+    const search = useSearch({ from: "/verify-otp" });
     const [otp, setOtp] = useState("");
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
-    // In TanStack Router, we can use history state or search params.
-    // For simplicity and matching the snippet's flow, we'll try to get email from history state.
+    // Support both search parameters and history state
     // @ts-ignore
-    const email = window.history.state?.usr?.email;
+    const email = search.email || window.history.state?.usr?.email;
 
     useEffect(() => {
         if (!email) {

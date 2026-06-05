@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Mail, Lock, Sparkles } from "lucide-react";
+import { ArrowLeft, Mail, Lock, Sparkles, Eye, EyeOff } from "lucide-react";
 import { motion } from "motion/react";
 import { login } from "@/lib/api";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ export const Route = createFileRoute("/login")({
 function Login() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const search = useSearch({ from: '/login' });
@@ -48,7 +49,7 @@ function Login() {
             if (requiresVerification || !user?.isVerified) {
                 toast.error('Please verify your account first. A new code has been sent.');
                 // @ts-ignore - state is supported but might have typing issues in some versions
-                navigate({ to: '/verify-otp', state: { email: user?.email || email } });
+                navigate({ to: '/verify-otp', search: { email: user?.email || email }, state: { email: user?.email || email } });
             } else {
                 localStorage.setItem('access_token', accessToken);
                 localStorage.setItem('refresh_token', refreshToken);
@@ -109,13 +110,20 @@ function Login() {
                         <div className="relative">
                             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-20" />
                             <input
-                                type="password"
+                                type={showPassword ? "text" : "password"}
                                 placeholder="Password"
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10"
+                                className="w-full pl-12 pr-12 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10"
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none z-20"
+                            >
+                                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            </button>
                         </div>
 
                         <PasswordValidator password={password} />

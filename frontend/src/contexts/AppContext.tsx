@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
-import { fetchAllUserChats } from '@/lib/api'
+import { fetchAllUserChats, fetchTasks } from '@/lib/api'
 import { Phone } from 'lucide-react'
 import { LiveKitMeetingModal } from '@/components/chat/LiveKitMeetingModal'
 import { RingtonePlayer } from '@/lib/ringtone'
@@ -77,6 +77,58 @@ export function AppProvider({ children, user }: AppProviderProps) {
             if (timeoutRef.current) clearTimeout(timeoutRef.current)
         }
     }, [])
+
+    // Priority Meeting Auto-Start Poller
+    useEffect(() => {
+        if (!user) return
+
+        const checkUpcomingMeetings = async () => {
+            try {
+                // Fetch user's scheduled meetings
+                const res = await fetchTasks({ type: 'meeting', status: 'todo' })
+                const meetings = res.tasks || res.data?.tasks || res.data || []
+                
+                const now = new Date()
+                
+                for (const meet of meetings) {
+                    if (!meet.start_time || !meet.end_time) continue
+                    
+                    const startTime = new Date(meet.start_time)
+                    const endTime = new Date(meet.end_time)
+                    
+                    // If the current time has reached the scheduled meeting start time (within its active block),
+                    // and we are currently idle, trigger the call automatically
+                    if (now >= startTime && now < endTime && callState.status === 'idle') {
+                        const dismissedKey = `dismissed-meet-${meet._id}`
+                        if (localStorage.getItem(dismissedKey)) continue
+
+                        const roomId = `meet-${meet._id}`
+                        toast.info(`🔔 Meeting starting now: "${meet.title}"`)
+                        
+                        // Automatically transition to call mode
+                        setCallState({
+                            status: 'in_call',
+                            roomId: roomId,
+                            type: 'video'
+                        })
+                        
+                        localStorage.setItem(dismissedKey, 'true')
+                        break
+                    }
+                }
+            } catch (err) {
+                console.error('Error in background meeting poller:', err)
+            }
+        }
+
+        const interval = setInterval(checkUpcomingMeetings, 20000)
+        const timer = setTimeout(checkUpcomingMeetings, 3000)
+
+        return () => {
+            clearInterval(interval)
+            clearTimeout(timer)
+        }
+    }, [user, callState.status])
 
     const endCall = useCallback(() => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current)

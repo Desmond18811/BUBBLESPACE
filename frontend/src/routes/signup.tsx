@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowLeft, Mail, Lock, User, Sparkles } from "lucide-react";
+import { ArrowLeft, Mail, Lock, User, Sparkles, Eye, EyeOff } from "lucide-react";
 import { motion } from "motion/react";
 import { register } from "@/lib/api";
 import { generateKeyPair } from "@/lib/crypto-utils";
@@ -8,11 +8,34 @@ import { storePrivateKey } from "@/lib/key-storage";
 import { toast } from "sonner";
 import { PasswordValidator, getPasswordRequirements } from "@/components/auth/password-validator";
 
+const INDUSTRIES = [
+  "Technology & Software",
+  "Healthcare & Life Sciences",
+  "Finance & Banking",
+  "Education & E-Learning",
+  "Retail & E-commerce",
+  "Real Estate & Construction",
+  "Manufacturing & Logistics",
+  "Media & Entertainment",
+  "Marketing & Advertising",
+  "Professional Services & Consulting",
+  "Hospitality & Tourism",
+  "Energy & Utilities",
+  "Non-Profit & Government",
+  "Other"
+];
+
 export const Route = createFileRoute("/signup")({
+    validateSearch: (search: Record<string, unknown>) => {
+        return {
+            inviteCode: (search.inviteCode as string) || undefined,
+        }
+    },
     component: Signup,
 });
 
 function Signup() {
+    const { inviteCode: queryInviteCode } = Route.useSearch()
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -22,7 +45,9 @@ function Signup() {
     const [orgName, setOrgName] = useState("");
     const [orgIndustry, setOrgIndustry] = useState("");
     const [orgSize, setOrgSize] = useState("");
-    const [inviteCode, setInviteCode] = useState("");
+    const [inviteCode, setInviteCode] = useState(queryInviteCode || "");
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const navigate = useNavigate();
 
     const handleSignup = async (e: React.FormEvent) => {
@@ -59,7 +84,7 @@ function Signup() {
 
             toast.success('Account created! Check your email for a verification code.');
             // @ts-ignore - state support
-            navigate({ to: '/verify-otp', state: { email: response.data?.email || email } });
+            navigate({ to: '/verify-otp', search: { email: response.data?.email || email }, state: { email: response.data?.email || email } });
         } catch (error: any) {
             toast.error(error.message || 'Registration failed');
         } finally {
@@ -134,20 +159,26 @@ function Signup() {
                                     />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <input
-                                        type="text"
-                                        placeholder="Industry"
+                                    <select
                                         value={orgIndustry}
                                         onChange={(e) => setOrgIndustry(e.target.value)}
-                                        className="w-full px-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10 text-sm"
-                                    />
+                                        className="w-full px-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10 text-sm appearance-none"
+                                    >
+                                        <option value="">Industry</option>
+                                        {INDUSTRIES.map((ind) => (
+                                            <option key={ind} value={ind}>
+                                                {ind}
+                                            </option>
+                                        ))}
+                                    </select>
                                     <select
                                         value={orgSize}
                                         onChange={(e) => setOrgSize(e.target.value)}
                                         className="w-full px-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10 text-sm appearance-none"
                                     >
                                         <option value="">Company Size</option>
-                                        <option value="1-10">1-10 Employees</option>
+                                        <option value="solo">Solo (1 Employee)</option>
+                                        <option value="2-10">2-10 Employees</option>
                                         <option value="11-50">11-50 Employees</option>
                                         <option value="51-200">51-200 Employees</option>
                                         <option value="201-500">201-500 Employees</option>
@@ -195,24 +226,38 @@ function Signup() {
                         <div className="relative">
                             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-20" />
                             <input
-                                type="password"
+                                type={showPassword ? "text" : "password"}
                                 placeholder="Password"
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10"
+                                className="w-full pl-12 pr-12 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10"
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none z-20"
+                            >
+                                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            </button>
                         </div>
                         <div className="relative">
                             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-20" />
                             <input
-                                type="password"
+                                type={showConfirmPassword ? "text" : "password"}
                                 placeholder="Confirm Password"
                                 required
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10"
+                                className="w-full pl-12 pr-12 py-3 rounded-2xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all relative z-10"
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none z-20"
+                            >
+                                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            </button>
                         </div>
 
                         <PasswordValidator password={password} />

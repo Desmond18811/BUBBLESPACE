@@ -18,6 +18,7 @@ import { Route as DashboardCallsImport } from './routes/dashboard/calls'
 import { Route as DashboardArchiveImport } from './routes/dashboard/archive'
 import { Route as DashboardProfileImport } from './routes/dashboard/profile'
 import { Route as DashboardEditProfileImport } from './routes/dashboard/edit-profile'
+import { Route as SetupProfileImport } from './routes/setup-profile'
 
 const IndexRoute = IndexImport.update({
     path: '/',
@@ -114,6 +115,11 @@ const DashboardRoute = DashboardImport.update({
     DashboardEditProfileRoute,
 ] as any) as any
 
+const SetupProfileRoute = SetupProfileImport.update({
+    path: '/setup-profile',
+    getParentRoute: () => rootRoute,
+} as any)
+
 export const routeTree = (rootRoute as any).addChildren([
     IndexRoute,
     LoginRoute,
@@ -124,6 +130,7 @@ export const routeTree = (rootRoute as any).addChildren([
     VerifyOtpRoute,
     GoogleCallbackRoute,
     NotFoundRoute,
+    SetupProfileRoute,
 ] as any) as any
 
 declare module '@tanstack/react-router' {
@@ -137,6 +144,7 @@ declare module '@tanstack/react-router' {
     '/verify-otp': any
     '/google-callback': any
     '/404': any
+    '/setup-profile': any
     '/dashboard/': any
     '/dashboard/all': any
     '/dashboard/work': any

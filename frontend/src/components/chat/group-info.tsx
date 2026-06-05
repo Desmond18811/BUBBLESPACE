@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   X,
   ChevronDown,
@@ -15,21 +15,24 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  Copy,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import type { Conversation, FileCategory } from '@/lib/chat-data'
+import { getOrgInviteCode } from '@/lib/api'
+import { toast } from 'sonner'
 
 /* ── Glassmorphic styling constants ───────────────────────────────────────── */
 
 const glass = {
   card: {
-    background: 'rgba(255, 255, 255, 0.95)',
-    backdropFilter: 'blur(16px)',
-    WebkitBackdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.9)',
-    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.03)',
+    background: 'rgba(255, 255, 255, 0.45)',
+    backdropFilter: 'blur(20px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+    border: '1px solid rgba(255, 255, 255, 0.5)',
+    boxShadow: '0 8px 32px 0 rgba(108, 92, 231, 0.04)',
     borderRadius: '24px',
   } as React.CSSProperties,
 }
@@ -245,6 +248,17 @@ function FilesCard({
   onClose?: () => void
 }) {
   const conv = conversation as any
+  const [inviteCode, setInviteCode] = useState<string>('')
+  useEffect(() => {
+    if (title === 'Group Info') {
+      getOrgInviteCode()
+        .then(res => {
+          if (res?.inviteCode) setInviteCode(res.inviteCode)
+        })
+        .catch(err => console.error('Error fetching org invite code inside FilesCard:', err))
+    }
+  }, [title])
+
   const {
     videos,
     audio,
@@ -286,6 +300,29 @@ function FilesCard({
         </button>
       )}
       <h2 className="text-[17px] font-bold text-ink mb-3">{title}</h2>
+      {inviteCode && (
+        <div className="mb-4 p-3.5 rounded-2xl bg-purple-soft/5 border border-purple/10 text-xs">
+          <p className="font-bold text-ink uppercase tracking-wider text-[9px] mb-1">Workspace Invite Link</p>
+          <div className="flex gap-1.5 mt-1">
+            <input
+              type="text"
+              readOnly
+              value={`${window.location.origin}/signup?inviteCode=${inviteCode}`}
+              className="flex-1 bg-white border border-border h-8 px-2 rounded-xl text-[10px] text-ink font-mono focus:outline-none"
+            />
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/signup?inviteCode=${inviteCode}`)
+                toast.success('Workspace link copied!')
+              }}
+              className="h-8 px-2.5 bg-purple text-white text-[10px] font-semibold rounded-xl active:scale-95 transition-all flex items-center gap-1 shrink-0"
+            >
+              <Copy className="size-3" />
+              Copy
+            </button>
+          </div>
+        </div>
+      )}
       {!hasContent ? (
         <p className="py-4 text-center text-xs text-ink-soft italic">No shared files yet</p>
       ) : (
@@ -464,22 +501,8 @@ export function GroupInfo({
           onClose={() => setLightboxState(null)} />
       )}
 
-      {/* Close button strip */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-0 shrink-0">
-        <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-black/35">
-          {isGroup ? 'Group Info' : 'Contact Info'}
-        </span>
-        <button
-          onClick={onClose}
-          className="flex size-7 items-center justify-center rounded-lg transition-all hover:bg-black/5 active:scale-95"
-          style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.02)' }}
-        >
-          <X className="size-3.5 text-black/50" />
-        </button>
-      </div>
-
       {/* Stacked Cards Container */}
-      <div className="flex flex-col gap-4 p-4 pt-0">
+      <div className="flex flex-col gap-4 p-4">
         {isGroup ? (
           <>
             <FilesCard
@@ -489,7 +512,7 @@ export function GroupInfo({
               onLightbox={(imgs, idx) => setLightboxState({ images: imgs, index: idx })}
               onClose={onClose}
             />
-            <MembersCard conversation={conversation} onClose={onClose} />
+            <MembersCard conversation={conversation} />
           </>
         ) : (
           <>
@@ -499,7 +522,6 @@ export function GroupInfo({
               title="Shared Files"
               messages={messages}
               onLightbox={(imgs, idx) => setLightboxState({ images: imgs, index: idx })}
-              onClose={onClose}
             />
           </>
         )}

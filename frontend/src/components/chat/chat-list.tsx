@@ -113,6 +113,14 @@ export function ChatList({
     }
     loadContacts()
   }, [])
+  useEffect(() => {
+    if (activeId && chats && chats.length > 0) {
+      const currentActive = chats.find((c: any) => (c._id || c.id) === activeId)
+      if (currentActive) {
+        setActiveChat(currentActive)
+      }
+    }
+  }, [activeId, chats, setActiveChat])
 
   // Merge chats and contacts
   // Users who have a chat already are in `chats`

@@ -1385,18 +1385,36 @@ export const createTaskFull = async (data: {
     description?: string;
     start_time: string;
     end_time: string;
-    type?: 'event' | 'task' | 'synced';
+    type?: 'event' | 'task' | 'synced' | 'meeting';
     priority?: 'low' | 'medium' | 'high' | 'urgent';
     assignedTo?: string;
     color?: string;
     source?: string;
     isRecurring?: boolean;
     recurrence?: 'daily' | 'weekly' | 'monthly';
+    recipients?: string[];
 }) => {
     const res = await fetch(`${BASE_URL}/tasks`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
+export const updateTaskFull = async (id: string, data: any) => {
+    const res = await fetch(`${BASE_URL}/tasks/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
+export const deleteTaskFull = async (id: string) => {
+    const res = await fetch(`${BASE_URL}/tasks/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
     });
     return handleResponse(res);
 };
@@ -1562,6 +1580,40 @@ export const respondToMessageRequest = async (requestId: string, action: 'accept
 export const getLiveKitToken = async (roomId: string) => {
     const res = await fetch(`${BASE_URL}/meet/livekit-token?roomId=${encodeURIComponent(roomId)}`, {
         headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const onboardOrgBrain = async (description: string) => {
+    const res = await fetch(`${BASE_URL}/org/brain/onboard`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ description }),
+    });
+    return handleResponse(res);
+};
+
+export const getOrgInviteCode = async () => {
+    const res = await fetch(`${BASE_URL}/org/invite-code`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const ingestOrgDocument = async (data: { title: string; content: string; department?: string; accessLevel?: string; tags?: string[] }) => {
+    const res = await fetch(`${BASE_URL}/org/documents`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
+export const fetchAiDescription = async (prompt: string) => {
+    const res = await fetch(`${BASE_URL}/tasks/ai-describe`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ prompt }),
     });
     return handleResponse(res);
 };
