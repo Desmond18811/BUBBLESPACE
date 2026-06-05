@@ -14,7 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { useQuery } from '@tanstack/react-query'
-import { getUnreadChatCount } from '@/lib/api'
+import { getUnreadChatCount, fetchMeetings } from '@/lib/api'
 
 type NavItem = {
   id: string
@@ -104,7 +104,14 @@ export function NavSidebar({
     refetchInterval: 10000, // Refresh every 10s
   })
 
+  const { data: meetingsData } = useQuery({
+    queryKey: ['activeMeetings'],
+    queryFn: () => fetchMeetings(1, 5),
+    refetchInterval: 10000, // Refresh every 10s
+  })
+
   const totalUnread = unreadData?.count || 0
+  const hasActiveCall = meetingsData?.meetings?.some((m: any) => m.status === 'live') || false
 
   return (
     <nav className="hidden md:flex w-[88px] shrink-0 flex-col items-center py-6">
@@ -148,6 +155,12 @@ export function NavSidebar({
                     {badge}
                   </span>
                 ) : null}
+                {item.id === 'calls' && hasActiveCall && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm animate-in zoom-in duration-200"></span>
+                  </span>
+                )}
               </span>
               <span
                 className={cn(
