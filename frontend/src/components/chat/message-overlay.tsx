@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Send, Paperclip, Smile, Phone, Video, Check, CheckCheck, Edit2, Trash2, Copy, MoreHorizontal, Briefcase, AtSign, Info, User, MapPin, ExternalLink } from 'lucide-react'
+import { X, Send, Paperclip, Smile, Phone, Video, Check, CheckCheck, Edit2, Trash2, Copy, MoreHorizontal, Briefcase, AtSign, Info, User, MapPin, ExternalLink, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useDashboard } from '@/contexts/DashboardContext'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import {
     accessOrCreateChat,
@@ -37,7 +38,7 @@ interface Msg {
 }
 
 // ── Liquid Glass Contact Card (floats outside the chat container) ──────────
-function LiquidGlassContactCard({ user, onClose, onExpand }: { user: any; onClose: () => void; onExpand?: () => void }) {
+function LiquidGlassContactCard({ user, onClose, onExpand, onViewStats }: { user: any; onClose: () => void; onExpand?: () => void; onViewStats?: () => void }) {
     const isUserAdmin = user.role === 'admin'
     const infoRows = [
         { icon: Briefcase, label: 'Organization', value: user.organization || user.company || 'No organization' },
@@ -113,19 +114,29 @@ function LiquidGlassContactCard({ user, onClose, onExpand }: { user: any; onClos
             </div>
 
             {/* Action buttons */}
-            <div className="px-5 pb-5 flex gap-2">
-                <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
-                    style={{ background: 'rgba(108,92,231,0.1)' }}>
-                    <Phone className="size-3.5" /> Call
-                </button>
-                <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
-                    style={{ background: 'rgba(108,92,231,0.1)' }}>
-                    <Video className="size-3.5" /> Video
-                </button>
-                {onExpand && (
-                    <button onClick={onExpand} className="flex size-10 items-center justify-center rounded-xl transition-all hover:bg-purple hover:text-white text-purple"
+            <div className="px-5 pb-5 flex flex-col gap-2">
+                <div className="flex gap-2">
+                    <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
                         style={{ background: 'rgba(108,92,231,0.1)' }}>
-                        <ExternalLink className="size-3.5" />
+                        <Phone className="size-3.5" /> Call
+                    </button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
+                        style={{ background: 'rgba(108,92,231,0.1)' }}>
+                        <Video className="size-3.5" /> Video
+                    </button>
+                </div>
+                {onViewStats && (
+                    <button 
+                        onClick={onViewStats} 
+                        className="w-full flex items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold text-purple border border-purple/20 bg-purple/5 hover:bg-purple/10 cursor-pointer active:scale-95 transition-all"
+                    >
+                        <Sparkles className="size-3.5 text-purple animate-pulse" /> Meeting Stats
+                    </button>
+                )}
+                {onExpand && (
+                    <button onClick={onExpand} className="w-full flex items-center justify-center gap-1.5 rounded-xl py-2 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
+                        style={{ background: 'rgba(108,92,231,0.1)' }}>
+                        <ExternalLink className="size-3.5" /> Expand Profile
                     </button>
                 )}
             </div>
@@ -149,6 +160,7 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
     const bottomRef = useRef<HTMLDivElement>(null)
     const socket = getSocket()
     const myId = user?._id || user?.id
+    const { setViewStatsUser } = useDashboard()
 
     // Open or create the DM chat
     useEffect(() => {
@@ -323,6 +335,9 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                         <LiquidGlassContactCard
                             user={targetUser}
                             onClose={() => setShowContactCard(false)}
+                            onViewStats={() => {
+                                setViewStatsUser?.(targetUser)
+                            }}
                         />
                     </div>
                 )}

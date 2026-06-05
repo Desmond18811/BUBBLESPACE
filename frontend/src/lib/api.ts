@@ -203,6 +203,15 @@ export const createGroupChat = async (name: string, users: string[]) => {
     return handleResponse(res);
 };
 
+export const joinGroupChat = async (inviteCode: string) => {
+    const res = await fetch(`${BASE_URL}/chat/group/join`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ inviteCode }),
+    });
+    return handleResponse(res);
+};
+
 export const updateGroupChat = async (
     chatId: string,
     data: {
@@ -1147,12 +1156,19 @@ export const addMeetingTranscriptChunk = async (
 
 export const endMeeting = async (
     meetingId: string,
-    transcriptRaw?: string
+    options?: { transcriptRaw?: string; saveToStorage?: boolean; sendEmail?: boolean }
 ) => {
     const res = await fetch(`${BASE_URL}/meetings/${meetingId}/end`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ transcriptRaw }),
+        body: JSON.stringify(options || {}),
+    });
+    return handleResponse(res);
+};
+
+export const getMeetingStatsWithUser = async (withUserId: string) => {
+    const res = await fetch(`${BASE_URL}/meetings/stats/${withUserId}`, {
+        headers: getAuthHeaders(),
     });
     return handleResponse(res);
 };

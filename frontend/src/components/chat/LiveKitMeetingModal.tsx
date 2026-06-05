@@ -73,6 +73,10 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
 
   const [permissionsGranted, setPermissionsGranted] = useState(false)
   const [permissionsError, setPermissionsError] = useState<string | null>(null)
+  const [meetingDbId, setMeetingDbId] = useState<string | null>(null)
+  const meetingDbIdRef = useRef<string | null>(null)
+  const hasEndedRef = useRef(false)
+  const [showEndPrompt, setShowEndPrompt] = useState(false)
 
   const serverUrl = import.meta.env.VITE_LIVEKIT_URL || 'wss://bubble-livekit.livekit.cloud'
   const { socket } = useSocket()
@@ -133,7 +137,6 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
   useEffect(() => {
     let active = true
     let recognition: any = null
-    let meetingDbId: string | null = null
 
     const initMeeting = async () => {
       if (!permissionsGranted) return
@@ -158,7 +161,12 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
           title: `${type === 'video' ? 'Video' : 'Voice'} Call`,
           type: type === 'video' ? 'video' : 'voice',
         })
-        meetingDbId = res?.meeting?._id || res?._id || null
+        const dbId = res?.meeting?._id || res?._id || null
+        if (dbId) {
+          setMeetingDbId(dbId)
+          meetingDbIdRef.current = dbId
+          socket?.emit('meeting_started', { roomId, meetingId: dbId })
+        }
       } catch (err) {
         console.warn('[LiveKit] Failed to create meeting record:', err)
       }
@@ -189,9 +197,9 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
               // Real-time socket transcript relay
               socket?.emit('meeting_transcript_chunk', { roomId, speaker: userName || 'You', text })
 
-              if (meetingDbId) {
-                addMeetingTranscriptChunk(meetingDbId, {
-                  speaker: userName || 'Guest',
+              if (meetingDbIdRef.current) {
+                addMeetingTranscriptChunk(meetingDbIdRef.current, {
+                  speaker: userName || 'You',
                   text,
                   timestamp: Date.now(),
                 }).catch(console.error)
@@ -221,14 +229,35 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
       if (recognition) {
         try { recognition.stop() } catch (_) { }
       }
-      if (meetingDbId) {
-        endMeeting(meetingDbId).catch(console.error)
+      if (meetingDbIdRef.current) {
+        if (!hasEndedRef.current) {
+          endMeeting(meetingDbIdRef.current).catch(console.error)
+        }
       }
       if (socket && roomId) {
         socket.emit('meeting_ended', { roomId })
       }
     }
   }, [roomId, type, userId, userName, socket, permissionsGranted])
+
+  const handleConfirmEndMeeting = async (saveToStorage: boolean, sendEmail: boolean) => {
+    try {
+      hasEndedRef.current = true
+      if (meetingDbId) {
+        const rawTranscript = transcript
+          .map((c) => `${c.speaker ? c.speaker + ': ' : ''}${c.text}`)
+          .join('\n');
+        await endMeeting(meetingDbId, { transcriptRaw: rawTranscript, saveToStorage, sendEmail })
+      }
+    } catch (err) {
+      console.error('Failed to end meeting with options:', err)
+    } finally {
+      if (socket && roomId) {
+        socket.emit('meeting_ended', { roomId })
+      }
+      onClose()
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none p-0 md:p-5 lg:p-8">
@@ -278,7 +307,13 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
                 type={type}
                 userName={userName}
                 userAvatar={userAvatar}
-                onClose={onClose}
+                onClose={() => {
+                  if (meetingDbIdRef.current) {
+                    setShowEndPrompt(true)
+                  } else {
+                    onClose()
+                  }
+                }}
                 transcript={transcript}
                 setTranscript={setTranscript}
                 roomId={roomId}
@@ -306,6 +341,46 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
               <div className="size-12 rounded-full border-4 border-purple border-t-transparent animate-spin mb-4" />
               <p className="text-slate-500 text-sm">Connecting to LiveKit Cloud…</p>
               <p className="text-slate-400 text-xs mt-1 font-mono">{roomId}</p>
+            </div>
+          )}
+          
+          {showEndPrompt && (
+            <div className="absolute inset-0 z-[250] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pointer-events-auto">
+              <div className="w-full max-w-md bg-white rounded-[2rem] p-8 shadow-2xl border border-slate-200/60 animate-in zoom-in-95 duration-200 text-center flex flex-col items-center">
+                <div className="size-16 rounded-2xl bg-purple/10 text-purple flex items-center justify-center mb-5">
+                  <Sparkles className="size-8 text-purple animate-pulse" />
+                </div>
+                <h3 className="text-xl font-bold text-ink mb-3 font-display">Save Meeting Transcripts?</h3>
+                <p className="text-sm text-ink-soft mb-6 leading-relaxed">
+                  Would you like us to save transcripts here, or would you rather have other people use their emails to get those things sent to them and notified?
+                </p>
+                <div className="w-full flex flex-col gap-2.5">
+                  <button
+                    onClick={() => handleConfirmEndMeeting(true, false)}
+                    className="w-full py-3 bg-purple text-white font-bold rounded-xl hover:bg-purple/90 active:scale-95 transition-all cursor-pointer text-sm"
+                  >
+                    Save in Storage Center
+                  </button>
+                  <button
+                    onClick={() => handleConfirmEndMeeting(false, true)}
+                    className="w-full py-3 bg-purple/10 text-purple font-bold rounded-xl hover:bg-purple/20 active:scale-95 transition-all cursor-pointer text-sm"
+                  >
+                    Send via Email Only
+                  </button>
+                  <button
+                    onClick={() => handleConfirmEndMeeting(true, true)}
+                    className="w-full py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 active:scale-95 transition-all cursor-pointer text-sm"
+                  >
+                    Both: Save & Email Attendees
+                  </button>
+                  <button
+                    onClick={() => handleConfirmEndMeeting(false, false)}
+                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-ink-soft font-bold rounded-xl active:scale-95 transition-all cursor-pointer text-sm"
+                  >
+                    Neither (Discard transcripts)
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

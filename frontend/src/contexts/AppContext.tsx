@@ -369,6 +369,16 @@ export function AppProvider({ children, user }: AppProviderProps) {
             setCallState({ status: 'idle' })
         })
 
+        sock?.on('meeting_ended', (data: { roomId: string }) => {
+            setCallState(prev => {
+                if (prev.status === 'in_call' && prev.roomId === data.roomId) {
+                    toast.info('Meeting has been ended')
+                    return { status: 'idle' }
+                }
+                return prev
+            })
+        })
+
         return () => {
             disconnectSocket()
             setConnected(false)
@@ -381,6 +391,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('chat_deleted')
             sock?.off('messages_read')
             sock?.off('message_reaction')
+            sock?.off('meeting_ended')
         }
     }, [user?.id, user?._id])
 

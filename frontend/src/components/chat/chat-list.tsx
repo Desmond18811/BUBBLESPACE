@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Search, Pin, Check, CheckCheck, MoreVertical, BellOff, Trash2, Archive, Shield, X, MessageSquarePlus, Menu, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
-import { useChats } from '@/contexts/AppContext'
+import { useChats, useSocket } from '@/contexts/AppContext'
 import { muteChat, clearChat, toggleChatPin, deleteChat, blockUser } from '@/lib/api'
 import { toast } from 'sonner'
 import { useDashboard } from '@/contexts/DashboardContext'
@@ -93,7 +93,40 @@ export function ChatList({
 }) {
   const { setIsMobileMenuOpen, setActiveChat, setActiveChatId, activeChatId } = useDashboard()
   const { chats, loadingChats, refreshChats, updateChatInList, removeChatFromList } = useChats()
+  const { socket } = useSocket()
+  const [typingChats, setTypingChats] = useState<Record<string, { fromUserId: string; fromUsername?: string; fromName?: string }>>({})
   const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    if (!socket) return
+
+    const handleTypingStart = ({ fromUserId, chatId, fromUsername, fromName }: { fromUserId: string; chatId: string; fromUsername?: string; fromName?: string }) => {
+      if (chatId) {
+        setTypingChats(prev => ({
+          ...prev,
+          [chatId]: { fromUserId, fromUsername, fromName }
+        }))
+      }
+    }
+
+    const handleTypingStop = ({ fromUserId, chatId }: { fromUserId: string; chatId: string }) => {
+      if (chatId) {
+        setTypingChats(prev => {
+          const next = { ...prev }
+          delete next[chatId]
+          return next
+        })
+      }
+    }
+
+    socket.on('typing_start', handleTypingStart)
+    socket.on('typing_stop', handleTypingStop)
+
+    return () => {
+      socket.off('typing_start', handleTypingStart)
+      socket.off('typing_stop', handleTypingStop)
+    }
+  }, [socket])
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set())
   const [contacts, setContacts] = useState<any[]>([])
@@ -393,10 +426,20 @@ export function ChatList({
                           </div>
 
                           <div className="mt-0.5 flex items-center justify-between gap-2">
-                            <p className={cn("truncate text-[13px]", unread > 0 ? "font-medium text-ink" : "text-ink-soft")}>
-                              {chat.isMuted && <BellOff className="inline size-3 mr-1 text-black/30" />}
-                              {preview}
-                            </p>
+                            {typingChats[chatId] ? (
+                              <p className="truncate text-[13px] text-purple font-medium animate-pulse">
+                                {typingChats[chatId].fromUsername 
+                                  ? `@${typingChats[chatId].fromUsername} is typing…`
+                                  : typingChats[chatId].fromName 
+                                    ? `${typingChats[chatId].fromName} is typing…`
+                                    : "typing…"}
+                              </p>
+                            ) : (
+                              <p className={cn("truncate text-[13px]", unread > 0 ? "font-medium text-ink" : "text-ink-soft")}>
+                                {chat.isMuted && <BellOff className="inline size-3 mr-1 text-black/30" />}
+                                {preview}
+                              </p>
+                            )}
                             <span className="flex shrink-0 items-center gap-1.5">
                               {unread > 0 && (
                                 <span className="flex size-5 items-center justify-center rounded-full bg-accent-orange text-[11px] font-semibold leading-[18px] text-white animate-pulse">

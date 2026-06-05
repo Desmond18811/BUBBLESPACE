@@ -16,10 +16,13 @@ import {
   ChevronRight,
   Info,
   Copy,
+  Share2,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
+import { useDashboard } from '@/contexts/DashboardContext'
 import type { Conversation, FileCategory } from '@/lib/chat-data'
 import { getOrgInviteCode } from '@/lib/api'
 import { toast } from 'sonner'
@@ -249,6 +252,8 @@ function FilesCard({
 }) {
   const conv = conversation as any
   const [inviteCode, setInviteCode] = useState<string>('')
+  const [showInviteLink, setShowInviteLink] = useState(false)
+  const [showGroupInviteLink, setShowGroupInviteLink] = useState(false)
   useEffect(() => {
     if (title === 'Group Info') {
       getOrgInviteCode()
@@ -300,27 +305,92 @@ function FilesCard({
         </button>
       )}
       <h2 className="text-[17px] font-bold text-ink mb-3">{title}</h2>
+      
       {inviteCode && (
-        <div className="mb-4 p-3.5 rounded-2xl bg-purple-soft/5 border border-purple/10 text-xs">
-          <p className="font-bold text-ink uppercase tracking-wider text-[9px] mb-1">Workspace Invite Link</p>
-          <div className="flex gap-1.5 mt-1">
-            <input
-              type="text"
-              readOnly
-              value={`${window.location.origin}/signup?inviteCode=${inviteCode}`}
-              className="flex-1 bg-white border border-border h-8 px-2 rounded-xl text-[10px] text-ink font-mono focus:outline-none"
-            />
+        <div className="mb-2">
+          {!showInviteLink ? (
             <button
-              onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/signup?inviteCode=${inviteCode}`)
-                toast.success('Workspace link copied!')
-              }}
-              className="h-8 px-2.5 bg-purple text-white text-[10px] font-semibold rounded-xl active:scale-95 transition-all flex items-center gap-1 shrink-0"
+              onClick={() => setShowInviteLink(true)}
+              className="w-full flex items-center justify-center gap-1.5 py-2 px-4 border border-purple/20 bg-purple/5 hover:bg-purple/10 text-purple text-xs font-bold rounded-xl active:scale-95 transition-all cursor-pointer"
             >
-              <Copy className="size-3" />
-              Copy
+              <Share2 className="size-3.5 text-purple" />
+              Share Workspace Link
             </button>
-          </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl bg-purple-soft/5 border border-purple/10 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="font-bold text-ink uppercase tracking-wider text-[9px]">Workspace Invite Link</p>
+                <button
+                  onClick={() => setShowInviteLink(false)}
+                  className="text-purple hover:text-purple/80 text-[10px] font-semibold cursor-pointer"
+                >
+                  Hide
+                </button>
+              </div>
+              <div className="flex gap-1.5 mt-1">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/signup?inviteCode=${inviteCode}`}
+                  className="flex-1 bg-white border border-border h-8 px-2 rounded-xl text-[10px] text-ink font-mono focus:outline-none"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/signup?inviteCode=${inviteCode}`)
+                    toast.success('Workspace link copied!')
+                  }}
+                  className="h-8 px-2.5 bg-purple text-white text-[10px] font-semibold rounded-xl active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <Copy className="size-3" />
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {conv.isGroupChat && conv.inviteCode && (
+        <div className="mb-4">
+          {!showGroupInviteLink ? (
+            <button
+              onClick={() => setShowGroupInviteLink(true)}
+              className="w-full flex items-center justify-center gap-1.5 py-2 px-4 border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 text-xs font-bold rounded-xl active:scale-95 transition-all cursor-pointer"
+            >
+              <Share2 className="size-3.5 text-emerald-600" />
+              Share Group Link
+            </button>
+          ) : (
+            <div className="p-3.5 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="font-bold text-ink uppercase tracking-wider text-[9px]">Group Invite Link</p>
+                <button
+                  onClick={() => setShowGroupInviteLink(false)}
+                  className="text-emerald-600 hover:text-emerald-500 text-[10px] font-semibold cursor-pointer"
+                >
+                  Hide
+                </button>
+              </div>
+              <div className="flex gap-1.5 mt-1">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/dashboard/all?joinGroupCode=${conv.inviteCode}`}
+                  className="flex-1 bg-white border border-border h-8 px-2 rounded-xl text-[10px] text-ink font-mono focus:outline-none"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/dashboard/all?joinGroupCode=${conv.inviteCode}`)
+                    toast.success('Group link copied!')
+                  }}
+                  className="h-8 px-2.5 bg-emerald-500 text-white text-[10px] font-semibold rounded-xl active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <Copy className="size-3" />
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {!hasContent ? (
@@ -375,6 +445,7 @@ function FilesCard({
 function MembersCard({ conversation, onClose }: { conversation: Conversation; onClose?: () => void }) {
   const conv = conversation as any
   const members = conv.members || (conv.isGroupChat ? conv.users : []) || []
+  const { setViewStatsUser } = useDashboard()
 
   return (
     <div className="flex flex-col rounded-3xl p-5 relative" style={glass.card}>
@@ -411,6 +482,16 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
               </p>
             </div>
             {m.isOnline && <span className="size-2 rounded-full bg-emerald-400 shrink-0 mt-2" />}
+            {(m._id || m.id) && (
+              <button
+                type="button"
+                onClick={() => setViewStatsUser?.(m)}
+                className="size-7 rounded-lg hover:bg-purple/10 flex items-center justify-center text-purple/60 hover:text-purple cursor-pointer shrink-0 mt-1 transition-colors"
+                title="View Meeting History"
+              >
+                <Sparkles className="size-3.5 animate-pulse" />
+              </button>
+            )}
           </div>
         ))}
         {members.length === 0 && (

@@ -143,6 +143,7 @@ export type Conversation = {
   members?: Member[]
   files?: FileCategory[]
   contact?: ContactInfo
+  inviteCode?: string
 }
 
 export type Friend = {

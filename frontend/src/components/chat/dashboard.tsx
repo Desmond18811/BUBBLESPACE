@@ -20,11 +20,12 @@ import { SetupProfileView } from '@/components/chat/setup-profile-view'
 import { getMyProfile, accessOrCreateChat, getUnreadChatCount } from '@/lib/api'
 import { AppProvider } from '@/contexts/AppContext'
 import { MessageOverlay } from '@/components/chat/message-overlay'
+import { MeetingStatsModal } from '@/components/chat/MeetingStatsModal'
 import { toast } from 'sonner'
 import { BubblespaceLogo } from '@/components/logo'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
 
 export function Dashboard({
@@ -47,6 +48,30 @@ export function Dashboard({
   const [overlayUser, setOverlayUser] = useState<any>(null)
   const [overlayWorkCard, setOverlayWorkCard] = useState(false)
   const [messages, setMessages] = useState<any[]>([])
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get('joinGroupCode');
+    if (joinCode) {
+      const handleJoin = async () => {
+        try {
+          const { joinGroupChat } = await import('@/lib/api');
+          const res = await joinGroupChat(joinCode);
+          toast.success('Successfully joined the group!');
+          const chat = res?.conversation || res?.data?.conversation || res?.data || res;
+          if (chat?.id) {
+            navigate({ to: `/dashboard/chat/${chat.id}` });
+          }
+        } catch (err: any) {
+          toast.error(err?.message || 'Could not join group. Invite link may be invalid.');
+        } finally {
+          const newUrl = window.location.pathname;
+          window.history.replaceState({}, document.title, newUrl);
+        }
+      };
+      handleJoin();
+    }
+  }, [navigate]);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -203,11 +228,20 @@ export function Dashboard({
     )
   }
 
+  const [viewStatsUser, setViewStatsUser] = useState<any | null>(null)
+  const queryClient = useQueryClient()
+
   const dashboardContextValue = {
     user,
     onMessage: handleOpenFullChat,
     isNarrow: !!activeChatId,
-    setUser: () => refetchProfile(),
+    setUser: (updatedUser?: any) => {
+      if (updatedUser) {
+        queryClient.setQueryData(['profile'], updatedUser)
+      } else {
+        refetchProfile()
+      }
+    },
     bgType,
     setBgType,
     showInfo,
@@ -220,6 +254,8 @@ export function Dashboard({
     setMessages,
     isMobileMenuOpen,
     setIsMobileMenuOpen,
+    viewStatsUser,
+    setViewStatsUser,
   }
 
   return (
@@ -310,6 +346,14 @@ export function Dashboard({
               targetUser={overlayUser}
               workCardInfo={overlayWorkCard}
               onClose={() => setOverlayUser(null)}
+            />
+          )}
+
+          {/* Meeting Stats Modal */}
+          {viewStatsUser && (
+            <MeetingStatsModal
+              targetUser={viewStatsUser}
+              onClose={() => setViewStatsUser(null)}
             />
           )}
 

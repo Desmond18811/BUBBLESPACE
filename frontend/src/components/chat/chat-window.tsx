@@ -180,6 +180,8 @@ export function ChatWindow({
   const [sending, setSending] = useState(false)
   const [typing, setTyping] = useState(false)
   const [typingUserId, setTypingUserId] = useState<string | null>(null)
+  const [typingUsername, setTypingUsername] = useState<string | null>(null)
+  const [typingName, setTypingName] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuPos | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
@@ -358,15 +360,22 @@ export function ChatWindow({
       }
     }
 
-    const onTypingStart = ({ fromUserId, chatId: cid }: any) => {
+    const onTypingStart = ({ fromUserId, chatId: cid, fromUsername, fromName }: any) => {
       if (cid === chatId && fromUserId !== myId) {
         setTyping(true)
         setTypingUserId(fromUserId)
+        setTypingUsername(fromUsername || null)
+        setTypingName(fromName || null)
       }
     }
 
     const onTypingStop = ({ chatId: cid }: any) => {
-      if (cid === chatId) { setTyping(false); setTypingUserId(null) }
+      if (cid === chatId) {
+        setTyping(false)
+        setTypingUserId(null)
+        setTypingUsername(null)
+        setTypingName(null)
+      }
     }
 
     socket.on('new_message', onNewMsg)
@@ -391,7 +400,7 @@ export function ChatWindow({
   const emitTyping = useCallback((isTyping: boolean) => {
     const otherUser = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
     const toUserId = otherUser?._id || otherUser?.id
-    if (!toUserId) return
+    if (!toUserId && !chat?.isGroupChat) return
     socket?.emit(isTyping ? 'typing_start' : 'typing_stop', { toUserId, chatId })
   }, [socket, chatId, chat, myId])
 
@@ -786,8 +795,15 @@ export function ChatWindow({
                     )}
                   </h1>
                   <p className="text-[12px] text-ink-soft">
-                    {typing ? <span className="text-purple animate-pulse">typing…</span>
-                      : getOtherUser()?.isOnline ? 'Online' : chat?.isGroupChat ? `${chat.users?.length || 0} members` : 'Offline'}
+                    {typing ? (
+                      <span className="text-purple animate-pulse">
+                        {typingUsername 
+                          ? `@${typingUsername} is typing…` 
+                          : typingName 
+                            ? `${typingName} is typing…` 
+                            : 'typing…'}
+                      </span>
+                    ) : getOtherUser()?.isOnline ? 'Online' : chat?.isGroupChat ? `${chat.users?.length || 0} members` : 'Offline'}
                   </p>
                 </div>
               </div>
@@ -1140,16 +1156,28 @@ export function ChatWindow({
           )}
 
           {/* Typing indicator */}
-          {typing && (
-            <div className="flex items-end gap-2.5">
-              <ChatAvatar src={getOtherUser()?.avatar} name={getOtherUser()?.full_name || 'User'} className="size-8 rounded-xl shrink-0" />
-              <div className="rounded-2xl rounded-tl-sm bg-black/5 px-4 py-3 flex items-center gap-1">
-                <span className="size-2 animate-bounce rounded-full bg-black/40" style={{ animationDelay: '0ms' }} />
-                <span className="size-2 animate-bounce rounded-full bg-black/40" style={{ animationDelay: '150ms' }} />
-                <span className="size-2 animate-bounce rounded-full bg-black/40" style={{ animationDelay: '300ms' }} />
+          {typing && (() => {
+            const typingUser = chat?.users?.find((u: any) => String(u._id || u.id) === String(typingUserId));
+            const avatarSrc = typingUser?.avatar || undefined;
+            const displayName = typingUser?.full_name || typingName || 'Someone';
+            return (
+              <div className="flex items-end gap-2.5">
+                <ChatAvatar src={avatarSrc} name={displayName} className="size-8 rounded-xl shrink-0" />
+                <div className="rounded-2xl rounded-tl-sm bg-black/5 px-4 py-3 flex flex-col gap-0.5">
+                  {chat?.isGroupChat && (
+                    <span className="text-[10px] text-ink-soft font-medium">
+                      {displayName}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1">
+                    <span className="size-2 animate-bounce rounded-full bg-black/40" style={{ animationDelay: '0ms' }} />
+                    <span className="size-2 animate-bounce rounded-full bg-black/40" style={{ animationDelay: '150ms' }} />
+                    <span className="size-2 animate-bounce rounded-full bg-black/40" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
           <div ref={bottomRef} />
         </div>
 

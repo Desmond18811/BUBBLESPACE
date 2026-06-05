@@ -17,6 +17,8 @@ interface DashboardContextType {
     setMessages: React.Dispatch<React.SetStateAction<any[]>>
     isMobileMenuOpen?: boolean
     setIsMobileMenuOpen?: (open: boolean) => void
+    viewStatsUser?: any
+    setViewStatsUser?: (u: any) => void
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined)

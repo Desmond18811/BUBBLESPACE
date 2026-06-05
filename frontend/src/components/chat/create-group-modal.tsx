@@ -16,6 +16,7 @@ export function CreateGroupModal({ onClose, onSuccess }: CreateGroupModalProps) 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [createdGroup, setCreatedGroup] = useState<any>(null)
 
   useEffect(() => {
     const loadContacts = async () => {
@@ -60,8 +61,9 @@ export function CreateGroupModal({ onClose, onSuccess }: CreateGroupModalProps) 
     try {
       const res = await createGroupChat(groupName.trim(), Array.from(selectedIds))
       toast.success('Group created successfully!')
-      onSuccess(res?.conversation || res?.data?.conversation || res?.data || res)
-      onClose()
+      const chat = res?.conversation || res?.data?.conversation || res?.data || res
+      setCreatedGroup(chat)
+      onSuccess(chat)
     } catch (err: any) {
       toast.error(err?.message || 'Could not create group')
     } finally {
@@ -72,6 +74,64 @@ export function CreateGroupModal({ onClose, onSuccess }: CreateGroupModalProps) 
   const filteredContacts = contacts.filter(c =>
     (c.full_name || c.username || '').toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  if (createdGroup) {
+    const inviteLink = `${window.location.origin}/dashboard/all?joinGroupCode=${createdGroup.inviteCode || ''}`
+    return (
+      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl border border-slate-200/60 animate-in zoom-in-95 duration-200 text-center flex flex-col items-center">
+          <div className="size-16 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-5">
+            <Sparkles className="size-8 text-emerald-500 animate-pulse" />
+          </div>
+          <h3 className="text-xl font-bold text-ink mb-2">Group Created! 🚀</h3>
+          <p className="text-sm text-ink-soft mb-6 leading-relaxed">
+            Your new group <strong className="text-purple">"{createdGroup.chatName || groupName}"</strong> has been successfully created. Invite others directly using this unique group link.
+          </p>
+
+          <div className="w-full p-4 rounded-2xl bg-slate-50 border border-slate-200/60 mb-6 text-left">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">Unique Invite Code</span>
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded">Active</span>
+            </div>
+            <div className="text-center py-2 font-mono font-bold text-base text-ink tracking-wider bg-white rounded-xl border border-slate-100 mb-4 select-all">
+              {createdGroup.inviteCode || 'No code available'}
+            </div>
+
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">Share Link</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={inviteLink}
+                className="flex-1 bg-white border border-slate-200 h-10 px-3 rounded-xl text-xs text-ink font-mono focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(inviteLink)
+                  toast.success('Group invite link copied!')
+                }}
+                className="h-10 px-4 bg-purple text-white text-xs font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer hover:opacity-95"
+              >
+                <Copy className="size-3.5" />
+                Copy
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-3 bg-purple text-white font-bold rounded-xl hover:bg-purple/90 active:scale-95 transition-all cursor-pointer text-sm"
+          >
+            Enter Chat Workspace
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">

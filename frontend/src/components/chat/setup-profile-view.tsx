@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { 
     Sparkles, User, Briefcase, Phone, Camera, Loader2, 
     ArrowRight, ArrowLeft, Upload, FileText, X, Check, 
-    MapPin, Smile, Globe, Bookmark, Plus, Copy
+    MapPin, Smile, Globe, Bookmark, Plus, Copy, Share
 } from 'lucide-react'
 import { setupProfile, uploadAvatar, onboardOrgBrain, ingestOrgDocument, getOrgInviteCode } from '@/lib/api'
 import { toast } from 'sonner'
@@ -68,6 +68,7 @@ export function SetupProfileView({
     const [successInvite, setSuccessInvite] = useState<{ inviteCode: string; orgName: string; userData: any } | null>(null)
     const [copiedLink, setCopiedLink] = useState(false)
     const [copiedCode, setCopiedCode] = useState(false)
+    const [showInviteLink, setShowInviteLink] = useState(false)
     const [selectedCountryCode, setSelectedCountryCode] = useState(() => {
         const phone = user?.phone_number || ''
         if (phone.startsWith('+')) {
@@ -408,38 +409,58 @@ export function SetupProfileView({
                         <div className="w-full h-[1px] bg-purple/10" />
 
                         {/* Invite Link Section */}
-                        <div className="text-left">
-                            <span className="text-[10px] font-bold text-ink uppercase tracking-wider block mb-2">Workspace Invite Link</span>
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    readOnly
-                                    value={inviteLink}
-                                    className="flex-1 bg-white border border-border h-11 px-3 rounded-xl text-xs text-ink font-mono focus:outline-none select-all"
-                                />
-                                <button
-                                    onClick={handleCopyLink}
-                                    className={cn(
-                                        "h-11 px-4 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer",
-                                        copiedLink 
-                                            ? "bg-emerald-500 text-white" 
-                                            : "bg-purple text-white hover:opacity-90 active:scale-95"
-                                    )}
-                                >
-                                    {copiedLink ? (
-                                        <>
-                                            <Check className="h-3.5 w-3.5" />
-                                            Copied!
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Copy className="h-3.5 w-3.5" />
-                                            Copy Link
-                                        </>
-                                    )}
-                                </button>
+                        {!showInviteLink ? (
+                            <button
+                                type="button"
+                                onClick={() => setShowInviteLink(true)}
+                                className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 border border-purple/20 bg-purple/5 hover:bg-purple/10 text-purple text-xs font-bold rounded-xl active:scale-95 transition-all cursor-pointer"
+                            >
+                                <Share className="h-3.5 w-3.5 text-purple" />
+                                Share Workspace Link
+                            </button>
+                        ) : (
+                            <div className="text-left animate-in fade-in slide-in-from-top-2 duration-200">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[10px] font-bold text-ink uppercase tracking-wider block">Workspace Invite Link</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowInviteLink(false)}
+                                        className="text-purple hover:text-purple/80 text-[10px] font-semibold cursor-pointer"
+                                    >
+                                        Hide
+                                    </button>
+                                </div>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        readOnly
+                                        value={inviteLink}
+                                        className="flex-1 bg-white border border-border h-11 px-3 rounded-xl text-xs text-ink font-mono focus:outline-none select-all"
+                                    />
+                                    <button
+                                        onClick={handleCopyLink}
+                                        className={cn(
+                                            "h-11 px-4 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer",
+                                            copiedLink 
+                                                ? "bg-emerald-500 text-white" 
+                                                : "bg-purple text-white hover:opacity-90 active:scale-95"
+                                        )}
+                                    >
+                                        {copiedLink ? (
+                                            <>
+                                                <Check className="h-3.5 w-3.5" />
+                                                Copied!
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy className="h-3.5 w-3.5" />
+                                                Copy Link
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
 
                     <div className="flex gap-4 items-center justify-center">
