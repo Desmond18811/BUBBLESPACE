@@ -77,9 +77,17 @@ export function SetupProfileView({
         return 'US'
     })
     
+    const suggestUsername = (fullName: string) => {
+        if (!fullName) return 'user_' + Math.floor(1000 + Math.random() * 9000);
+        const cleanName = fullName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+        const randomNum = Math.floor(100 + Math.random() * 900);
+        return `${cleanName}_${randomNum}`;
+    }
+
     // Core profile details
     const [formData, setFormData] = useState({
         full_name: user?.full_name || '',
+        username: user?.username || (user?.full_name ? suggestUsername(user.full_name) : 'user_' + Math.floor(1000 + Math.random() * 9000)),
         bio: '',
         organization: user?.organization || '',
         org_role: user?.org_role || '',
@@ -179,6 +187,7 @@ export function SetupProfileView({
             setUploadProgress('Completing your profile details...')
             const res = await setupProfile({
                 full_name: formData.full_name,
+                username: formData.username,
                 bio: formData.bio,
                 phone_number: formData.phone_number,
                 avatar: finalAvatar,
@@ -218,6 +227,7 @@ export function SetupProfileView({
             setUploadProgress('Configuring organization profile...')
             const profileRes = await setupProfile({
                 full_name: formData.full_name,
+                username: formData.username,
                 bio: formData.bio,
                 organization: formData.organization,
                 org_role: formData.org_role,
@@ -572,8 +582,8 @@ export function SetupProfileView({
                                             <div>
                                                 <h3 className="font-bold text-ink text-sm">Avatar Photo</h3>
                                                 <p className="text-xs text-ink-soft mt-1">Upload a professional photo for notifications.</p>
-                                                {user?.username && (
-                                                    <p className="text-xs text-purple font-bold mt-1.5 bg-purple/10 px-2 py-0.5 rounded-md inline-block">@{user.username}</p>
+                                                {formData.username && (
+                                                    <p className="text-xs text-purple font-bold mt-1.5 bg-purple/10 px-2 py-0.5 rounded-md inline-block">@{formData.username}</p>
                                                 )}
                                             </div>
                                         </div>
@@ -594,6 +604,33 @@ export function SetupProfileView({
                                                 </div>
                                             </div>
 
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] font-bold text-ink uppercase tracking-wider ml-0.5">Username</label>
+                                                <div className="relative flex items-center">
+                                                    <input
+                                                        required
+                                                        type="text"
+                                                        className="w-full bg-white border border-border rounded-xl py-3 pl-4 pr-24 text-ink focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none transition-all text-sm"
+                                                        placeholder="username"
+                                                        value={formData.username}
+                                                        onChange={e => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const generated = suggestUsername(formData.full_name || user?.full_name);
+                                                            setFormData(prev => ({ ...prev, username: generated }));
+                                                        }}
+                                                        className="absolute right-2 px-3 py-1.5 bg-purple/10 hover:bg-purple/20 text-purple text-xs font-bold rounded-lg transition-colors flex items-center gap-1 font-semibold"
+                                                    >
+                                                        <Sparkles className="size-3 text-purple" />
+                                                        Generate
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-bold text-ink uppercase tracking-wider ml-0.5">Phone Number</label>
                                                 <div className="relative flex items-center">

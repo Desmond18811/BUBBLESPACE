@@ -777,7 +777,14 @@ export function ChatWindow({
                   )}
                 </div>
                 <div>
-                  <h1 className="text-[18px] font-bold leading-tight text-ink">{getChatTitle()}</h1>
+                  <h1 className="text-[18px] font-bold leading-tight text-ink flex items-center gap-2">
+                    {getChatTitle()}
+                    {!chat?.isGroupChat && getOtherUser()?.username && (
+                      <span className="text-[11px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-md">
+                        @{getOtherUser().username}
+                      </span>
+                    )}
+                  </h1>
                   <p className="text-[12px] text-ink-soft">
                     {typing ? <span className="text-purple animate-pulse">typing…</span>
                       : getOtherUser()?.isOnline ? 'Online' : chat?.isGroupChat ? `${chat.users?.length || 0} members` : 'Offline'}
@@ -978,7 +985,14 @@ export function ChatWindow({
                                 }}
                               >
                                 {!own && chat?.isGroupChat && !msg.isDeleted && (
-                                  <p className="text-[12px] font-semibold text-purple mb-1">{senderName}</p>
+                                  <p className="text-[12px] font-semibold text-purple mb-1">
+                                    {senderName}
+                                    {msg.sender?.username && (
+                                      <span className="text-[10px] text-purple/80 ml-1.5 font-bold">
+                                        @{msg.sender.username}
+                                      </span>
+                                    )}
+                                  </p>
                                 )}
                                  {msg.message_type === 'voice' ? (
                                    <VoiceBubble msg={msg} own={own} />
