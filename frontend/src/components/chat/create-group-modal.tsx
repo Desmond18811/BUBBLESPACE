@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Users, Search, Check, Sparkles, Loader2, Briefcase } from 'lucide-react'
+import { X, Users, Search, Check, Sparkles, Loader2, Briefcase, Copy } from 'lucide-react'
 import { getMyContacts, createGroupChat } from '@/lib/api'
 import { ChatAvatar } from './chat-avatar'
 import { toast } from 'sonner'

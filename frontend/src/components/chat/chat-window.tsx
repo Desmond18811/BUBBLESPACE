@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { useSocket, useChats } from '@/contexts/AppContext'
+import { useDashboard } from '@/contexts/DashboardContext'
 import {
   fetchMessages,
   sendTextMessage,
@@ -151,6 +152,7 @@ export function ChatWindow({
 }) {
   const { socket, startCall } = useSocket()
   const { chats, updateChatInList } = useChats()
+  const { bgType } = useDashboard()
   const myId = currentUser?._id || currentUser?.id
 
   const handleVoiceCall = () => {
@@ -764,7 +766,10 @@ export function ChatWindow({
   return (
     <div className="flex h-full w-full overflow-hidden" onClick={() => { setContextMenu(null); setShowChatMenu(false) }}>
       <div
-        className="flex h-full w-full flex-col bg-white transition-all duration-300"
+        className={cn(
+          "flex h-full w-full flex-col transition-all duration-300",
+          bgType === 'glass' ? "bg-transparent" : "bg-white"
+        )}
       >
         {/* Header */}
         <header className="flex items-center justify-between border-b border-black/5 px-6 py-4">

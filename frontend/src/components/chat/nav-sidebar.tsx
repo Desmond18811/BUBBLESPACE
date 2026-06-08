@@ -28,7 +28,7 @@ export const navItems: NavItem[] = [
   { id: 'all', label: 'All chats', icon: MessageSquare },
   { id: 'work', label: 'Work', icon: FolderClosed },
   { id: 'friends', label: 'Friends', icon: Users },
-  { id: 'calls', label: 'Calls', icon: Phone },
+  { id: 'calls', label: 'Events & Meets', icon: Phone },
   { id: 'archive', label: 'Archived', icon: Archive },
 ]
 
@@ -146,8 +146,10 @@ export function NavSidebar({
               <span className="relative">
                 <Icon
                   className={cn(
-                    'size-6',
-                    isActive ? 'text-white' : 'text-white/70',
+                    'size-6 transition-all duration-300',
+                    item.id === 'calls' && hasActiveCall
+                      ? 'text-emerald-400 animate-pulse drop-shadow-[0_0_8px_rgba(52,211,153,0.6)] font-bold'
+                      : isActive ? 'text-white' : 'text-white/70',
                   )}
                 />
                 {badge > 0 ? (
@@ -164,8 +166,10 @@ export function NavSidebar({
               </span>
               <span
                 className={cn(
-                  'text-[11px] font-medium transition-colors',
-                  isActive ? 'text-white' : 'text-white/60 group-hover:text-white/80',
+                  'text-[10px] font-medium transition-colors text-center leading-tight max-w-[76px]',
+                  item.id === 'calls' && hasActiveCall
+                    ? 'text-emerald-400 font-extrabold animate-pulse drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
+                    : isActive ? 'text-white' : 'text-white/60 group-hover:text-white/80',
                 )}
               >
                 {item.label}
@@ -202,7 +206,7 @@ export function NavSidebar({
                   )}
                 />
               )}
-              <span className={cn('text-[11px] font-medium', isActive ? 'text-white' : 'text-white/60')}>
+              <span className={cn('text-[10px] font-medium text-center leading-tight max-w-[76px]', isActive ? 'text-white' : 'text-white/60')}>
                 {item.label}
               </span>
             </Link>

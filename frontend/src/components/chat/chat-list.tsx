@@ -91,7 +91,7 @@ export function ChatList({
   onSelect: (id: string, chat: any) => void
   currentUserId?: string
 }) {
-  const { setIsMobileMenuOpen, setActiveChat, setActiveChatId, activeChatId } = useDashboard()
+  const { setIsMobileMenuOpen, setActiveChat, setActiveChatId, activeChatId, bgType } = useDashboard()
   const { chats, loadingChats, refreshChats, updateChatInList, removeChatFromList } = useChats()
   const { socket } = useSocket()
   const [typingChats, setTypingChats] = useState<Record<string, { fromUserId: string; fromUsername?: string; fromName?: string }>>({})
@@ -297,7 +297,7 @@ export function ChatList({
   }
 
   return (
-    <aside className="flex h-full flex-col bg-white">
+    <aside className={cn("flex h-full flex-col", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
       {/* Header with Archive Charts */}
       <div className="flex items-center justify-between px-4 pt-6 pb-2">
         <div className="flex items-center gap-3">

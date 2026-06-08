@@ -129,7 +129,11 @@ export function Dashboard({
   React.useEffect(() => {
     if (user) {
       if (user.app_background) {
-        setBgType(user.app_background)
+        if (user.app_background === 'custom' && user.custom_background) {
+          setBgType(user.custom_background)
+        } else {
+          setBgType(user.app_background)
+        }
         if (user.app_background === 'dark') {
           setTheme('dark')
         } else {
@@ -264,10 +268,17 @@ export function Dashboard({
         <div className="relative z-10 flex h-screen md:h-[min(960px,92vh)] w-full max-w-[1760px] items-stretch gap-0 md:gap-5 2xl:h-[min(1080px,88vh)] font-poppins">
           {/* App container */}
           <div
-            className="flex flex-1 gap-1 rounded-none md:rounded-[36px] bg-transparent md:bg-app-dark p-0 md:p-3 shadow-none md:shadow-2xl transition-all duration-500 overflow-hidden"
+            className={cn(
+              "flex flex-1 gap-1 rounded-none md:rounded-[36px] p-0 md:p-3 shadow-none md:shadow-2xl transition-all duration-500 overflow-hidden",
+              bgType === 'glass'
+                ? "bg-transparent md:bg-black/10 md:backdrop-blur-md md:border md:border-white/10"
+                : (bgType === 'custom' || bgType.startsWith('/') || bgType.startsWith('http') || bgType.startsWith('data:'))
+                  ? "bg-transparent md:bg-black/20"
+                  : "bg-transparent md:bg-app-dark"
+            )}
             style={{
-              backgroundImage: (!isMobile && user?.app_background === 'custom' && user?.custom_background)
-                ? `url(${user.custom_background})`
+              backgroundImage: (!isMobile && (bgType === 'custom' || bgType.startsWith('/') || bgType.startsWith('http') || bgType.startsWith('data:')) && (user?.custom_background || bgType))
+                ? `url(${user?.custom_background || bgType})`
                 : 'none',
               backgroundSize: 'cover',
               backgroundPosition: 'center',
@@ -275,7 +286,10 @@ export function Dashboard({
           >
             <NavSidebar activeTab={isChatRoute ? 'all' : activeTab} user={user} onLogout={handleLogout} />
 
-            <div className="flex flex-1 overflow-hidden rounded-none md:rounded-[26px] bg-white relative transition-all duration-300">
+            <div className={cn(
+              "flex flex-1 overflow-hidden rounded-none md:rounded-[26px] relative transition-all duration-300",
+              bgType === 'glass' ? "bg-white/40 backdrop-blur-xl border border-white/20 shadow-2xl" : "bg-white"
+            )}>
               {/* Always mount the chat list + window but only show when on 'all' tab */}
               <div className={cn("flex flex-1 overflow-hidden", !showSidePanel && "hidden")}>
                 <div className={cn("border-r border-black/5 shrink-0 transition-all duration-300", activeChatId ? "hidden md:block w-[360px]" : "w-full md:w-[360px]")}>

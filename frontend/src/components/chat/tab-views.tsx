@@ -124,7 +124,7 @@ function ViewHeader({ title, subtitle, action, isNarrow = false }: { title: stri
           </button>
         )}
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-bold text-ink">{title}</h1>
+          <h1 className="truncate text-lg font-bold bg-linear-to-r from-purple to-purple/60 bg-clip-text text-transparent">{title}</h1>
           {subtitle && !isNarrow && <p className="truncate text-[11px] font-medium text-ink-soft">{subtitle}</p>}
         </div>
       </div>
@@ -254,7 +254,7 @@ function CallOverlay({
 
 export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
   const { startCall } = useSocket()
-  const { user: currentUser, setActiveChat, setActiveChatId } = useDashboard()
+  const { user: currentUser, setActiveChat, setActiveChatId, bgType } = useDashboard()
   const { refreshChats } = useChats()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -337,7 +337,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
   )
 
   return (
-    <div className="flex h-full w-full flex-col bg-white">
+    <div className={cn("flex h-full w-full flex-col", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
       <ViewHeader
         title="Contacts"
         subtitle={`${contacts.length} connection${contacts.length !== 1 ? 's' : ''}`}
@@ -681,7 +681,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   const { startCall } = useSocket()
   const [selectionStep, setSelectionStep] = useState<'none' | 'source' | 'type'>('none')
   const [activeMeeting, setActiveMeeting] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(null)
-  const { user: currentUser } = useDashboard()
+  const { user: currentUser, bgType } = useDashboard()
   const [callsTab, setCallsTab] = useState<'meet' | 'calendar'>('meet')
 
   const generateRoomId = () => `bubble-${Math.random().toString(36).slice(2, 11)}`
@@ -732,10 +732,10 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   })
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-white rounded-[26px]">
-      <div className="flex flex-1 flex-col overflow-hidden border-r border-black/5 bg-white">
+    <div className={cn("flex h-full w-full overflow-hidden rounded-[26px]", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
+      <div className={cn("flex flex-1 flex-col overflow-hidden border-r border-black/5", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
         <ViewHeader
-          title={callsTab === 'meet' ? "Calls & Meet" : "Business Calendar"}
+          title={callsTab === 'meet' ? "Events & Meets" : "Business Calendar"}
           subtitle={callsTab === 'meet' ? "Experience seamless communication" : "Organize organization events and team meetings"}
           action={
             callsTab === 'meet' ? (
@@ -987,6 +987,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
     setMessages,
     showInfo,
     setShowInfo,
+    bgType,
   } = useDashboard()
   const { updateChatInList } = useChats()
   const myId = user?._id || user?.id
@@ -1030,7 +1031,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
   }
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-white rounded-[26px]">
+    <div className={cn("flex h-full w-full overflow-hidden rounded-[26px]", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
       {/* Left panel — archived chat list */}
       <div className={cn(
         "flex flex-col border-r border-black/5 transition-all duration-500 ease-in-out",
@@ -1167,16 +1168,16 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
 
 export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void }) {
   const isMobile = useIsMobile()
+  const { bgType } = useDashboard()
   const stats = [
-    { label: 'Chats', value: user?.postsCount || 0 },
-    { label: 'Following', value: user?.followingCount || 0 },
-    { label: 'Files', value: user?.sharedResources?.length || 0 },
+    { label: 'Chats', value: user?.chatsCount || 0 },
+    { label: 'Files', value: user?.filesCount || 0 },
   ]
 
   return (
-    <div className="flex h-full w-full flex-col bg-white">
+    <div className={cn("flex h-full w-full flex-col", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
       <ViewHeader title="Profile" subtitle="Manage your account" />
-      <div className="flex-1 overflow-y-auto bg-white">
+      <div className={cn("flex-1 overflow-y-auto", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
         <div className={cn(
           "mx-auto flex flex-col gap-6",
           isMobile ? "p-0 max-w-full" : "p-8 max-w-4xl"
@@ -1356,7 +1357,11 @@ export function EditView({
       const res = await uploadBackground(file)
       const u = res.data.user || res.data
       setUser(u)
-      setBgType(u.app_background || 'custom')
+      if (u.app_background === 'custom' && u.custom_background) {
+        setBgType(u.custom_background)
+      } else {
+        setBgType(u.app_background || 'custom')
+      }
       toast.success('Custom background set!')
     } catch (err: any) {
       toast.error('Background upload failed')
@@ -1383,9 +1388,9 @@ export function EditView({
   const labelCls = "mb-1.5 block text-[13px] font-medium text-ink-soft"
 
   return (
-    <div className="flex h-full w-full flex-col bg-white">
+    <div className={cn("flex h-full w-full flex-col", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
       <ViewHeader title="Edit profile" subtitle="Update your information" />
-      <div className="flex-1 overflow-y-auto bg-white flex flex-col items-center">
+      <div className={cn("flex-1 overflow-y-auto flex flex-col items-center", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
         <form
           onSubmit={handleUpdate}
           className={cn(
@@ -2527,6 +2532,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
     setMessages,
     showInfo,
     setShowInfo,
+    bgType,
   } = useDashboard()
   const { refreshChats } = useChats()
   const isNarrow = narrowProp ?? contextNarrow
@@ -2579,7 +2585,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
   }
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-white rounded-[26px]">
+    <div className={cn("flex h-full w-full overflow-hidden rounded-[26px]", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
       {/* Side-by-side layout: List on left, Chat on right */}
       <div className={cn(
         "flex flex-col border-r border-black/5 transition-all duration-500 ease-in-out",
