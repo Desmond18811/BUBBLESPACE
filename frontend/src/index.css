@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@custom-variant dark (&:is(.dark *));
+@variant dark (&:where(.dark, .dark *));
 
 :root {
   --radius: 1rem;
@@ -71,6 +71,10 @@
   --border: oklch(1 0 0 / 0.1);
   --input: oklch(1 0 0 / 0.15);
   --ring: oklch(0.75 0.18 295);
+
+  /* Dark-mode hero gradient — deep purple/indigo tones instead of light lavender */
+  --gradient-hero: radial-gradient(ellipse at top, oklch(0.45 0.18 295 / 0.55), transparent 60%),
+    linear-gradient(180deg, oklch(0.14 0.03 285), oklch(0.18 0.06 290));
 
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);

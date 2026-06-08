@@ -1,8 +1,10 @@
+//trials 
 import React, { createContext, useContext } from 'react'
 
 interface DashboardContextType {
     user: any
     onMessage: (targetUser: any, showWorkCard?: boolean) => void
+    onOpenProfile?: (targetUser: any, showWorkCard?: boolean) => void
     isNarrow: boolean
     setUser: (u: any) => void
     bgType: string
@@ -34,3 +36,43 @@ export function useDashboard() {
     }
     return context
 }
+
+
+//Working code 
+
+// import React, { createContext, useContext } from 'react'
+
+// interface DashboardContextType {
+//     user: any
+//     onMessage: (targetUser: any, showWorkCard?: boolean) => void
+//     isNarrow: boolean
+//     setUser: (u: any) => void
+//     bgType: string
+//     setBgType: (t: string) => void
+//     showInfo: boolean
+//     setShowInfo: React.Dispatch<React.SetStateAction<boolean>> | ((val: boolean) => void)
+//     activeChatId: string | null
+//     setActiveChatId: (id: string | null) => void
+//     activeChat: any
+//     setActiveChat: (chat: any) => void
+//     messages: any[]
+//     setMessages: React.Dispatch<React.SetStateAction<any[]>>
+//     isMobileMenuOpen?: boolean
+//     setIsMobileMenuOpen?: (open: boolean) => void
+//     viewStatsUser?: any
+//     setViewStatsUser?: (u: any) => void
+// }
+
+// const DashboardContext = createContext<DashboardContextType | undefined>(undefined)
+
+// export function DashboardProvider({ children, value }: { children: React.ReactNode, value: DashboardContextType }) {
+//     return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>
+// }
+
+// export function useDashboard() {
+//     const context = useContext(DashboardContext)
+//     if (context === undefined) {
+//         throw new Error('useDashboard must be used within a DashboardProvider')
+//     }
+//     return context
+// }
