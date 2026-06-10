@@ -89,6 +89,11 @@ function LiquidGlassContactCard({ user, onClose, onExpand, onViewStats }: { user
                 </div>
                 <h3 className="font-bold text-[15px] text-ink leading-tight">{user.full_name || user.username}</h3>
                 <p className="text-[12px] font-medium text-purple mt-0.5">{user.org_role || user.role || 'Team Member'}</p>
+                {user.uniqueTag && (
+                  <div className="mt-1 px-2.5 py-0.5 bg-purple/5 border border-purple/10 rounded-full">
+                    <p className="text-[10px] font-mono text-purple/70">{user.uniqueTag}</p>
+                  </div>
+                )}
                 {isUserAdmin && user.status_message && (
                     <p className="text-[11px] text-ink-soft mt-1 italic px-2">"{user.status_message}"</p>
                 )}

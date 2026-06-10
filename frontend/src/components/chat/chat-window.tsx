@@ -226,6 +226,12 @@ export function ChatWindow({
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevChatId = useRef<string | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  // @mention state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionResults, setMentionResults] = useState<any[]>([])
+  const [mentionIndex, setMentionIndex] = useState(0)
 
   // Fetch messages and reset state when chat changes (only chatId triggers this)
   useEffect(() => {
@@ -410,6 +416,30 @@ export function ChatWindow({
     setInput(val)
     if (!socket || !chatId) return
 
+    // Detect @mention trigger
+    const atIdx = val.lastIndexOf('@')
+    if (chat?.isGroupChat && atIdx !== -1) {
+      const afterAt = val.slice(atIdx + 1)
+      // Only trigger if no space after @
+      if (!afterAt.includes(' ')) {
+        setMentionQuery(afterAt)
+        const members = chat?.users || chat?.members || []
+        const filtered = members.filter((m: any) => {
+          const name = (m.full_name || m.username || '').toLowerCase()
+          const uname = (m.username || '').toLowerCase()
+          return name.includes(afterAt.toLowerCase()) || uname.includes(afterAt.toLowerCase())
+        }).filter((m: any) => (m._id || m.id) !== myId)
+        setMentionResults(filtered.slice(0, 6))
+        setMentionIndex(0)
+      } else {
+        setMentionQuery(null)
+        setMentionResults([])
+      }
+    } else {
+      setMentionQuery(null)
+      setMentionResults([])
+    }
+
     // Emit socket typing
     emitTyping(true)
     if (typingTimer.current) clearTimeout(typingTimer.current)
@@ -435,6 +465,17 @@ export function ChatWindow({
         setIsAiSuggesting(false)
       }
     }, val.trim().length > 0 ? 300 : 200)
+  }
+
+  const handleMentionSelect = (member: any) => {
+    const atIdx = input.lastIndexOf('@')
+    const before = input.slice(0, atIdx)
+    const username = member.username || member.full_name?.split(' ')[0] || 'user'
+    const newInput = `${before}@${username} `
+    setInput(newInput)
+    setMentionQuery(null)
+    setMentionResults([])
+    inputRef.current?.focus()
   }
 
   const handleSuggestionClick = (s: string) => {
@@ -763,16 +804,48 @@ export function ChatWindow({
     ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
     : null
 
+  // Render message content with clickable @mentions
+  const renderMentionText = (text: string) => {
+    if (!text || !text.includes('@')) return text
+    const parts = text.split(/(@\w[\w.-]*)/g)
+    return parts.map((part, i) => {
+      if (part.startsWith('@') && part.length > 1) {
+        const uname = part.slice(1)
+        const mentionedMember = (chat?.users || chat?.members || []).find((m: any) =>
+          (m.username || '').toLowerCase() === uname.toLowerCase() ||
+          (m.full_name || '').toLowerCase().startsWith(uname.toLowerCase())
+        )
+        return (
+          <span
+            key={i}
+            className="text-purple font-semibold cursor-pointer hover:underline"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (mentionedMember) onOpenProfile?.(mentionedMember, true)
+            }}
+          >
+            {part}
+          </span>
+        )
+      }
+      return <span key={i}>{part}</span>
+    })
+  }
+
   return (
     <div className="flex h-full w-full overflow-hidden" onClick={() => { setContextMenu(null); setShowChatMenu(false) }}>
       <div
         className={cn(
           "flex h-full w-full flex-col transition-all duration-300",
-          bgType === 'glass' ? "bg-transparent" : "bg-white"
+          bgType === 'glass'
+            ? "bg-transparent"
+            : bgType === 'dark'
+              ? "bg-[#1a1a2e] text-white"
+              : "bg-white text-ink"
         )}
       >
         {/* Header */}
-        <header className="flex items-center justify-between border-b border-black/5 px-6 py-4">
+        <header className={cn("flex items-center justify-between px-6 py-4", bgType === 'dark' ? "border-b border-white/10" : "border-b border-black/5")}>
           {!isSearchExpanded ? (
             <>
               <div className="flex items-center gap-3 min-w-0">
@@ -792,7 +865,7 @@ export function ChatWindow({
                     )}
                   </div>
                   <div>
-                    <h1 className="text-[18px] font-bold leading-tight text-ink flex items-center gap-2">
+                    <h1 className={cn("text-[18px] font-bold leading-tight flex items-center gap-2", bgType === 'dark' ? "text-white" : "text-ink")}>
                       {getChatTitle()}
                       {!chat?.isGroupChat && getOtherUser()?.username && (
                         <span className="text-[11px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-md">
@@ -800,7 +873,7 @@ export function ChatWindow({
                         </span>
                       )}
                     </h1>
-                    <p className="text-[12px] text-ink-soft">
+                    <p className={cn("text-[12px]", bgType === 'dark' ? "text-white/50" : "text-ink-soft")}>
                       {typing ? (
                         <span className="text-purple animate-pulse">
                           {typingUsername 
@@ -814,7 +887,7 @@ export function ChatWindow({
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-ink-soft">
+              <div className={cn("flex items-center gap-4", bgType === 'dark' ? "text-white/50" : "text-ink-soft")}>
                 <button onClick={() => setIsSearchExpanded(true)} className="hover:text-purple transition-colors p-1">
                   <Search className="size-5" />
                 </button>
@@ -930,8 +1003,8 @@ export function ChatWindow({
               <div className="size-16 rounded-3xl bg-purple/10 flex items-center justify-center mb-4">
                 <Send className="size-8 text-purple/50" />
               </div>
-              <p className="text-base font-semibold text-black/30">No messages yet</p>
-              <p className="text-sm text-black/20 mt-1">Be the first to say something!</p>
+              <p className={cn("text-base font-semibold", bgType === 'dark' ? "text-white/30" : "text-black/30")}>No messages yet</p>
+              <p className={cn("text-sm mt-1", bgType === 'dark' ? "text-white/20" : "text-black/20")}>Be the first to say something!</p>
             </div>
           ) : (
             groupedMessages
@@ -940,9 +1013,9 @@ export function ChatWindow({
                 <div key={group.date}>
                   {/* Date separator */}
                   <div className="flex items-center gap-4 my-4">
-                    <div className="h-px flex-1 bg-black/5" />
-                    <span className="text-xs text-black/30 font-medium px-2">{group.date}</span>
-                    <div className="h-px flex-1 bg-black/5" />
+                    <div className={cn("h-px flex-1", bgType === 'dark' ? "bg-white/10" : "bg-black/5")} />
+                    <span className={cn("text-xs font-medium px-2", bgType === 'dark' ? "text-white/30" : "text-black/30")}>{group.date}</span>
+                    <div className={cn("h-px flex-1", bgType === 'dark' ? "bg-white/10" : "bg-black/5")} />
                   </div>
 
                   <div className="space-y-2">
@@ -1116,7 +1189,7 @@ export function ChatWindow({
                                    </a>
                                  ) : (
                                   <span>
-                                    {msg.content}
+                                    {renderMentionText(msg.content || '')}
                                     {msg.isEdited && <span className="ml-1 text-[10px] opacity-50">(edited)</span>}
                                   </span>
                                 )}
@@ -1285,7 +1358,7 @@ export function ChatWindow({
             </div>
           </div>
         ) : (
-          <div className="mt-auto border-t border-black/5 px-4 pb-4 pt-3">
+          <div className={cn("mt-auto px-4 pb-4 pt-3 relative", bgType === 'dark' ? "border-t border-white/10" : "border-t border-black/5")}>
             {selectedAttachment && (
               <div className="mb-2.5 p-2.5 rounded-[18px] bg-white/80 backdrop-blur-md border border-black/5 flex items-center justify-between animate-in slide-in-from-bottom-2 duration-200">
                 <div className="flex items-center gap-3 min-w-0">
@@ -1315,7 +1388,34 @@ export function ChatWindow({
                 </button>
               </div>
             )}
-            <div className="flex items-center gap-3 rounded-[20px] bg-black/3 px-4 py-2.5">
+            {/* @mention autocomplete dropdown */}
+            {mentionQuery !== null && mentionResults.length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 mx-2 z-40">
+                <div className="rounded-2xl overflow-hidden shadow-2xl border border-black/5 bg-white backdrop-blur-xl">
+                  <div className="px-3 pt-2 pb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-purple/60">Mention a member</span>
+                  </div>
+                  {mentionResults.map((member: any, idx: number) => (
+                    <button
+                      key={member._id || member.id}
+                      type="button"
+                      onClick={() => handleMentionSelect(member)}
+                      className={cn(
+                        'flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-purple/5',
+                        idx === mentionIndex && 'bg-purple/5'
+                      )}
+                    >
+                      <ChatAvatar src={member.avatar} name={member.full_name || member.username} className="size-8 rounded-xl shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-ink truncate">{member.full_name || member.username}</p>
+                        {member.username && <p className="text-[11px] text-purple font-semibold">@{member.username}</p>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className={cn("flex items-center gap-3 rounded-[20px] px-4 py-2.5", bgType === 'dark' ? "bg-white/5" : "bg-black/3")}>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="text-black/40 hover:text-purple transition-colors"
@@ -1353,11 +1453,25 @@ export function ChatWindow({
                 ) : (
                   <input
                     type="text"
+                    ref={inputRef}
                     value={input}
                     onChange={(e) => handleInputChange(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder={selectedAttachment ? "Add a caption..." : "Type a message..."}
-                    className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-[15px] placeholder:text-black/30"
+                    onKeyDown={(e) => {
+                      if (mentionResults.length > 0 && e.key === 'Tab') {
+                        e.preventDefault()
+                        handleMentionSelect(mentionResults[mentionIndex])
+                      } else if (mentionResults.length > 0 && e.key === 'Escape') {
+                        setMentionQuery(null)
+                        setMentionResults([])
+                      } else if (e.key === 'Enter') {
+                        handleSend()
+                      }
+                    }}
+                    placeholder={selectedAttachment ? "Add a caption..." : chat?.isGroupChat ? "Type a message or @ to mention..." : "Type a message..."}
+                    className={cn(
+                      "w-full bg-transparent border-none focus:outline-none focus:ring-0 text-[15px] placeholder:text-black/30",
+                      bgType === 'dark' ? "text-white placeholder:text-white/30" : "text-ink placeholder:text-ink/40"
+                    )}
                   />
                 )}
               </div>

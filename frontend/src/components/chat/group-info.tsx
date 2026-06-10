@@ -481,6 +481,9 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
                   </>
                 )}
               </p>
+              {m.uniqueTag && (
+                <p className="text-[9px] text-ink-soft/60 font-mono mt-0.5 truncate">{m.uniqueTag}</p>
+              )}
             </div>
             {m.isOnline && <span className="size-2 rounded-full bg-emerald-400 shrink-0 mt-2" />}
             {(m._id || m.id) && (
@@ -554,6 +557,11 @@ function ContactCard({ conversation, onClose }: { conversation: any; onClose?: (
       <h2 className="text-[17px] font-bold text-ink">{displayName}</h2>
       <p className="text-[12px] text-purple font-semibold mt-0.5">{status}</p>
       {email && <p className="text-[11px] text-ink-soft mt-0.5">{email}</p>}
+      {resolved.uniqueTag && (
+        <div className="mt-1 px-2.5 py-0.5 bg-purple/5 border border-purple/10 rounded-full">
+          <p className="text-[10px] font-mono text-purple/70">{resolved.uniqueTag}</p>
+        </div>
+      )}
 
       <div className="w-full text-left mt-5 space-y-3.5">
         {infoRows.map(({ icon: Icon, label, value }) => (
