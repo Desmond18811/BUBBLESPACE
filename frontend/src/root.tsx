@@ -4,8 +4,10 @@ import {
     Link,
     createRootRouteWithContext,
     useRouter,
+    useLocation,
 } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { useTheme } from "next-themes";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
     component: RootComponent,
@@ -75,6 +77,17 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
 function RootComponent() {
     const { queryClient } = Route.useRouteContext();
+    const location = useLocation();
+    const { setTheme, theme } = useTheme();
+
+    useEffect(() => {
+        const isDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/setup-profile');
+        if (!isDashboard) {
+            if (theme !== 'light') {
+                setTheme('light');
+            }
+        }
+    }, [location.pathname, theme, setTheme]);
 
     return (
         <QueryClientProvider client={queryClient}>

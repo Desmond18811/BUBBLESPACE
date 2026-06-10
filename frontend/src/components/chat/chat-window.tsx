@@ -837,15 +837,11 @@ export function ChatWindow({
       <div
         className={cn(
           "flex h-full w-full flex-col transition-all duration-300",
-          bgType === 'glass'
-            ? "bg-transparent"
-            : bgType === 'dark'
-              ? "bg-[#1a1a2e] text-white"
-              : "bg-white text-ink"
+          bgType === 'glass' ? "bg-transparent" : "bg-white text-ink"
         )}
       >
         {/* Header */}
-        <header className={cn("flex items-center justify-between px-6 py-4", bgType === 'dark' ? "border-b border-white/10" : "border-b border-black/5")}>
+        <header className="flex items-center justify-between px-6 py-4 border-b border-black/5">
           {!isSearchExpanded ? (
             <>
               <div className="flex items-center gap-3 min-w-0">
@@ -865,7 +861,7 @@ export function ChatWindow({
                     )}
                   </div>
                   <div>
-                    <h1 className={cn("text-[18px] font-bold leading-tight flex items-center gap-2", bgType === 'dark' ? "text-white" : "text-ink")}>
+                    <h1 className="text-[18px] font-bold leading-tight flex items-center gap-2 text-ink">
                       {getChatTitle()}
                       {!chat?.isGroupChat && getOtherUser()?.username && (
                         <span className="text-[11px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-md">
@@ -873,7 +869,7 @@ export function ChatWindow({
                         </span>
                       )}
                     </h1>
-                    <p className={cn("text-[12px]", bgType === 'dark' ? "text-white/50" : "text-ink-soft")}>
+                    <p className="text-[12px] text-ink-soft">
                       {typing ? (
                         <span className="text-purple animate-pulse">
                           {typingUsername 
@@ -887,7 +883,7 @@ export function ChatWindow({
                   </div>
                 </div>
               </div>
-              <div className={cn("flex items-center gap-4", bgType === 'dark' ? "text-white/50" : "text-ink-soft")}>
+              <div className="flex items-center gap-4 text-ink-soft">
                 <button onClick={() => setIsSearchExpanded(true)} className="hover:text-purple transition-colors p-1">
                   <Search className="size-5" />
                 </button>
@@ -1003,8 +999,8 @@ export function ChatWindow({
               <div className="size-16 rounded-3xl bg-purple/10 flex items-center justify-center mb-4">
                 <Send className="size-8 text-purple/50" />
               </div>
-              <p className={cn("text-base font-semibold", bgType === 'dark' ? "text-white/30" : "text-black/30")}>No messages yet</p>
-              <p className={cn("text-sm mt-1", bgType === 'dark' ? "text-white/20" : "text-black/20")}>Be the first to say something!</p>
+              <p className="text-base font-semibold text-black/30">No messages yet</p>
+              <p className="text-sm mt-1 text-black/20">Be the first to say something!</p>
             </div>
           ) : (
             groupedMessages
@@ -1013,9 +1009,9 @@ export function ChatWindow({
                 <div key={group.date}>
                   {/* Date separator */}
                   <div className="flex items-center gap-4 my-4">
-                    <div className={cn("h-px flex-1", bgType === 'dark' ? "bg-white/10" : "bg-black/5")} />
-                    <span className={cn("text-xs font-medium px-2", bgType === 'dark' ? "text-white/30" : "text-black/30")}>{group.date}</span>
-                    <div className={cn("h-px flex-1", bgType === 'dark' ? "bg-white/10" : "bg-black/5")} />
+                    <div className="h-px flex-1 bg-black/5" />
+                    <span className="text-xs font-medium px-2 text-black/30">{group.date}</span>
+                    <div className="h-px flex-1 bg-black/5" />
                   </div>
 
                   <div className="space-y-2">
@@ -1358,7 +1354,7 @@ export function ChatWindow({
             </div>
           </div>
         ) : (
-          <div className={cn("mt-auto px-4 pb-4 pt-3 relative", bgType === 'dark' ? "border-t border-white/10" : "border-t border-black/5")}>
+          <div className="mt-auto px-4 pb-4 pt-3 relative border-t border-black/5">
             {selectedAttachment && (
               <div className="mb-2.5 p-2.5 rounded-[18px] bg-white/80 backdrop-blur-md border border-black/5 flex items-center justify-between animate-in slide-in-from-bottom-2 duration-200">
                 <div className="flex items-center gap-3 min-w-0">
@@ -1415,7 +1411,7 @@ export function ChatWindow({
                 </div>
               </div>
             )}
-            <div className={cn("flex items-center gap-3 rounded-[20px] px-4 py-2.5", bgType === 'dark' ? "bg-white/5" : "bg-black/3")}>
+            <div className="flex items-center gap-3 rounded-[20px] px-4 py-2.5 bg-black/3">
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="text-black/40 hover:text-purple transition-colors"
@@ -1468,10 +1464,7 @@ export function ChatWindow({
                       }
                     }}
                     placeholder={selectedAttachment ? "Add a caption..." : chat?.isGroupChat ? "Type a message or @ to mention..." : "Type a message..."}
-                    className={cn(
-                      "w-full bg-transparent border-none focus:outline-none focus:ring-0 text-[15px] placeholder:text-black/30",
-                      bgType === 'dark' ? "text-white placeholder:text-white/30" : "text-ink placeholder:text-ink/40"
-                    )}
+                    className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-[15px] placeholder:text-black/30 text-ink placeholder:text-ink/40"
                   />
                 )}
               </div>

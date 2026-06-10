@@ -297,7 +297,7 @@ export function ChatList({
   }
 
   return (
-    <aside className={cn("flex h-full flex-col", bgType === 'glass' ? "bg-transparent" : bgType === 'dark' ? "bg-[#12122a]" : "bg-white")}>
+    <aside className={cn("flex h-full flex-col", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
       {/* Header with Archive Charts */}
       <div className="flex items-center justify-between px-4 pt-6 pb-2">
         <div className="flex items-center gap-3">
