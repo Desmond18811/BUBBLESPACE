@@ -864,7 +864,7 @@ export function ChatWindow({
                     <h1 className="text-[18px] font-bold leading-tight flex items-center gap-2 text-ink">
                       {getChatTitle()}
                       {!chat?.isGroupChat && getOtherUser()?.username && (
-                        <span className="text-[11px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-md">
+                        <span className="text-[11px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-md hidden md:inline-flex">
                           @{getOtherUser().username}
                         </span>
                       )}
@@ -883,14 +883,14 @@ export function ChatWindow({
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-ink-soft">
-                <button onClick={() => setIsSearchExpanded(true)} className="hover:text-purple transition-colors p-1">
+              <div className="flex items-center gap-2 md:gap-4 text-ink-soft shrink-0 flex-nowrap">
+                <button onClick={() => setIsSearchExpanded(true)} className="hover:text-purple transition-colors p-1 shrink-0">
                   <Search className="size-5" />
                 </button>
-                <button onClick={handleVoiceCall} className="hover:text-purple transition-colors">
+                <button onClick={handleVoiceCall} className="hover:text-purple transition-colors shrink-0">
                   <Phone className="size-5" />
                 </button>
-                <button onClick={handleVideoCall} className="hover:text-purple transition-colors">
+                <button onClick={handleVideoCall} className="hover:text-purple transition-colors shrink-0">
                   <Video className="size-5" />
                 </button>
                 <button

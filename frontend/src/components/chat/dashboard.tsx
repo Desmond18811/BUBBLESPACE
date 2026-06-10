@@ -351,7 +351,7 @@ export function Dashboard({
           </div>
 
           {/* Right info panel */}
-          {isInfoVisible && (
+          {isInfoVisible && !isMobile && (
             <aside className="w-[360px] shrink-0 flex flex-col gap-4 overflow-y-auto max-h-full animate-in slide-in-from-right duration-300 custom-scrollbar pr-1">
               <GroupInfo
                 key={activeChatId}
@@ -360,6 +360,26 @@ export function Dashboard({
                 onClose={() => setShowInfo(false)}
               />
             </aside>
+          )}
+
+          {/* Mobile Info Overlay */}
+          {isInfoVisible && isMobile && (
+            <div className="fixed inset-0 z-50 flex">
+              <div
+                className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
+                onClick={() => setShowInfo(false)}
+              />
+              <div className="relative flex w-full flex-col bg-white overflow-y-auto animate-in slide-in-from-right duration-300">
+                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white pb-8">
+                  <GroupInfo
+                    key={activeChatId}
+                    conversation={activeChat}
+                    messages={messages}
+                    onClose={() => setShowInfo(false)}
+                  />
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Message Overlay for Work/Friends messaging */}
