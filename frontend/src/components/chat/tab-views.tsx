@@ -1647,17 +1647,6 @@ export function EditView({
                   <span className="text-[13px] font-bold text-ink">Dark</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleBgSelect('glass')}
-                  className={cn(
-                    'flex flex-col items-center gap-3 rounded-2xl border-2 p-5 transition-all',
-                    bgType === 'glass' ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10' : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
-                  )}
-                >
-                  <div className="size-14 rounded-xl shadow-sm border border-black/5 bg-gradient-to-br from-purple-light to-pink-400" />
-                  <span className="text-[13px] font-bold text-ink">Liquid Glass</span>
-                </button>
 
                 <div className="relative text-left">
                   <button

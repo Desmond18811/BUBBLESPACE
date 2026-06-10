@@ -152,7 +152,7 @@ export function ChatWindow({
 }) {
   const { socket, startCall } = useSocket()
   const { chats, updateChatInList } = useChats()
-  const { bgType } = useDashboard()
+  const { bgType, onOpenProfile } = useDashboard()
   const myId = currentUser?._id || currentUser?.id
 
   const handleVoiceCall = () => {
@@ -784,32 +784,34 @@ export function ChatWindow({
                     <ArrowLeft className="size-5" />
                   </button>
                 )}
-                <div className="relative shrink-0">
-                  <ChatAvatar src={getChatAvatar()} name={getChatTitle()} className="size-10 rounded-xl" />
-                  {getOtherUser()?.isOnline && (
-                    <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
-                  )}
-                </div>
-                <div>
-                  <h1 className="text-[18px] font-bold leading-tight text-ink flex items-center gap-2">
-                    {getChatTitle()}
-                    {!chat?.isGroupChat && getOtherUser()?.username && (
-                      <span className="text-[11px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-md">
-                        @{getOtherUser().username}
-                      </span>
+                <div className="flex items-center gap-3 cursor-pointer min-w-0" onClick={() => onShowInfo?.()}>
+                  <div className="relative shrink-0">
+                    <ChatAvatar src={getChatAvatar()} name={getChatTitle()} className="size-10 rounded-xl" />
+                    {getOtherUser()?.isOnline && (
+                      <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
                     )}
-                  </h1>
-                  <p className="text-[12px] text-ink-soft">
-                    {typing ? (
-                      <span className="text-purple animate-pulse">
-                        {typingUsername 
-                          ? `@${typingUsername} is typing…` 
-                          : typingName 
-                            ? `${typingName} is typing…` 
-                            : 'typing…'}
-                      </span>
-                    ) : getOtherUser()?.isOnline ? 'Online' : chat?.isGroupChat ? `${chat.users?.length || 0} members` : 'Offline'}
-                  </p>
+                  </div>
+                  <div>
+                    <h1 className="text-[18px] font-bold leading-tight text-ink flex items-center gap-2">
+                      {getChatTitle()}
+                      {!chat?.isGroupChat && getOtherUser()?.username && (
+                        <span className="text-[11px] font-bold text-purple bg-purple/10 px-2 py-0.5 rounded-md">
+                          @{getOtherUser().username}
+                        </span>
+                      )}
+                    </h1>
+                    <p className="text-[12px] text-ink-soft">
+                      {typing ? (
+                        <span className="text-purple animate-pulse">
+                          {typingUsername 
+                            ? `@${typingUsername} is typing…` 
+                            : typingName 
+                              ? `${typingName} is typing…` 
+                              : 'typing…'}
+                        </span>
+                      ) : getOtherUser()?.isOnline ? 'Online' : chat?.isGroupChat ? `${chat.users?.length || 0} members` : 'Offline'}
+                    </p>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-4 text-ink-soft">
@@ -955,7 +957,9 @@ export function ChatWindow({
                           className={cn("flex items-end gap-2.5 group", own ? "justify-end" : "justify-start")}
                         >
                           {!own && (
-                            <ChatAvatar src={msg.sender?.avatar} name={senderName} className="size-8 rounded-xl shrink-0 mb-1" />
+                            <div className="cursor-pointer" onClick={() => onOpenProfile?.(msg.sender, true)}>
+                              <ChatAvatar src={msg.sender?.avatar} name={senderName} className="size-8 rounded-xl shrink-0 mb-1" />
+                            </div>
                           )}
 
                           <div className="max-w-[65%] relative">
@@ -1006,7 +1010,10 @@ export function ChatWindow({
                                 }}
                               >
                                 {!own && chat?.isGroupChat && !msg.isDeleted && (
-                                  <p className="text-[12px] font-semibold text-purple mb-1">
+                                  <p 
+                                    className="text-[12px] font-semibold text-purple mb-1 cursor-pointer hover:underline"
+                                    onClick={() => onOpenProfile?.(msg.sender, true)}
+                                  >
                                     {senderName}
                                     {msg.sender?.username && (
                                       <span className="text-[10px] text-purple/80 ml-1.5 font-bold">

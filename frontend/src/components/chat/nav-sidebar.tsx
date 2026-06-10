@@ -1,5 +1,3 @@
-'use client'
-
 import {
   MessageSquare,
   FolderClosed,
@@ -114,7 +112,7 @@ export function NavSidebar({
   const hasActiveCall = meetingsData?.meetings?.some((m: any) => m.status === 'live') || false
 
   return (
-    <nav className="hidden md:flex w-[88px] shrink-0 flex-col items-center py-6">
+    <nav className="hidden md:flex w-[88px] shrink-0 flex-col items-center py-6 bg-app-dark rounded-[26px] overflow-y-auto scrollbar-hide max-h-full">
       {/* Logo */}
       <div className="mb-8 flex size-10 items-center justify-center">
         <BubblespaceLogo className="size-9 text-white" />

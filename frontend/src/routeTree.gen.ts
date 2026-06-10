@@ -52,7 +52,7 @@ const VerifyOtpRoute = VerifyOtpImport.update({
 } as any)
 
 const GoogleCallbackRoute = GoogleCallbackImport.update({
-    path: '/google-callback',
+    path: '/auth/google/callback',
     getParentRoute: () => rootRoute,
 } as any)
 
@@ -149,7 +149,7 @@ declare module '@tanstack/react-router' {
     '/forgot-password': any
     '/reset-password': any
     '/verify-otp': any
-    '/google-callback': any
+    '/auth/google/callback': any
     '/404': any
     '/setup-profile': any
     '/dashboard/': any

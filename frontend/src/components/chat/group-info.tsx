@@ -445,7 +445,7 @@ function FilesCard({
 function MembersCard({ conversation, onClose }: { conversation: Conversation; onClose?: () => void }) {
   const conv = conversation as any
   const members = conv.members || (conv.isGroupChat ? conv.users : []) || []
-  const { setViewStatsUser } = useDashboard()
+  const { setViewStatsUser, onOpenProfile } = useDashboard()
 
   return (
     <div className="flex flex-col rounded-3xl p-5 relative" style={glass.card}>
@@ -463,7 +463,8 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
       <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
         {members.map((m: any) => (
           <div key={m._id || m.id || m.name}
-            className="flex items-start gap-3 rounded-xl px-1.5 py-1.5 hover:bg-purple/5">
+            onClick={() => onOpenProfile?.(m, true)}
+            className="flex items-start gap-3 rounded-xl px-1.5 py-1.5 hover:bg-purple/5 cursor-pointer">
             <ChatAvatar src={m.avatar || m.profile_image} name={m.full_name || m.username || '?'}
               className="size-9 rounded-xl shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
@@ -485,11 +486,11 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
             {(m._id || m.id) && (
               <button
                 type="button"
-                onClick={() => setViewStatsUser?.(m)}
+                onClick={(e) => { e.stopPropagation(); setViewStatsUser?.(m) }}
                 className="size-7 rounded-lg hover:bg-purple/10 flex items-center justify-center text-purple/60 hover:text-purple cursor-pointer shrink-0 mt-1 transition-colors"
                 title="View Meeting History"
               >
-                <Sparkles className="size-3.5 animate-pulse" />
+                <Sparkles className="size-3.5" />
               </button>
             )}
           </div>

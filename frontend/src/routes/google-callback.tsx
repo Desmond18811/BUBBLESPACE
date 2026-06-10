@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { BubblespaceLogo } from "@/components/logo";
 
-export const Route = createFileRoute("/google-callback")({
+export const Route = createFileRoute("/auth/google/callback")({
     component: GoogleCallbackPage,
 });
 
