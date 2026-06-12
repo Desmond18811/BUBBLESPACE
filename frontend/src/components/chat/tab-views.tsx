@@ -1074,7 +1074,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
                   )}
                 >
                   <div className="relative shrink-0">
-                    <ChatAvatar src={avatar} name={name} className="size-12 rounded-xl shadow-sm" />
+                    <ChatAvatar src={avatar} name={name} className="size-12 rounded-xl shadow-sm" isGroup={chat.isGroupChat} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

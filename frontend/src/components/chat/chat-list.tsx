@@ -410,7 +410,7 @@ export function ChatList({
                         )}
                       >
                         <div className="relative shrink-0">
-                          <ChatAvatar src={avatar} name={name} className="size-[52px] rounded-2xl shadow-sm" />
+                          <ChatAvatar src={avatar} name={name} className="size-[52px] rounded-2xl shadow-sm" isGroup={chat.isGroupChat} />
                           {chat.isOnline && (
                             <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500 shadow-sm" />
                           )}

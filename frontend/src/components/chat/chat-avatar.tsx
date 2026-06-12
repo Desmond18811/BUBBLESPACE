@@ -7,9 +7,10 @@ interface AvatarProps {
     src?: string | null
     name: string
     className?: string
+    isGroup?: boolean
 }
 
-export function ChatAvatar({ src, name, className }: AvatarProps) {
+export function ChatAvatar({ src, name, className, isGroup }: AvatarProps) {
     const [imageError, setImageError] = useState(false)
     const initials = (name || '?')
         .split(' ')
@@ -19,7 +20,7 @@ export function ChatAvatar({ src, name, className }: AvatarProps) {
         .toUpperCase()
         .slice(0, 2)
 
-    const isBlackIcon = src === 'black' || src === '#000000'
+    const isBlackIcon = src === 'black' || src === '#000000' || isGroup
     const resolvedSrc = isBlackIcon ? null : getSecureMediaUrl(src)
     const hasImage = resolvedSrc && !imageError
 

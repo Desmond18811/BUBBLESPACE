@@ -855,7 +855,7 @@ export function ChatWindow({
                 )}
                 <div className="flex items-center gap-3 cursor-pointer min-w-0" onClick={() => onShowInfo?.()}>
                   <div className="relative shrink-0">
-                    <ChatAvatar src={getChatAvatar()} name={getChatTitle()} className="size-10 rounded-xl" />
+                    <ChatAvatar src={getChatAvatar()} name={getChatTitle()} className="size-10 rounded-xl" isGroup={chat?.isGroupChat} />
                     {getOtherUser()?.isOnline && (
                       <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
                     )}
