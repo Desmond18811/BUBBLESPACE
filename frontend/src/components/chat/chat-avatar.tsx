@@ -8,11 +8,13 @@ interface AvatarProps {
     name: string
     className?: string
     isGroup?: boolean
+    organization?: string
 }
 
-export function ChatAvatar({ src, name, className, isGroup }: AvatarProps) {
+export function ChatAvatar({ src, name, className, isGroup, organization }: AvatarProps) {
     const [imageError, setImageError] = useState(false)
-    const initials = (name || '?')
+    const textForInitials = isGroup ? name : organization ? organization : name || '?'
+    const initials = textForInitials
         .split(' ')
         .map((n) => n[0])
         .filter(Boolean)
@@ -20,7 +22,7 @@ export function ChatAvatar({ src, name, className, isGroup }: AvatarProps) {
         .toUpperCase()
         .slice(0, 2)
 
-    const isBlackIcon = src === 'black' || src === '#000000' || isGroup
+    const isBlackIcon = src === 'black' || src === '#000000' || isGroup || !!organization
     const resolvedSrc = isBlackIcon ? null : getSecureMediaUrl(src)
     const hasImage = resolvedSrc && !imageError
 
