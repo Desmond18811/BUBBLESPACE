@@ -1544,23 +1544,23 @@ export function ChatWindow({
                     ))}
                   </div>
                 </div>
-                <button onClick={() => { navigator.clipboard.writeText(msg.content || ''); setContextMenu(null); toast.success('Copied!') }} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 transition-colors">
-                  <Copy className="size-4 text-black/40" /> Copy
+                <button onClick={() => { navigator.clipboard.writeText(msg.content || ''); setContextMenu(null); toast.success('Copied!') }} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-black/5 transition-colors">
+                  <Copy className="size-4 text-slate-600" /> Copy
                 </button>
-                <button onClick={() => handlePin(msg._id)} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 transition-colors">
-                  <Pin className="size-4 text-black/40" /> {msg.isPinned ? 'Unpin' : 'Pin'} Message
+                <button onClick={() => handlePin(msg._id)} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-black/5 transition-colors">
+                  <Pin className="size-4 text-slate-600" /> {msg.isPinned ? 'Unpin' : 'Pin'} Message
                 </button>
                 {own && !msg.isDeleted && (
                   <button
                     onClick={() => { setEditingId(contextMenu.msgId); setEditText(msg.content || ''); setContextMenu(null) }}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 transition-colors"
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-black/5 transition-colors"
                   >
-                    <Edit2 className="size-4 text-black/40" /> Edit
+                    <Edit2 className="size-4 text-slate-600" /> Edit
                   </button>
                 )}
                 <hr className="my-1 border-black/5" />
-                <button onClick={() => handleDelete(contextMenu.msgId, false)} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-black/60 hover:bg-black/5 transition-colors">
-                  <Trash2 className="size-4 text-black/40" /> Delete for Me
+                <button onClick={() => handleDelete(contextMenu.msgId, false)} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-black/5 transition-colors">
+                  <Trash2 className="size-4 text-slate-600" /> Delete for Me
                 </button>
                 {canDeleteAll(msg) && (
                   <button onClick={() => handleDelete(contextMenu.msgId, true)} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">

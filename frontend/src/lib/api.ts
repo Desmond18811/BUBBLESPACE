@@ -4,6 +4,83 @@
 
 const BASE_URL = (import.meta.env.VITE_API_URL?.replace(/ i$/, '')?.trim()) || 'https://bubble-backend-production-96a0.up.railway.app/api/v1';
 
+const originalFetch = globalThis.fetch;
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const onRefreshed = (token: string) => {
+  refreshSubscribers.forEach(cb => cb(token));
+  refreshSubscribers = [];
+};
+
+const addRefreshSubscriber = (cb: (token: string) => void) => {
+  refreshSubscribers.push(cb);
+};
+
+const customFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const urlStr = typeof input === 'string' ? input : (input as any).url || String(input);
+  
+  let res = await originalFetch(input, init);
+
+  if (res.status === 401 && !urlStr.includes('/auth/refresh-token')) {
+    if (!isRefreshing) {
+      isRefreshing = true;
+      try {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          const refreshRes = await originalFetch(`${BASE_URL}/auth/refresh-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          });
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            const { accessToken: newAccessToken, refreshToken: newRefreshToken } = refreshData.data || {};
+            if (newAccessToken && newRefreshToken) {
+              localStorage.setItem('access_token', newAccessToken);
+              localStorage.setItem('refresh_token', newRefreshToken);
+              onRefreshed(newAccessToken);
+              isRefreshing = false;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to auto-refresh token:', err);
+      }
+
+      if (isRefreshing) {
+        isRefreshing = false;
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      }
+    }
+
+    if (isRefreshing) {
+      const retryPromise = new Promise<Response>((resolve) => {
+        addRefreshSubscriber((newToken) => {
+          const headers = init?.headers ? { ...init.headers } : {};
+          (headers as any)['Authorization'] = `Bearer ${newToken}`;
+          resolve(originalFetch(input, { ...init, headers }));
+        });
+      });
+      return retryPromise;
+    } else {
+      const newToken = localStorage.getItem('access_token');
+      if (newToken) {
+        const headers = init?.headers ? { ...init.headers } : {};
+        (headers as any)['Authorization'] = `Bearer ${newToken}`;
+        return originalFetch(input, { ...init, headers });
+      }
+    }
+  }
+
+  return res;
+};
+
+const fetch = customFetch;
+
 export const getAuthHeaders = () => {
     const token = localStorage.getItem('access_token');
     return {
