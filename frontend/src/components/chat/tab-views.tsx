@@ -3545,8 +3545,10 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
               )
             })
 
-            const hasMeeting = dayTasks.some((t: any) => t.type === 'meeting')
-            const hasEvent = dayTasks.some((t: any) => t.type === 'event' && !t.isUpdated)
+            const hasUrgent = dayTasks.some((t: any) => t.priority === 'urgent')
+            const hasMeeting = dayTasks.some((t: any) => t.type === 'meeting' && t.priority !== 'urgent')
+            const hasEvent = dayTasks.some((t: any) => t.type === 'event' && t.priority !== 'urgent')
+            const hasTask = dayTasks.some((t: any) => (t.type === 'task' || t.type === 'synced' || !t.type) && t.priority !== 'urgent')
             const hasUpdated = dayTasks.some((t: any) => t.isUpdated)
 
             const selected = isSelected(date)
@@ -3579,11 +3581,17 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                   {hasUpdated && (
                     <span className="size-1.5 rounded-full bg-amber-500" title="Updated" />
                   )}
+                  {hasUrgent && (
+                    <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-[#ef4444]")} title="Urgent" />
+                  )}
                   {hasMeeting && (
-                    <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-emerald-500")} title="Meeting" />
+                    <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-[#10b981]")} title="Meeting" />
                   )}
                   {hasEvent && (
-                    <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-blue-500")} title="Event" />
+                    <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-[#3b82f6]")} title="Event" />
+                  )}
+                  {hasTask && (
+                    <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-[#6366f1]")} title="Task" />
                   )}
                 </div>
               </button>
@@ -3623,8 +3631,9 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                           Updated
                         </span>
                       ) : task.type === 'meeting' ? (
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-600 uppercase tracking-tight">
-                          Meeting
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-600 uppercase tracking-tight flex items-center gap-1">
+                          {task.meetingType === 'voice' ? <Phone className="size-2.5" /> : <Video className="size-2.5" />}
+                          Meeting ({task.meetingType === 'voice' ? 'Voice Call' : 'Video Call'})
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-600 uppercase tracking-tight">
@@ -3777,6 +3786,20 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                   </select>
                 </div>
               </div>
+
+              {type === 'meeting' && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-ink uppercase tracking-wider">Meeting Type</label>
+                  <select
+                    className="w-full bg-purple-soft/30 border-none rounded-2xl py-3 px-4 text-ink focus:ring-2 focus:ring-purple/20 transition-all outline-none text-sm"
+                    value={meetingType}
+                    onChange={(e: any) => setMeetingType(e.target.value)}
+                  >
+                    <option value="video">Video Call 🎥</option>
+                    <option value="voice">Voice Call 📞</option>
+                  </select>
+                </div>
+              )}
 
               {/* Date & Time Range */}
               <div className="grid grid-cols-2 gap-4">
