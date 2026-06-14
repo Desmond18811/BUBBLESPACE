@@ -1480,6 +1480,7 @@ export const createTaskFull = async (data: {
     start_time: string;
     end_time: string;
     type?: 'event' | 'task' | 'synced' | 'meeting';
+    meetingType?: 'voice' | 'video';
     priority?: 'low' | 'medium' | 'high' | 'urgent';
     assignedTo?: string;
     color?: string;
@@ -1723,4 +1724,34 @@ export const uploadGroupOrOrgImage = async (file: File): Promise<string> => {
     });
     const data = await handleResponse(res);
     return data.url;
+};
+
+export const getOrgMembers = async () => {
+    const res = await fetch(`${BASE_URL}/org/members`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const getOrgTranscripts = async () => {
+    const res = await fetch(`${BASE_URL}/org/transcripts`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const updateOrgProfile = async (data: {
+    name?: string;
+    industry?: string;
+    size?: string;
+    description?: string;
+    logo?: string;
+    allowMembersToShareInvite?: boolean;
+}) => {
+    const res = await fetch(`${BASE_URL}/org/profile`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
 };

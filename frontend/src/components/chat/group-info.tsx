@@ -641,6 +641,22 @@ function GroupProfileCard({
   const [avatar, setAvatar] = useState(conv.groupIcon || conv.avatar || '')
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [inviteCode, setInviteCode] = useState<string>('')
+
+  useEffect(() => {
+    const fetchInvite = async () => {
+      try {
+        const { getOrgInviteCode } = await import('@/lib/api')
+        const data = await getOrgInviteCode()
+        if (data && data.inviteCode) {
+          setInviteCode(data.inviteCode)
+        }
+      } catch (err) {
+        console.error('Failed to fetch org invite code in GroupProfileCard:', err)
+      }
+    }
+    fetchInvite()
+  }, [])
 
   const currentUser = (() => {
     try {
@@ -836,6 +852,25 @@ function GroupProfileCard({
             >
               Edit Group Info
             </button>
+          )}
+
+          {inviteCode && (
+            <div className="mt-4 w-full bg-white/5 border border-black/5 rounded-2xl p-3 flex flex-col items-start gap-1">
+              <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Organization Invite Code</span>
+              <div className="flex items-center justify-between w-full bg-black/5 rounded-xl px-3 py-2 border border-black/5">
+                <span className="font-mono text-xs text-ink truncate select-all">{inviteCode}</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(inviteCode)
+                    toast.success('Invite code copied to clipboard!')
+                  }}
+                  className="p-1 hover:bg-black/5 rounded text-purple flex items-center justify-center cursor-pointer active:scale-95 transition-all"
+                  title="Copy Invite Code"
+                >
+                  <Copy className="size-3.5" />
+                </button>
+              </div>
+            </div>
           )}
         </>
       )}

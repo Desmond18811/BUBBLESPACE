@@ -39,6 +39,9 @@ import {
   Plus,
   Trash2,
   Clock,
+  Settings,
+  Copy,
+  Upload,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useDashboard } from '@/contexts/DashboardContext'
@@ -724,11 +727,12 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   })
 
   const activeRooms = callLogsData?.rooms || []
-  // Filter out self from coworkers so you can't call yourself
+  // Filter out self and bots from coworkers so you can't call yourself or the AI bot
   const coworkers = (coworkerData || []).filter((w: any) => {
     const wId = w._id || w.id
     const myId = currentUser?._id || currentUser?.id
-    return wId !== myId
+    const isBot = w.is_bot || w.username === 'aida' || w.username?.toLowerCase() === 'aida'
+    return wId !== myId && !isBot
   })
 
   return (
@@ -1166,9 +1170,455 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
 
 /* ---------------- Profile ---------------- */
 
+function OrgSettingsModal({
+  onClose,
+  currentUser,
+}: {
+  onClose: () => void
+  currentUser: any
+}) {
+  const [activeTab, setActiveTab] = useState<'profile' | 'people' | 'transcripts'>('profile')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [inviteCode, setInviteCode] = useState('')
+  const [allowShare, setAllowShare] = useState(true)
+
+  // Profile fields
+  const [orgName, setOrgName] = useState('')
+  const [industry, setIndustry] = useState('')
+  const [size, setSize] = useState('solo')
+  const [description, setDescription] = useState('')
+  const [logo, setLogo] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Data lists
+  const [members, setMembers] = useState<any[]>([])
+  const [transcripts, setTranscripts] = useState<any[]>([])
+  const [loadingData, setLoadingData] = useState(false)
+  const [expandedMeeting, setExpandedMeeting] = useState<string | null>(null)
+
+  // Fetch invite code and role visibility
+  useEffect(() => {
+    const fetchInviteDetails = async () => {
+      try {
+        const { getOrgInviteCode } = await import('@/lib/api')
+        const res = await getOrgInviteCode()
+        if (res) {
+          setIsAdmin(res.isAdmin ?? false)
+          setInviteCode(res.inviteCode || '')
+          setAllowShare(res.allowMembersToShareInvite ?? true)
+          setOrgName(res.name || '')
+          setLogo(res.logo || '')
+          setDescription(res.description || '')
+        }
+      } catch (err) {
+        console.error('Failed to get org invite details:', err)
+      }
+    }
+    fetchInviteDetails()
+  }, [])
+
+  // Fetch People / Transcripts
+  useEffect(() => {
+    if (activeTab === 'people') {
+      const fetchMembers = async () => {
+        setLoadingData(true)
+        try {
+          const { getOrgMembers } = await import('@/lib/api')
+          const res = await getOrgMembers()
+          setMembers(res.members || [])
+        } catch (err) {
+          toast.error('Failed to load members')
+        } finally {
+          setLoadingData(false)
+        }
+      }
+      fetchMembers()
+    } else if (activeTab === 'transcripts') {
+      const fetchTranscripts = async () => {
+        setLoadingData(true)
+        try {
+          const { getOrgTranscripts } = await import('@/lib/api')
+          const res = await getOrgTranscripts()
+          setTranscripts(res.transcripts || [])
+        } catch (err) {
+          toast.error('Failed to load transcripts')
+        } finally {
+          setLoadingData(false)
+        }
+      }
+      fetchTranscripts()
+    }
+  }, [activeTab])
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!isAdmin) return
+    setIsSaving(true)
+    try {
+      const { updateOrgProfile } = await import('@/lib/api')
+      await updateOrgProfile({
+        name: orgName,
+        industry,
+        size,
+        description,
+        logo,
+        allowMembersToShareInvite: allowShare,
+      })
+      toast.success('Organization profile updated!')
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update profile')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setIsUploading(true)
+    try {
+      const { uploadGroupOrOrgImage } = await import('@/lib/api')
+      const url = await uploadGroupOrOrgImage(file)
+      setLogo(url)
+      toast.success('Logo uploaded!')
+    } catch (err: any) {
+      toast.error('Logo upload failed')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-55 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm pointer-events-auto" onClick={onClose} />
+
+      {/* Modal Container */}
+      <div
+        className="relative w-full max-w-3xl h-[80vh] flex flex-col overflow-hidden rounded-[32px] animate-in zoom-in-95 duration-200 pointer-events-auto"
+        style={{
+          background: 'linear-gradient(160deg, rgba(255,255,255,0.97) 0%, rgba(255,255,255,0.9) 100%)',
+          backdropFilter: 'blur(30px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(30px) saturate(180%)',
+          border: '1px solid rgba(255,255,255,0.8)',
+          boxShadow: '0 24px 80px -16px rgba(108,92,231,0.22), 0 8px 32px rgba(0,0,0,0.1)',
+        }}
+      >
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-black/5 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-ink flex items-center gap-2">
+              <Settings className="size-5 text-purple" /> Organization Settings
+            </h3>
+            <p className="text-xs text-ink-soft">Configure organization settings and view metrics</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-xl transition-all cursor-pointer">
+            <X className="size-5 text-ink-soft" />
+          </button>
+        </div>
+
+        {/* Tab Selector */}
+        <div className="px-6 py-3 border-b border-black/5 flex gap-2">
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={cn(
+              "px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer",
+              activeTab === 'profile' ? "bg-purple text-white shadow-md shadow-purple/15" : "text-ink-soft hover:bg-black/5"
+            )}
+          >
+            Profile & Invites
+          </button>
+          <button
+            onClick={() => setActiveTab('people')}
+            className={cn(
+              "px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer",
+              activeTab === 'people' ? "bg-purple text-white shadow-md shadow-purple/15" : "text-ink-soft hover:bg-black/5"
+            )}
+          >
+            People Directory
+          </button>
+          <button
+            onClick={() => setActiveTab('transcripts')}
+            className={cn(
+              "px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer",
+              activeTab === 'transcripts' ? "bg-purple text-white shadow-md shadow-purple/15" : "text-ink-soft hover:bg-black/5"
+            )}
+          >
+            Transcripts & Brain
+          </button>
+        </div>
+
+        {/* Modal Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {activeTab === 'profile' && (
+            <div className="space-y-6 text-left">
+              {!isAdmin && (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-xs text-amber-700 font-semibold leading-relaxed flex items-start gap-3">
+                  <span className="text-lg mt-0.5">⚠️</span>
+                  <span>
+                    You are viewing these settings as an employee. Logo upload, metadata editing, and settings updates are locked for non-administrative roles.
+                  </span>
+                </div>
+              )}
+
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                {/* Logo & Name */}
+                <div className="flex items-center gap-6">
+                  <div className="relative size-20 rounded-2xl bg-black/5 border border-black/5 flex items-center justify-center overflow-hidden shrink-0 group">
+                    {logo ? (
+                      <img src={logo} alt="Logo" className="size-full object-cover" />
+                    ) : (
+                      <Briefcase className="size-8 text-black/20" />
+                    )}
+                    {isAdmin && (
+                      <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] font-bold text-white uppercase tracking-wider cursor-pointer transition-opacity">
+                        {isUploading ? '...' : <Upload className="size-4" />}
+                        <input type="file" onChange={handleLogoUpload} accept="image/*" className="hidden" disabled={isUploading} />
+                      </label>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">Organization Name</label>
+                    <input
+                      type="text"
+                      value={orgName}
+                      onChange={e => setOrgName(e.target.value)}
+                      disabled={!isAdmin}
+                      className="w-full bg-white border border-black/10 rounded-xl px-3.5 py-2 text-sm mt-1 focus:outline-none focus:border-purple disabled:opacity-60"
+                      placeholder="Organization Name"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Industry & Size */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">Industry</label>
+                    <select
+                      value={industry}
+                      onChange={e => setIndustry(e.target.value)}
+                      disabled={!isAdmin}
+                      className="w-full bg-white border border-black/10 rounded-xl px-3.5 py-2 text-sm mt-1 focus:outline-none focus:border-purple disabled:opacity-60"
+                    >
+                      <option value="">Select Industry</option>
+                      {INDUSTRIES.map(ind => (
+                        <option key={ind} value={ind}>{ind}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">Company Size</label>
+                    <select
+                      value={size}
+                      onChange={e => setSize(e.target.value)}
+                      disabled={!isAdmin}
+                      className="w-full bg-white border border-black/10 rounded-xl px-3.5 py-2 text-sm mt-1 focus:outline-none focus:border-purple disabled:opacity-60"
+                    >
+                      <option value="solo">Solo (1 employee)</option>
+                      <option value="2-10">2-10 employees</option>
+                      <option value="11-50">11-50 employees</option>
+                      <option value="51-200">51-200 employees</option>
+                      <option value="201-500">201-500 employees</option>
+                      <option value="500+">500+ employees</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Bio */}
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">Description / Bio</label>
+                  <textarea
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    disabled={!isAdmin}
+                    className="w-full bg-white border border-black/10 rounded-xl px-3.5 py-2 text-sm mt-1 focus:outline-none focus:border-purple min-h-[80px] resize-none disabled:opacity-60"
+                    placeholder="Describe your organization's mission and purpose..."
+                  />
+                </div>
+
+                {/* Invite Code Permissions (Admin only toggle) */}
+                {isAdmin && (
+                  <div className="flex items-center justify-between border-t border-black/5 pt-4">
+                    <div>
+                      <p className="text-xs font-bold text-ink">Allow members to share invite codes</p>
+                      <p className="text-[10px] text-ink-soft">If disabled, employees won't see or be able to share invite details.</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={allowShare}
+                      onChange={e => setAllowShare(e.target.checked)}
+                      className="accent-purple size-4 cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {isAdmin && (
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="w-full py-3 bg-purple text-white font-bold rounded-xl text-xs active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-purple/10"
+                  >
+                    {isSaving ? 'Saving...' : 'Update Settings'}
+                  </button>
+                )}
+              </form>
+
+              {/* Invite Code display widget */}
+              {inviteCode ? (
+                <div className="border-t border-black/5 pt-4 text-left">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">Organization Invite Code</label>
+                  <div className="flex items-center justify-between bg-black/5 rounded-2xl px-4 py-3 border border-black/5 mt-1">
+                    <span className="font-mono text-sm font-semibold text-ink select-all">{inviteCode}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteCode)
+                        toast.success('Invite code copied to clipboard!')
+                      }}
+                      className="p-1.5 hover:bg-black/5 rounded-lg text-purple flex items-center justify-center cursor-pointer active:scale-95 transition-all"
+                      title="Copy invite code"
+                    >
+                      <Copy className="size-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="border-t border-black/5 pt-4 text-center py-4 bg-black/5 rounded-2xl">
+                  <p className="text-xs font-bold text-ink-soft">Invite Sharing Disabled</p>
+                  <p className="text-[10px] text-ink-soft mt-0.5">Only administrators have access to organization invitation protocols.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'people' && (
+            <div className="space-y-4 text-left">
+              <h4 className="text-xs font-bold text-ink-soft uppercase tracking-wider">Members Directory ({members.length})</h4>
+              {loadingData ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="size-6 animate-spin text-purple" />
+                </div>
+              ) : members.length === 0 ? (
+                <p className="text-center text-xs text-ink-soft py-12">No organization members found.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {members.map(member => (
+                    <div key={member._id || member.username} className="bg-white/60 border border-black/5 rounded-2xl p-4 flex items-center gap-3">
+                      <div className="relative">
+                        <ChatAvatar src={member.avatar} name={member.full_name || member.username} className="size-10 rounded-xl" />
+                        {member.isOnline && (
+                          <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h5 className="font-bold text-sm text-ink truncate">{member.full_name || member.username}</h5>
+                        <p className="text-[10px] text-purple font-bold tracking-wide mt-0.5">{member.org_role || member.role || 'Member'}</p>
+                        <p className="text-[10px] text-ink-soft truncate mt-0.5">{member.email}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'transcripts' && (
+            <div className="space-y-4 text-left">
+              <h4 className="text-xs font-bold text-ink-soft uppercase tracking-wider">Brain & Meeting Transcripts ({transcripts.length})</h4>
+              {loadingData ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="size-6 animate-spin text-purple" />
+                </div>
+              ) : transcripts.length === 0 ? (
+                <p className="text-center text-xs text-ink-soft py-12">No meeting minutes or transcripts recorded yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {transcripts.map(meeting => {
+                    const isExpanded = expandedMeeting === meeting._id
+                    const durationStr = meeting.duration ? `${Math.round(meeting.duration / 60)} mins` : 'N/A'
+                    const dateStr = new Date(meeting.startedAt || meeting.createdAt).toLocaleDateString([], {
+                      dateStyle: 'medium'
+                    })
+
+                    return (
+                      <div key={meeting._id} className="bg-white/60 border border-black/5 rounded-2xl overflow-hidden transition-all">
+                        {/* Header Trigger */}
+                        <div
+                          onClick={() => setExpandedMeeting(isExpanded ? null : meeting._id)}
+                          className="p-4 flex items-center justify-between cursor-pointer hover:bg-black/2 transition-colors select-none"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <h5 className="font-bold text-sm text-ink truncate">{meeting.title || 'Untitled Meeting'}</h5>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px] text-ink-soft font-semibold">
+                              <span>📅 {dateStr}</span>
+                              <span>⏱️ {durationStr}</span>
+                              <span>👤 Host: {meeting.host?.full_name || meeting.host?.username || 'Unknown'}</span>
+                            </div>
+                          </div>
+                          <ChevronRight className={cn("size-4 text-ink-soft transition-transform", isExpanded ? "rotate-90 text-purple" : "")} />
+                        </div>
+
+                        {/* Expandable Details */}
+                        {isExpanded && (
+                          <div className="border-t border-black/5 p-4 bg-purple-soft/5 space-y-4 animate-in slide-in-from-top-2 duration-150">
+                            {/* Summary / AI Detailed Explanation */}
+                            <div>
+                              <h6 className="text-[10px] font-bold text-purple uppercase tracking-wider mb-1">Aida Meeting Brain Overview</h6>
+                              <div className="bg-white/80 border border-black/5 rounded-xl p-3.5 text-xs text-ink leading-relaxed whitespace-pre-line">
+                                {meeting.summary || 'AI Explanation is generating or unavailable.'}
+                              </div>
+                            </div>
+
+                            {/* Action Items */}
+                            {meeting.actionItems && meeting.actionItems.length > 0 && (
+                              <div>
+                                <h6 className="text-[10px] font-bold text-purple uppercase tracking-wider mb-1">Action Items Assigned</h6>
+                                <div className="space-y-2">
+                                  {meeting.actionItems.map((item: any, idx: number) => (
+                                    <div key={idx} className="flex items-start gap-2 bg-white/40 border border-black/5 rounded-xl p-2.5 text-xs text-ink leading-tight">
+                                      <span className="text-purple">📌</span>
+                                      <div className="flex-1">
+                                        <p className="font-medium">{item.text}</p>
+                                        {item.assignedToName && (
+                                          <p className="text-[9px] text-purple font-bold tracking-wide mt-0.5">Assigned to: {item.assignedToName}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Raw Transcript (Collapsible block) */}
+                            {meeting.transcriptRaw && (
+                              <div>
+                                <h6 className="text-[10px] font-bold text-ink-soft uppercase tracking-wider mb-1">Raw Audio Transcript</h6>
+                                <div className="bg-black/5 rounded-xl p-3 font-mono text-[10px] leading-relaxed max-h-40 overflow-y-auto text-ink">
+                                  {meeting.transcriptRaw}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void }) {
   const isMobile = useIsMobile()
   const { bgType } = useDashboard()
+  const [showOrgModal, setShowOrgModal] = useState(false)
   const stats = [
     { label: 'Chats', value: user?.chatsCount || 0 },
     { label: 'Files', value: user?.filesCount || 0 },
@@ -1216,17 +1666,33 @@ export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void })
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={onEdit}
-              className={cn(
-                "flex items-center gap-2 rounded-2xl bg-purple text-white transition-opacity hover:opacity-90 font-bold shadow-lg shadow-purple/20",
-                isMobile ? "mt-6 px-6 py-3 text-[14px]" : "mt-8 px-10 py-4 text-[16px]"
+            <div className="flex flex-wrap gap-3 items-center justify-center mt-6">
+              <button
+                type="button"
+                onClick={onEdit}
+                className={cn(
+                  "flex items-center gap-2 rounded-2xl bg-purple text-white transition-opacity hover:opacity-90 font-bold shadow-lg shadow-purple/20 px-6 py-3 text-[14px]",
+                  isMobile ? "w-full justify-center" : "px-8 py-3.5 text-[15px]"
+                )}
+              >
+                <Pencil className="size-4" />
+                Edit profile
+              </button>
+              
+              {user?.organization && (
+                <button
+                  type="button"
+                  onClick={() => setShowOrgModal(true)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-2xl border border-purple/20 bg-purple/5 text-purple hover:bg-purple/10 transition-all font-bold shadow-lg shadow-purple/5 px-6 py-3 text-[14px]",
+                    isMobile ? "w-full justify-center" : "px-8 py-3.5 text-[15px]"
+                  )}
+                >
+                  <Settings className="size-4" />
+                  Organization Settings
+                </button>
               )}
-            >
-              <Pencil className="size-4" />
-              Edit profile
-            </button>
+            </div>
           </div>
 
           {/* Contact details card */}
@@ -1266,6 +1732,12 @@ export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void })
           </div>
         </div>
       </div>
+      {showOrgModal && (
+        <OrgSettingsModal
+          onClose={() => setShowOrgModal(false)}
+          currentUser={user}
+        />
+      )}
     </div>
   )
 }
@@ -2540,9 +3012,14 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
       try {
         setLoading(true)
         const res = await searchUsers(search)
-        // Filter out self so you can't message yourself
+        // Filter out self and bots so you can't message yourself or the AI bot
         const myId = currentUser?._id || currentUser?.id
-        setCoworkers((res.users || []).filter((w: any) => (w._id || w.id) !== myId))
+        setCoworkers((res.users || []).filter((w: any) => {
+          const wId = w._id || w.id
+          const isMe = wId === myId
+          const isBot = w.is_bot || w.username === 'aida' || w.username?.toLowerCase() === 'aida'
+          return !isMe && !isBot
+        }))
       } catch (err) {
         console.error('Failed to fetch coworkers:', err)
         toast.error('Failed to load coworkers')
@@ -2826,6 +3303,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [type, setType] = useState<'event' | 'meeting'>('meeting')
+  const [meetingType, setMeetingType] = useState<'voice' | 'video'>('video')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium')
@@ -2840,6 +3318,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
     setTitle('')
     setDescription('')
     setType('meeting')
+    setMeetingType('video')
     
     // Default times: starting at selected date next hour
     const now = new Date(selectedDate)
@@ -2862,6 +3341,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
     setTitle(task.title)
     setDescription(task.description || '')
     setType(task.type || 'meeting')
+    setMeetingType(task.meetingType || 'video')
     setStartTime(formatDateForInput(new Date(task.start_time)))
     setEndTime(formatDateForInput(new Date(task.end_time)))
     setPriority(task.priority || 'medium')
@@ -2901,6 +3381,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
       title,
       description,
       type,
+      meetingType: type === 'meeting' ? meetingType : undefined,
       start_time: new Date(startTime).toISOString(),
       end_time: new Date(endTime).toISOString(),
       priority,

@@ -791,9 +791,19 @@ export function ChatWindow({
 
   const getOtherUser = () => chat?.users?.find((u: any) => (u._id || u.id) !== myId)
 
+  // Filter out Aida/bot messages
+  const visibleMessages = messages.filter(m => {
+    const sender = m.sender;
+    if (!sender) return true;
+    const isBot = typeof sender === 'object'
+      ? (sender.is_bot || sender.username === 'aida' || sender.username?.toLowerCase() === 'aida')
+      : (sender === 'aida' || m.senderIsBot);
+    return !isBot;
+  });
+
   // Group messages by date
   const groupedMessages: { date: string; messages: any[] }[] = []
-  messages.forEach(msg => {
+  visibleMessages.forEach(msg => {
     const date = formatDate(msg.createdAt)
     const last = groupedMessages[groupedMessages.length - 1]
     if (last && last.date === date) last.messages.push(msg)
@@ -801,7 +811,7 @@ export function ChatWindow({
   })
 
   const filteredMessages = searchQuery
-    ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
+    ? visibleMessages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
     : null
 
   // Render message content with clickable @mentions
@@ -994,7 +1004,7 @@ export function ChatWindow({
             <div className="flex h-full items-center justify-center">
               <div className="size-6 animate-spin rounded-full border-2 border-purple border-t-transparent" />
             </div>
-          ) : (searchQuery && filteredMessages ? filteredMessages : messages).length === 0 ? (
+          ) : (searchQuery && filteredMessages ? filteredMessages : visibleMessages).length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center py-20 text-center">
               <div className="size-16 rounded-3xl bg-purple/10 flex items-center justify-center mb-4">
                 <Send className="size-8 text-purple/50" />

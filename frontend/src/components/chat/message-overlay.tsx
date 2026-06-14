@@ -38,7 +38,7 @@ interface Msg {
 }
 
 // ── Liquid Glass Contact Card (floats outside the chat container) ──────────
-function LiquidGlassContactCard({ user, onClose, onExpand, onViewStats }: { user: any; onClose: () => void; onExpand?: () => void; onViewStats?: () => void }) {
+function LiquidGlassContactCard({ user, myId, onClose, onExpand, onViewStats }: { user: any; myId?: string; onClose: () => void; onExpand?: () => void; onViewStats?: () => void }) {
     const isUserAdmin = user.role === 'admin'
     const infoRows = [
         { icon: Briefcase, label: 'Organization', value: user.organization || user.company || 'No organization' },
@@ -47,6 +47,8 @@ function LiquidGlassContactCard({ user, onClose, onExpand, onViewStats }: { user
         ...(isUserAdmin && user.location?.city ? [{ icon: MapPin, label: 'Location', value: `${user.location.city}, ${user.location.country || ''}` }] : []),
         ...(user.bio ? [{ icon: Info, label: 'Bio', value: user.bio }] : []),
     ]
+
+    const isBotOrSelf = user.is_bot || user.username === 'aida' || user.username?.toLowerCase() === 'aida' || (myId && String(user._id || user.id) === String(myId));
 
     return (
         <div
@@ -120,16 +122,18 @@ function LiquidGlassContactCard({ user, onClose, onExpand, onViewStats }: { user
 
             {/* Action buttons */}
             <div className="px-5 pb-5 flex flex-col gap-2">
-                <div className="flex gap-2">
-                    <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
-                        style={{ background: 'rgba(108,92,231,0.1)' }}>
-                        <Phone className="size-3.5" /> Call
-                    </button>
-                    <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
-                        style={{ background: 'rgba(108,92,231,0.1)' }}>
-                        <Video className="size-3.5" /> Video
-                    </button>
-                </div>
+                {!isBotOrSelf && (
+                    <div className="flex gap-2">
+                        <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
+                            style={{ background: 'rgba(108,92,231,0.1)' }}>
+                            <Phone className="size-3.5" /> Call
+                        </button>
+                        <button className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-purple transition-all hover:bg-purple hover:text-white"
+                            style={{ background: 'rgba(108,92,231,0.1)' }}>
+                            <Video className="size-3.5" /> Video
+                        </button>
+                    </div>
+                )}
                 {onViewStats && (
                     <button 
                         onClick={onViewStats} 
@@ -166,6 +170,19 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
     const socket = getSocket()
     const myId = user?._id || user?.id
     const { setViewStatsUser } = useDashboard()
+
+    const isTargetBot = targetUser?.is_bot || targetUser?.username === 'aida' || targetUser?.username?.toLowerCase() === 'aida';
+    const isTargetSelf = String(targetUser?._id || targetUser?.id) === String(myId);
+    const hideCallButtons = isTargetBot || isTargetSelf;
+
+    const visibleMessages = messages.filter(m => {
+        const sender = m.sender;
+        if (!sender) return true;
+        const isBot = typeof sender === 'object'
+            ? (sender.is_bot || sender.username === 'aida' || sender.username?.toLowerCase() === 'aida')
+            : (sender === 'aida' || m.senderIsBot);
+        return !isBot;
+    });
 
     // Open or create the DM chat
     useEffect(() => {
@@ -339,6 +356,7 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                     <div className="w-64 mb-2 animate-in slide-in-from-right duration-300">
                         <LiquidGlassContactCard
                             user={targetUser}
+                            myId={myId}
                             onClose={() => setShowContactCard(false)}
                             onViewStats={() => {
                                 setViewStatsUser?.(targetUser)
@@ -392,14 +410,18 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                             >
                                 <User className="size-3.5" />
                             </button>
-                            <button className="flex size-8 items-center justify-center rounded-xl text-purple transition-all hover:bg-purple/10"
-                                style={{ background: 'rgba(108,92,231,0.08)' }}>
-                                <Phone className="size-3.5" />
-                            </button>
-                            <button className="flex size-8 items-center justify-center rounded-xl text-purple transition-all hover:bg-purple/10"
-                                style={{ background: 'rgba(108,92,231,0.08)' }}>
-                                <Video className="size-3.5" />
-                            </button>
+                            {!hideCallButtons && (
+                                <>
+                                    <button className="flex size-8 items-center justify-center rounded-xl text-purple transition-all hover:bg-purple/10"
+                                        style={{ background: 'rgba(108,92,231,0.08)' }}>
+                                        <Phone className="size-3.5" />
+                                    </button>
+                                    <button className="flex size-8 items-center justify-center rounded-xl text-purple transition-all hover:bg-purple/10"
+                                        style={{ background: 'rgba(108,92,231,0.08)' }}>
+                                        <Video className="size-3.5" />
+                                    </button>
+                                </>
+                            )}
                             <button onClick={onClose}
                                 className="flex size-8 items-center justify-center rounded-xl transition-all hover:bg-black/8"
                                 style={{ background: 'rgba(0,0,0,0.05)' }}>
@@ -414,14 +436,14 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                             <div className="flex h-full items-center justify-center">
                                 <div className="size-6 animate-spin rounded-full border-2 border-purple border-t-transparent" />
                             </div>
-                        ) : messages.length === 0 ? (
+                        ) : visibleMessages.length === 0 ? (
                             <div className="flex h-full flex-col items-center justify-center text-center">
                                 <ChatAvatar src={targetUser.avatar} name={targetUser.full_name || targetUser.username} className="size-14 mb-3 rounded-2xl" />
                                 <p className="font-semibold text-black text-[13px]">{targetUser.full_name || targetUser.username}</p>
                                 <p className="text-xs text-black/40 mt-1">Start the conversation!</p>
                             </div>
                         ) : (
-                            messages.map(msg => {
+                            visibleMessages.map(msg => {
                                 const own = isOwn(msg)
                                 return (
                                     <div key={msg._id} className={cn("flex gap-2 group", own ? "justify-end" : "justify-start")}>
