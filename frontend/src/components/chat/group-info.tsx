@@ -18,6 +18,7 @@ import {
   Copy,
   Share2,
   Sparkles,
+  Edit,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
@@ -254,11 +255,15 @@ function FilesCard({
   const [inviteCode, setInviteCode] = useState<string>('')
   const [showInviteLink, setShowInviteLink] = useState(false)
   const [showGroupInviteLink, setShowGroupInviteLink] = useState(false)
+  const [allowOrgShare, setAllowOrgShare] = useState(true)
   useEffect(() => {
-    if (title === 'Group Info') {
+    if (title === 'Group Info' || title === 'Shared Resources') {
       getOrgInviteCode()
         .then(res => {
-          if (res?.inviteCode) setInviteCode(res.inviteCode)
+          if (res?.inviteCode) {
+            setInviteCode(res.inviteCode)
+            setAllowOrgShare(res.allowMembersToShareInvite ?? true)
+          }
         })
         .catch(err => console.error('Error fetching org invite code inside FilesCard:', err))
     }
@@ -292,6 +297,23 @@ function FilesCard({
   const fileRows = dynamicRows.length > 0 ? dynamicRows : staticFiles.map(f => ({ label: f.label, icon: f.icon, items: [] }))
   const hasContent = allImageUrls.length > 0 || fileRows.length > 0
 
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}')
+    } catch {
+      return {}
+    }
+  })()
+  const isOrgAdmin = currentUser.role === 'admin'
+  const isGroupAdmin = conv.groupAdmin && (
+    String(conv.groupAdmin._id || conv.groupAdmin.id || conv.groupAdmin) === String(currentUser.id || currentUser._id || '')
+  )
+
+  const showOrgInvite = inviteCode && (isOrgAdmin || allowOrgShare)
+  const showGroupInvite = conv.isGroupChat && conv.inviteCode && (
+    isGroupAdmin || (conv.allowMembersToShareInvite ?? true)
+  )
+
   return (
     <div className="rounded-3xl p-5 relative" style={glass.card}>
       {onClose && (
@@ -306,7 +328,7 @@ function FilesCard({
       )}
       <h2 className="text-[17px] font-bold text-ink mb-3">{title}</h2>
       
-      {inviteCode && (
+      {showOrgInvite && (
         <div className="mb-2">
           {!showInviteLink ? (
             <button
@@ -350,7 +372,7 @@ function FilesCard({
         </div>
       )}
 
-      {conv.isGroupChat && conv.inviteCode && (
+      {showGroupInvite && (
         <div className="mb-4">
           {!showGroupInviteLink ? (
             <button
@@ -447,8 +469,18 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
   const members = conv.members || (conv.isGroupChat ? conv.users : []) || []
   const { setViewStatsUser, onOpenProfile } = useDashboard()
 
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}')
+    } catch {
+      return {}
+    }
+  })()
+  const currentUserId = currentUser.id || currentUser._id || ''
+  const adminId = conv.groupAdmin?._id || conv.groupAdmin?.id || conv.groupAdmin
+
   return (
-    <div className="flex flex-col rounded-3xl p-5 relative" style={glass.card}>
+    <div className="flex flex-col rounded-3xl p-5 relative animate-in fade-in" style={glass.card}>
       {onClose && (
         <button
           onClick={onClose}
@@ -459,45 +491,56 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
           <X className="size-4" />
         </button>
       )}
-      <h2 className="text-[17px] font-bold text-ink mb-3">Members</h2>
+      <h2 className="text-[17px] font-bold text-ink mb-3">Members ({members.length})</h2>
       <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-        {members.map((m: any) => (
-          <div key={m._id || m.id || m.name}
-            onClick={() => onOpenProfile?.(m, true)}
-            className="flex items-start gap-3 rounded-xl px-1.5 py-1.5 hover:bg-purple/5 cursor-pointer">
-            <ChatAvatar src={m.avatar || m.profile_image} name={m.full_name || m.username || '?'}
-              className="size-9 rounded-xl shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <p className="text-[13px] font-bold text-ink truncate">{m.full_name || m.name || m.username}</p>
-                {m.username && <span className="text-[10px] font-semibold text-purple shrink-0">@{m.username}</span>}
-              </div>
-              <p className="text-[10px] text-ink-soft truncate flex items-center gap-1 mt-0.5 leading-tight">
-                <span className="font-medium">{m.org_role || m.role || 'Member'}</span>
-                {(m.organization || m.company) && (
-                  <>
-                    <span className="opacity-60">•</span>
-                    <span className="truncate">{m.organization || m.company}</span>
-                  </>
+        {members.map((m: any) => {
+          const isMemberAdmin = adminId && String(m._id || m.id) === String(adminId)
+          const isMe = String(m._id || m.id) === String(currentUserId)
+          return (
+            <div key={m._id || m.id || m.name}
+              onClick={() => onOpenProfile?.(m, true)}
+              className="flex items-start gap-3 rounded-xl px-1.5 py-1.5 hover:bg-purple/5 cursor-pointer">
+              <ChatAvatar src={m.avatar || m.profile_image} name={m.full_name || m.username || '?'}
+                className="size-9 rounded-xl shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[13px] font-bold text-ink truncate flex items-center gap-1">
+                    {m.full_name || m.name || m.username}
+                    {isMemberAdmin && (
+                      <span className="px-1 py-0.5 text-[8px] font-bold uppercase bg-purple/10 text-purple rounded leading-none shrink-0">
+                        {isMe ? 'You (Admin)' : 'Admin'}
+                      </span>
+                    )}
+                  </p>
+                  {m.username && <span className="text-[10px] font-semibold text-purple shrink-0">@{m.username}</span>}
+                </div>
+                <p className="text-[10px] text-ink-soft truncate flex items-center gap-1 mt-0.5 leading-tight">
+                  <span className="font-medium">{m.org_role || m.role || 'Member'}</span>
+                  {(m.organization || m.company) && (
+                    <>
+                      <span className="opacity-60">•</span>
+                      <span className="truncate">{m.organization || m.company}</span>
+                    </>
+                  )}
+                </p>
+                {m.uniqueTag && (
+                  <p className="text-[9px] text-ink-soft/60 font-mono mt-0.5 truncate">{m.uniqueTag}</p>
                 )}
-              </p>
-              {m.uniqueTag && (
-                <p className="text-[9px] text-ink-soft/60 font-mono mt-0.5 truncate">{m.uniqueTag}</p>
+              </div>
+              {m.isOnline && <span className="size-2 rounded-full bg-emerald-400 shrink-0 mt-2" />}
+              {(m._id || m.id) && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setViewStatsUser?.(m) }}
+                  className="size-7 rounded-lg hover:bg-purple/10 flex items-center justify-center text-purple/60 hover:text-purple cursor-pointer shrink-0 mt-1 transition-colors"
+                  title="View Meeting History"
+                >
+                  <Sparkles className="size-3.5" />
+                </button>
               )}
             </div>
-            {m.isOnline && <span className="size-2 rounded-full bg-emerald-400 shrink-0 mt-2" />}
-            {(m._id || m.id) && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setViewStatsUser?.(m) }}
-                className="size-7 rounded-lg hover:bg-purple/10 flex items-center justify-center text-purple/60 hover:text-purple cursor-pointer shrink-0 mt-1 transition-colors"
-                title="View Meeting History"
-              >
-                <Sparkles className="size-3.5" />
-              </button>
-            )}
-          </div>
-        ))}
+          )
+        })}
         {members.length === 0 && (
           <p className="py-4 text-center text-xs text-ink-soft italic">No members found</p>
         )}
@@ -580,6 +623,226 @@ function ContactCard({ conversation, onClose }: { conversation: any; onClose?: (
   )
 }
 
+/* ── Group Profile Card ─────────────────────────────────────────────────── */
+
+function GroupProfileCard({
+  conversation,
+  onUpdate,
+  onClose,
+}: {
+  conversation: any
+  onUpdate: (updatedConvo: any) => void
+  onClose?: () => void
+}) {
+  const conv = conversation
+  const [isEditing, setIsEditing] = useState(false)
+  const [name, setName] = useState(conv.chatName || conv.name || '')
+  const [bio, setBio] = useState(conv.groupDescription || conv.bio || '')
+  const [avatar, setAvatar] = useState(conv.groupIcon || conv.avatar || '')
+  const [isSaving, setIsSaving] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}')
+    } catch {
+      return {}
+    }
+  })()
+  const currentUserId = currentUser.id || currentUser._id || ''
+  const isGroupAdmin = conv.groupAdmin && (
+    String(conv.groupAdmin._id || conv.groupAdmin.id || conv.groupAdmin) === String(currentUserId)
+  )
+
+  const [allowShare, setAllowShare] = useState(conv.allowMembersToShareInvite ?? true)
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      toast.error('Group name cannot be empty.')
+      return
+    }
+    setIsSaving(true)
+    try {
+      const { updateGroupChat } = await import('@/lib/api')
+      const res = await updateGroupChat(conv.id || conv._id, {
+        chatName: name.trim(),
+        groupDescription: bio.trim(),
+        groupIcon: avatar,
+      })
+      toast.success('Group settings updated!')
+      setIsEditing(false)
+      if (onUpdate) onUpdate(res.conversation || res.data || res)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update group settings')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setIsUploading(true)
+    try {
+      const { uploadGroupOrOrgImage } = await import('@/lib/api')
+      const url = await uploadGroupOrOrgImage(file)
+      setAvatar(url)
+      
+      const { updateGroupChat } = await import('@/lib/api')
+      const res = await updateGroupChat(conv.id || conv._id, { groupIcon: url })
+      toast.success('Group avatar updated!')
+      if (onUpdate) onUpdate(res.conversation || res.data || res)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload image')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleRemoveAvatar = async () => {
+    if (!confirm('Are you sure you want to remove the group avatar?')) return
+    setAvatar('')
+    try {
+      const { updateGroupChat } = await import('@/lib/api')
+      const res = await updateGroupChat(conv.id || conv._id, { groupIcon: '' })
+      toast.success('Group avatar removed')
+      if (onUpdate) onUpdate(res.conversation || res.data || res)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to remove group avatar')
+    }
+  }
+
+  const displayName = conv.chatName || conv.name || 'Group Chat'
+  const displayBio = conv.groupDescription || conv.bio || 'No description'
+
+  return (
+    <div className="rounded-3xl p-5 text-center flex flex-col items-center relative w-full" style={glass.card}>
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 flex size-7 items-center justify-center rounded-lg transition-all hover:bg-black/5 active:scale-95 text-black/40 hover:text-purple"
+          type="button"
+          aria-label="Close"
+        >
+          <X className="size-4" />
+        </button>
+      )}
+
+      {isEditing ? (
+        <div className="w-full text-left space-y-4 mt-2">
+          <h3 className="text-sm font-bold text-ink mb-1">Edit Group Details</h3>
+          
+          <div>
+            <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Group Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full bg-white border border-black/10 rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-purple mt-1"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Description / Bio</label>
+            <textarea
+              value={bio}
+              onChange={e => setBio(e.target.value)}
+              className="w-full bg-white border border-black/10 rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-purple min-h-[70px] mt-1 resize-none"
+            />
+          </div>
+
+          <div className="flex items-center justify-between border-t border-black/5 pt-3 mt-1">
+            <div className="flex-1 pr-2">
+              <p className="text-xs font-bold text-ink">Allow members to share code</p>
+              <p className="text-[10px] text-ink-soft leading-tight mt-0.5">If disabled, only admins can view/share invites</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={allowShare}
+              onChange={async (e) => {
+                const val = e.target.checked
+                setAllowShare(val)
+                try {
+                  const { updateGroupChat } = await import('@/lib/api')
+                  const res = await updateGroupChat(conv.id || conv._id, { allowMembersToShareInvite: val })
+                  if (onUpdate) onUpdate(res.conversation || res.data || res)
+                } catch (err: any) {
+                  toast.error(err.message || 'Failed to update invite setting')
+                }
+              }}
+              className="accent-purple size-4 cursor-pointer"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex-1 py-2 bg-purple text-white text-xs font-bold rounded-xl active:scale-95 transition-all cursor-pointer text-center"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              onClick={() => {
+                setName(conv.chatName || conv.name || '')
+                setBio(conv.groupDescription || conv.bio || '')
+                setIsEditing(false)
+              }}
+              className="flex-1 py-2 border border-black/10 text-ink text-xs font-bold rounded-xl active:scale-95 transition-all cursor-pointer text-center"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="relative size-20 mb-3 group">
+            <ChatAvatar src={avatar || null} name={displayName} isGroup={true} className="size-20 rounded-2xl" />
+            
+            {isGroupAdmin && (
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200">
+                <label className="text-[9px] font-bold text-white uppercase cursor-pointer hover:underline">
+                  {isUploading ? '...' : 'Upload'}
+                  <input type="file" onChange={handleFileChange} accept="image/*" className="hidden" disabled={isUploading} />
+                </label>
+                {avatar && (
+                  <button
+                    onClick={handleRemoveAvatar}
+                    className="text-[9px] font-bold text-red-400 uppercase hover:underline cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <h2 className="text-[17px] font-bold text-ink flex items-center justify-center gap-1.5">
+            {displayName}
+            {isGroupAdmin && (
+              <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase bg-purple/15 text-purple rounded">
+                Admin
+              </span>
+            )}
+          </h2>
+          <p className="text-[11px] text-ink-soft mt-1 leading-relaxed max-w-sm px-2 italic">
+            "{displayBio}"
+          </p>
+
+          {isGroupAdmin && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="mt-3.5 px-3 py-1.5 border border-purple/20 bg-purple/5 hover:bg-purple/10 text-purple text-[11px] font-bold rounded-xl active:scale-95 transition-all cursor-pointer"
+            >
+              Edit Group Info
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ── Main GroupInfo Panel ────────────────────────────────────────────────── */
 
 export function GroupInfo({
@@ -595,6 +858,11 @@ export function GroupInfo({
   const isGroup = conv.isGroupChat || conversation.type === 'group'
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null)
 
+  const [convoState, setConvoState] = useState(conversation)
+  useEffect(() => {
+    setConvoState(conversation)
+  }, [conversation])
+
   return (
     <aside className="flex w-full flex-col gap-4 pointer-events-auto select-none">
       {lightboxState && (
@@ -606,14 +874,18 @@ export function GroupInfo({
       <div className="flex flex-col gap-4 p-4">
         {isGroup ? (
           <>
-            <FilesCard
-              conversation={conversation}
-              title="Group Info"
-              messages={messages}
-              onLightbox={(imgs, idx) => setLightboxState({ images: imgs, index: idx })}
+            <GroupProfileCard
+              conversation={convoState}
+              onUpdate={(updated) => setConvoState(updated)}
               onClose={onClose}
             />
-            <MembersCard conversation={conversation} />
+            <MembersCard conversation={convoState} />
+            <FilesCard
+              conversation={convoState}
+              title="Shared Resources"
+              messages={messages}
+              onLightbox={(imgs, idx) => setLightboxState({ images: imgs, index: idx })}
+            />
           </>
         ) : (
           <>

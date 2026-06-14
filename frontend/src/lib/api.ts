@@ -295,12 +295,13 @@ export const updateGroupChat = async (
         chatName?: string;
         groupIcon?: string;
         groupDescription?: string;
+        allowMembersToShareInvite?: boolean;
     }
 ) => {
-    const res = await fetch(`${BASE_URL}/chat/group/${chatId}`, {
+    const res = await fetch(`${BASE_URL}/chat/group/update`, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify(data),
+        body: JSON.stringify({ chatId, ...data }),
     });
     return handleResponse(res);
 };
@@ -1709,4 +1710,17 @@ export const fetchAiDescription = async (prompt: string) => {
         body: JSON.stringify({ prompt }),
     });
     return handleResponse(res);
+};
+
+export const uploadGroupOrOrgImage = async (file: File): Promise<string> => {
+    const token = localStorage.getItem('access_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${BASE_URL}/message/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    const data = await handleResponse(res);
+    return data.url;
 };
