@@ -1091,6 +1091,8 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
                       {(() => {
                         const lm = chat.latestMessage
                         if (!lm) return 'No messages yet'
+                        const isSystem = lm.message_type === 'system' || lm.is_announcement === true;
+                        if (isSystem) return 'No messages yet'
                         if (lm.content) return lm.content
                         if (lm.message_type === 'image') return '📷 Image'
                         if (lm.message_type === 'voice') return '🎤 Voice message'

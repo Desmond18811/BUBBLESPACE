@@ -177,12 +177,9 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
     const hideCallButtons = isTargetBot || isTargetSelf;
 
     const visibleMessages = messages.filter(m => {
-        const sender = m.sender;
-        if (!sender) return true;
-        const isBot = typeof sender === 'object'
-            ? (sender.is_bot || sender.username === 'aida' || sender.username?.toLowerCase() === 'aida')
-            : (sender === 'aida' || m.senderIsBot);
-        return !isBot;
+        const isSystem = m.message_type === 'system' || m.is_announcement === true;
+        if (isSystem) return false;
+        return true;
     });
 
     // Open or create the DM chat

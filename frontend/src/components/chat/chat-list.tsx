@@ -375,17 +375,27 @@ export function ChatList({
                     const name = getChatName(chat, currentUserId)
                     const avatar = getChatAvatar(chat, currentUserId)
                     const unread = getUnread(chat)
-                    let preview = chat.latestMessage?.content;
-                    if (!preview && chat.latestMessage) {
-                      if (chat.latestMessage.message_type === 'image') preview = '📷 Image';
-                      else if (chat.latestMessage.message_type === 'voice') preview = '🎤 Voice message';
-                      else if (chat.latestMessage.message_type === 'video') preview = '🎥 Video';
-                      else if (chat.latestMessage.message_type === 'file') preview = '📎 Attachment';
+                    const lm = chat.latestMessage
+                    const isSystem = lm && (lm.message_type === 'system' || lm.is_announcement === true);
+
+                    // ── NEW ──
+                    const isBotMsg = lm && (
+                      lm.senderIsBot ||
+                      lm.sender?.is_bot ||
+                      lm.sender?.username?.toLowerCase() === 'aida'
+                    );
+
+                    let preview = (isSystem || isBotMsg) ? null : lm?.content;
+                    if (!preview && lm && !isSystem && !isBotMsg) {
+                      if (lm.message_type === 'image') preview = '📷 Image';
+                      else if (lm.message_type === 'voice') preview = '🎤 Voice message';
+                      else if (lm.message_type === 'video') preview = '🎥 Video';
+                      else if (lm.message_type === 'file') preview = '📎 Attachment';
                       else preview = 'Say hello! 👋';
                     } else if (!preview) {
                       preview = 'Say hello! 👋';
                     }
-                    const time = formatTime(chat.updatedAt || chat.latestMessage?.createdAt)
+                    const time = formatTime(chat.updatedAt || (isSystem ? undefined : lm?.createdAt))
                     const selected = chatId === activeId
 
                     return (

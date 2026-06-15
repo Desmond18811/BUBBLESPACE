@@ -791,14 +791,18 @@ export function ChatWindow({
 
   const getOtherUser = () => chat?.users?.find((u: any) => (u._id || u.id) !== myId)
 
-  // Filter out Aida/bot messages
+  // Filter out system and announcement messages, but keep onboarding text messages visible
   const visibleMessages = messages.filter(m => {
-    const sender = m.sender;
-    if (!sender) return true;
-    const isBot = typeof sender === 'object'
-      ? (sender.is_bot || sender.username === 'aida' || sender.username?.toLowerCase() === 'aida')
-      : (sender === 'aida' || m.senderIsBot);
-    return !isBot;
+    const isSystem = m.message_type === 'system' || m.is_announcement === true;
+    if (isSystem) return false;
+
+    // ── NEW: strip Aida bot notification messages from group chat threads ──
+    if (
+      chat?.isGroupChat &&
+      (m.senderIsBot || m.sender?.is_bot || m.sender?.username?.toLowerCase() === 'aida')
+    ) return false;
+
+    return true;
   });
 
   // Group messages by date

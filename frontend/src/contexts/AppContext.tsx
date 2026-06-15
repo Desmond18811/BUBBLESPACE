@@ -220,9 +220,18 @@ export function AppProvider({ children, user }: AppProviderProps) {
 
             if (!chatId) return
 
+            const isSystem = m?.message_type === 'system' || m?.is_announcement === true;
+            if (isSystem) return; // Ignore system/announcement messages for list update
+
+            // ── NEW: ignore Aida bot messages (e.g. meeting transcripts) in group chats ──
+            const isBotMsg = !!(m?.senderIsBot || m?.sender?.is_bot || m?.sender?.username?.toLowerCase() === 'aida');
+
             setChats(prev => {
                 const idx = prev.findIndex(c => (c._id || c.id) === String(chatId))
                 if (idx === -1) return prev
+
+                // Don't surface bot messages as the latest message in group chats
+                if (isBotMsg && prev[idx]?.isGroupChat) return prev
                 const updated = [...prev]
                 // Build a human-friendly preview even for media messages
                 let preview = m?.content
