@@ -3040,8 +3040,10 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
       const chat = res?.conversation || res?.data?.conversation || res?.data || res
       if (!chat.users && worker) chat.users = [currentUser, worker]
       setActiveChat(chat)
-      setActiveChatId(chat.id || chat._id)
+      const id = chat.id || chat._id
+      setActiveChatId(id)
       setShowInfo(false)
+      navigate({ to: `/dashboard/chat/${id}` })
     } catch {
       toast.error('Failed to open chat')
     } finally {
