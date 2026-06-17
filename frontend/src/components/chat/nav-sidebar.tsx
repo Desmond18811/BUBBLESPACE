@@ -6,7 +6,6 @@ import {
   User,
   LogOut,
   Phone,
-  Video,
   SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'

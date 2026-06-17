@@ -1755,3 +1755,173 @@ export const updateOrgProfile = async (data: {
     });
     return handleResponse(res);
 };
+
+// ─── Company Brain ────────────────────────────────────────────────────────────
+
+export const brainIngestText = async (text: string, title?: string, department?: string) => {
+    const res = await fetch(`${BASE_URL}/brain/ingest`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ sourceType: 'text', content: text, title, department }),
+    });
+    return handleResponse(res);
+};
+
+export const brainIngestUrl = async (url: string, title?: string) => {
+    const res = await fetch(`${BASE_URL}/brain/ingest`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ sourceType: 'url', url, title }),
+    });
+    return handleResponse(res);
+};
+
+export const brainIngestYouTube = async (url: string, title?: string) => {
+    const res = await fetch(`${BASE_URL}/brain/ingest`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ sourceType: 'youtube', url, title }),
+    });
+    return handleResponse(res);
+};
+
+export const brainIngestFile = async (file: File) => {
+    const token = localStorage.getItem('access_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${BASE_URL}/brain/ingest`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    return handleResponse(res);
+};
+
+export const brainSearch = async (query: string, department?: string, topK?: number) => {
+    const q = new URLSearchParams({ query });
+    if (department) q.set('department', department);
+    if (topK) q.set('topK', String(topK));
+    const res = await fetch(`${BASE_URL}/brain/search?${q}`, { headers: getAuthHeaders() });
+    return handleResponse(res);
+};
+
+export const getBrainOnboardingBrief = async () => {
+    const res = await fetch(`${BASE_URL}/brain/brief`, { headers: getAuthHeaders() });
+    return handleResponse(res);
+};
+
+export const getDailyDigest = async (date?: string) => {
+    const q = date ? `?date=${date}` : '';
+    const res = await fetch(`${BASE_URL}/brain/digest${q}`, { headers: getAuthHeaders() });
+    return handleResponse(res);
+};
+
+export const getDigestHistory = async (days = 7) => {
+    const res = await fetch(`${BASE_URL}/brain/digest/history?days=${days}`, { headers: getAuthHeaders() });
+    return handleResponse(res);
+};
+
+export const getExpertiseRadar = async (topic?: string) => {
+    const q = topic ? `?topic=${encodeURIComponent(topic)}` : '';
+    const res = await fetch(`${BASE_URL}/brain/expertise${q}`, { headers: getAuthHeaders() });
+    return handleResponse(res);
+};
+
+export const brainGetJobs = async () => {
+    const res = await fetch(`${BASE_URL}/brain/jobs`, { headers: getAuthHeaders() });
+    return handleResponse(res);
+};
+
+// ─── Calendar Events ──────────────────────────────────────────────────────────
+
+export const createCalendarEvent = async (data: {
+    title: string;
+    eventType?: string;
+    description?: string;
+    startTime: string;
+    endTime: string;
+    isAllDay?: boolean;
+    attendees?: string[];
+    agenda?: string;
+    tags?: string[];
+    isRecurring?: boolean;
+    recurrenceRule?: string;
+}) => {
+    const res = await fetch(`${BASE_URL}/events/create`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
+export const getCalendarEvents = async (params?: {
+    start?: string;
+    end?: string;
+    type?: string;
+    mine?: boolean;
+}) => {
+    const q = new URLSearchParams();
+    if (params?.start) q.set('start', params.start);
+    if (params?.end) q.set('end', params.end);
+    if (params?.type) q.set('type', params.type);
+    if (params?.mine) q.set('mine', 'true');
+    const res = await fetch(`${BASE_URL}/events?${q}`, { headers: getAuthHeaders() });
+    return handleResponse(res);
+};
+
+export const getCalendarEvent = async (id: string) => {
+    const res = await fetch(`${BASE_URL}/events/${id}`, { headers: getAuthHeaders() });
+    return handleResponse(res);
+};
+
+export const updateCalendarEvent = async (id: string, data: any) => {
+    const res = await fetch(`${BASE_URL}/events/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
+export const deleteCalendarEvent = async (id: string) => {
+    const res = await fetch(`${BASE_URL}/events/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const startCalendarMeeting = async (eventId: string) => {
+    const res = await fetch(`${BASE_URL}/events/${eventId}/start-meeting`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
+export const endCalendarMeeting = async (eventId: string, data: { transcriptText?: string }) => {
+    const res = await fetch(`${BASE_URL}/events/${eventId}/end-meeting`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
+export const getEventSuggestions = async (query?: string, startTime?: string) => {
+    const q = new URLSearchParams();
+    if (query) q.set('query', query);
+    if (startTime) q.set('startTime', startTime);
+    const res = await fetch(`${BASE_URL}/events/suggest?${q}`, { headers: getAuthHeaders() });
+    return handleResponse(res);
+};
+
+export const bulkImportHolidays = async (holidays: { name: string; date: string; country?: string }[]) => {
+    const res = await fetch(`${BASE_URL}/events/holidays/bulk`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ holidays }),
+    });
+    return handleResponse(res);
+};

@@ -59,7 +59,7 @@ import {
   profile,
   type Friend,
 } from '@/lib/chat-data'
-import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite } from '@/lib/api'
+import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite, getDailyDigest, getCalendarEvents } from '@/lib/api'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { useSocket } from '@/contexts/AppContext'
@@ -1167,6 +1167,632 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
 }
 
 
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* BrainView                                                                   */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+import {
+  Brain as BrainIcon, Link2, BookOpen, RotateCcw, AlertCircle, ChevronDown as ChevronDownIcon,
+} from 'lucide-react'
+import {
+  brainSearch, brainIngestText, brainIngestUrl, brainIngestYouTube, brainIngestFile,
+  getDailyDigest as webGetDailyDigest, getExpertiseRadar as webGetExpertiseRadar,
+  brainGetJobs, getBrainOnboardingBrief,
+  createCalendarEvent as apiCreateCalendarEvent,
+  getCalendarEvents,
+  startCalendarMeeting as apiStartMeeting,
+  deleteCalendarEvent as apiDeleteCalendarEvent,
+  getEventSuggestions,
+} from '@/lib/api'
+
+type BrainTab = 'search' | 'seed' | 'onboard' | 'digest'
+
+const BRAIN_SOURCE_TYPES = [
+  { key: 'text',    label: 'Text / Paste', icon: <FileText className="size-4" /> },
+  { key: 'url',     label: 'Web Page URL', icon: <Link2 className="size-4" /> },
+  { key: 'youtube', label: 'YouTube',      icon: <Search className="size-4" /> },
+  { key: 'file',    label: 'File Upload',  icon: <Upload className="size-4" /> },
+]
+
+function BrainDigestPanel() {
+  const [digest, setDigest] = useState<any>(null)
+  const [radar, setRadar] = useState<Record<string, any[]>>({})
+  const [loading, setLoading] = useState(true)
+  const [headsUpOpen, setHeadsUpOpen] = useState(false)
+
+  useEffect(() => {
+    Promise.allSettled([webGetDailyDigest(), webGetExpertiseRadar()]).then(([d, r]) => {
+      if (d.status === 'fulfilled') setDigest(d.value?.digest)
+      if (r.status === 'fulfilled') setRadar(r.value?.byTopic || {})
+    }).finally(() => setLoading(false))
+  }, [])
+
+  const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-base font-bold text-ink mb-1">Morning Brief</h2>
+        <p className="text-xs text-ink-soft mb-4">{today}</p>
+
+        {loading ? (
+          <div className="flex items-center gap-3 rounded-2xl bg-purple/5 p-5">
+            <Loader2 className="size-5 text-purple animate-spin" />
+            <span className="text-sm text-ink-soft">Generating your brief…</span>
+          </div>
+        ) : digest ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-purple/10 bg-purple/5 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex size-8 items-center justify-center rounded-xl bg-purple/15"><Sparkles className="size-4 text-purple" /></div>
+                <span className="text-sm font-semibold text-ink">AI Summary</span>
+              </div>
+              <p className="text-sm text-ink leading-relaxed">{digest.morningBrief}</p>
+            </div>
+
+            {digest.events?.length > 0 && (
+              <div className="rounded-2xl border border-black/5 bg-white p-4">
+                <p className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-3">Today's Events ({digest.events.length})</p>
+                {digest.events.map((e: any) => (
+                  <div key={e._id} className="flex items-center gap-3 py-2 border-b border-black/3 last:border-0">
+                    <div className="size-2 rounded-full bg-purple shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-ink truncate">{e.title}</p>
+                      <p className="text-xs text-ink-soft">{new Date(e.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {digest.highConfidenceItems?.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-black/40 uppercase tracking-wider">Key Knowledge ({digest.highConfidenceItems.length})</p>
+                {digest.highConfidenceItems.map((item: any, idx: number) => (
+                  <div key={idx} className="rounded-xl border-l-4 border-purple/40 bg-purple/3 p-3">
+                    <p className="text-[11px] font-semibold text-purple mb-1">{item.sourceTitle || 'Knowledge Base'}</p>
+                    <p className="text-xs text-ink leading-relaxed line-clamp-3">{item.content}</p>
+                    <span className="inline-block mt-1.5 rounded-lg bg-purple/10 px-2 py-0.5 text-[10px] font-semibold text-purple">
+                      {Math.round((item.confidence || 0) * 100)}% confidence
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {digest.headsUpItems?.length > 0 && (
+              <div>
+                <button onClick={() => setHeadsUpOpen(o => !o)} className="flex items-center gap-2 w-full rounded-xl bg-amber-50 border border-amber-100 px-3 py-2 text-left">
+                  <AlertCircle className="size-4 text-amber-500 shrink-0" />
+                  <span className="text-xs font-semibold text-amber-700 flex-1">{digest.headsUpItems.length} heads-up item(s)</span>
+                  <ChevronDownIcon className={cn("size-4 text-amber-500 transition-transform", headsUpOpen && "rotate-180")} />
+                </button>
+                {headsUpOpen && digest.headsUpItems.map((item: any, idx: number) => (
+                  <div key={idx} className="mt-2 rounded-xl border-l-4 border-amber-300 bg-amber-50 p-3">
+                    <p className="text-xs text-ink leading-relaxed line-clamp-2">{item.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-black/5 p-10 text-center">
+            <Sparkles className="size-10 text-black/10" />
+            <p className="text-sm text-ink-soft">No digest yet. Check back tomorrow morning!</p>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 className="text-base font-bold text-ink mb-1">Expertise Radar</h2>
+        <p className="text-xs text-ink-soft mb-4">Top contributors per topic</p>
+        {Object.keys(radar).length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-black/5 p-8 text-center">
+            <Users className="size-10 text-black/10" />
+            <p className="text-sm text-ink-soft">No expertise data yet.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {Object.entries(radar).slice(0, 8).map(([topic, experts]) => (
+              <div key={topic} className="rounded-2xl border border-black/5 bg-white p-4">
+                <p className="text-[11px] font-semibold text-purple mb-3">#{topic}</p>
+                <div className="flex gap-3 flex-wrap">
+                  {experts.slice(0, 4).map((expert: any, idx: number) => (
+                    <div key={idx} className="flex flex-col items-center gap-1">
+                      <div className="flex size-10 items-center justify-center rounded-2xl bg-purple/10 text-base font-bold text-purple">
+                        {(expert.user?.full_name || expert.user?.username || '?')[0].toUpperCase()}
+                      </div>
+                      <p className="text-[10px] text-ink-soft text-center max-w-[52px] truncate">
+                        {expert.user?.full_name?.split(' ')[0] || expert.user?.username || 'Member'}
+                      </p>
+                      <span className="text-[9px] font-semibold text-black/30 bg-black/5 rounded-lg px-1.5 py-0.5">{expert.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function BrainView({ isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
+  const { bgType } = useDashboard()
+  const [activeTab, setActiveTab] = useState<BrainTab>('search')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searching, setSearching] = useState(false)
+  const [seedType, setSeedType] = useState('text')
+  const [seedContent, setSeedContent] = useState('')
+  const [seedUrl, setSeedUrl] = useState('')
+  const [seedTitle, setSeedTitle] = useState('')
+  const [seeding, setSeeding] = useState(false)
+  const [seedMsg, setSeedMsg] = useState('')
+  const [jobs, setJobs] = useState<any[]>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
+  const [onboardBrief, setOnboardBrief] = useState('')
+  const [onboardLoading, setOnboardLoading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const loadJobs = async () => {
+    setJobsLoading(true)
+    try { const d = await brainGetJobs(); setJobs(d?.jobs || []) } catch { /* silent */ }
+    finally { setJobsLoading(false) }
+  }
+  useEffect(() => { if (activeTab === 'seed') loadJobs() }, [activeTab])
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return
+    setSearching(true)
+    try { const d = await brainSearch(searchQuery.trim()); setSearchResults(d?.results || []) }
+    catch { /* silent */ } finally { setSearching(false) }
+  }
+
+  const handleSeed = async () => {
+    setSeeding(true); setSeedMsg('')
+    try {
+      if (seedType === 'text') { if (!seedContent.trim()) throw new Error('Content required'); await brainIngestText(seedContent, seedTitle) }
+      else if (seedType === 'url') { if (!seedUrl.trim()) throw new Error('URL required'); await brainIngestUrl(seedUrl, seedTitle) }
+      else if (seedType === 'youtube') { if (!seedUrl.trim()) throw new Error('YouTube URL required'); await brainIngestYouTube(seedUrl, seedTitle) }
+      setSeedMsg('✓ Ingestion queued!'); setSeedContent(''); setSeedUrl(''); setSeedTitle('')
+      setTimeout(loadJobs, 800)
+    } catch (e: any) { setSeedMsg(`Error: ${e.message}`) } finally { setSeeding(false) }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return
+    setSeeding(true); setSeedMsg('')
+    try { await brainIngestFile(file); setSeedMsg(`✓ "${file.name}" queued.`); setTimeout(loadJobs, 800) }
+    catch (err: any) { setSeedMsg(`Error: ${err.message}`) } finally { setSeeding(false) }
+  }
+
+  const TABS: { id: BrainTab; label: string }[] = [
+    { id: 'search', label: 'Search' }, { id: 'seed', label: 'Seed' },
+    { id: 'onboard', label: 'Onboard' }, { id: 'digest', label: 'Digest' },
+  ]
+
+  return (
+    <div className={cn("flex h-full w-full flex-col", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
+      <ViewHeader title="Company Brain" subtitle="Semantic org knowledge — search, seed and grow intelligence" isNarrow={isNarrow} />
+
+      <div className="flex border-b border-black/5 px-6 gap-5 bg-white">
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            className={cn("pb-3 pt-2 text-sm font-semibold border-b-2 transition-all",
+              activeTab === t.id ? "border-purple text-purple" : "border-transparent text-ink-soft hover:text-ink")}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6">
+        {activeTab === 'search' && (
+          <div>
+            <h2 className="text-base font-bold text-ink mb-1">Search the Brain</h2>
+            <p className="text-xs text-ink-soft mb-4">Ask anything — results pulled semantically from your org's knowledge base.</p>
+            <div className="flex gap-2 mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-black/30" />
+                <input type="text" placeholder="e.g. What is our refund policy?" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  className="w-full rounded-xl border border-black/10 py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-purple/20" />
+              </div>
+              <button onClick={handleSearch} disabled={searching || !searchQuery.trim()}
+                className="rounded-xl bg-purple px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50 hover:opacity-90">
+                {searching ? <Loader2 className="size-4 animate-spin" /> : 'Search'}
+              </button>
+            </div>
+            {searchResults.length === 0 && !searching ? (
+              <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-black/5 p-10 text-center">
+                <BrainIcon className="size-12 text-black/10" />
+                <p className="text-sm text-ink-soft">Results will appear here after you search.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {searchResults.map((r: any, idx: number) => (
+                  <div key={idx} className="rounded-2xl border border-black/5 bg-white p-4 hover:border-purple/20 transition-all">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="text-sm font-bold text-ink">{r.title || 'Knowledge Chunk'}</h3>
+                      <span className="text-[10px] font-semibold text-purple bg-purple/10 rounded-lg px-2 py-0.5">{Math.round((r.score || 0) * 100)}%</span>
+                    </div>
+                    <p className="text-xs text-ink-soft leading-relaxed line-clamp-4">{r.chunk}</p>
+                    {r.department && <span className="inline-block mt-2 text-[10px] font-medium text-black/40 bg-black/5 rounded-lg px-2 py-0.5">{r.department}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'seed' && (
+          <div>
+            <h2 className="text-base font-bold text-ink mb-1">Seed the Brain</h2>
+            <p className="text-xs text-ink-soft mb-4">Add knowledge via text, URL, YouTube, or file upload.</p>
+            <div className="flex gap-2 flex-wrap mb-4">
+              {BRAIN_SOURCE_TYPES.map(t => (
+                <button key={t.key} onClick={() => setSeedType(t.key)}
+                  className={cn("flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold border transition-all",
+                    seedType === t.key ? "border-purple bg-purple/10 text-purple" : "border-black/10 text-ink-soft hover:border-purple/30")}>
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
+            <input type="text" placeholder="Title (optional)" value={seedTitle} onChange={e => setSeedTitle(e.target.value)}
+              className="w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-purple/20" />
+            {seedType === 'text' && (
+              <textarea placeholder="Paste your knowledge here…" value={seedContent} onChange={e => setSeedContent(e.target.value)} rows={6}
+                className="w-full rounded-xl border border-black/10 px-4 py-3 text-sm resize-none mb-3 focus:outline-none focus:ring-2 focus:ring-purple/20" />
+            )}
+            {(seedType === 'url' || seedType === 'youtube') && (
+              <input type="text" placeholder={seedType === 'youtube' ? 'https://youtube.com/watch?v=...' : 'https://...'} value={seedUrl} onChange={e => setSeedUrl(e.target.value)}
+                className="w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-purple/20" />
+            )}
+            {seedType === 'file' ? (
+              <div>
+                <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.mp3,.mp4,.wav,.json" className="hidden" onChange={handleFileUpload} />
+                <button onClick={() => fileInputRef.current?.click()} disabled={seeding}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-purple/20 bg-purple/3 p-6 text-sm font-semibold text-purple hover:bg-purple/8 transition-all disabled:opacity-50">
+                  <Upload className="size-5" />
+                  {seeding ? 'Uploading…' : 'Click to upload PDF, DOCX, TXT, MP3, MP4…'}
+                </button>
+              </div>
+            ) : (
+              <button onClick={handleSeed} disabled={seeding}
+                className="w-full rounded-xl bg-purple py-3 text-sm font-bold text-white disabled:opacity-50 hover:opacity-90 transition-opacity">
+                {seeding ? <Loader2 className="size-4 animate-spin mx-auto" /> : 'Ingest into Brain →'}
+              </button>
+            )}
+            {seedMsg && (
+              <p className={cn("mt-3 text-xs font-semibold rounded-xl px-3 py-2",
+                seedMsg.startsWith('✓') ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700")}>
+                {seedMsg}
+              </p>
+            )}
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-black/40 uppercase tracking-wider">Recent Jobs</h3>
+                <button onClick={loadJobs} className="text-purple hover:opacity-70"><RotateCcw className="size-3.5" /></button>
+              </div>
+              {jobsLoading ? <div className="flex items-center gap-2 text-ink-soft text-xs"><Loader2 className="size-4 animate-spin" /> Loading…</div>
+                : jobs.length === 0 ? <p className="text-xs text-ink-soft">No ingestion jobs yet.</p>
+                : (
+                  <div className="space-y-2">
+                    {jobs.slice(0, 8).map((j: any) => (
+                      <div key={j._id} className="flex items-center gap-3 rounded-xl border border-black/5 bg-white p-3">
+                        <div className={cn("size-2 rounded-full shrink-0",
+                          j.status === 'completed' ? 'bg-emerald-500' : j.status === 'failed' ? 'bg-red-500' : j.status === 'processing' ? 'bg-purple animate-pulse' : 'bg-amber-400')} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-ink truncate">{j.title || j.sourceType}</p>
+                          <p className="text-[10px] text-ink-soft capitalize">{j.status}</p>
+                        </div>
+                        <span className="text-[10px] text-black/30">{new Date(j.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'onboard' && (
+          <div>
+            <h2 className="text-base font-bold text-ink mb-1">Onboarding Brief</h2>
+            <p className="text-xs text-ink-soft mb-4">Generate a personalised brief powered by your org's brain. New members get the same access to historical knowledge.</p>
+            <button onClick={async () => { setOnboardLoading(true); try { const d = await getBrainOnboardingBrief(); setOnboardBrief(d?.brief || 'No brief available.') } catch (e: any) { setOnboardBrief(`Error: ${e.message}`) } finally { setOnboardLoading(false) } }}
+              disabled={onboardLoading}
+              className="flex items-center gap-2 rounded-xl bg-purple px-5 py-3 text-sm font-bold text-white disabled:opacity-50 hover:opacity-90 transition-opacity mb-5">
+              {onboardLoading ? <Loader2 className="size-4 animate-spin" /> : <BookOpen className="size-4" />}
+              Generate My Brief
+            </button>
+            {onboardBrief && (
+              <div className="rounded-2xl border border-purple/10 bg-purple/5 p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex size-8 items-center justify-center rounded-xl bg-purple/15"><BrainIcon className="size-4 text-purple" /></div>
+                  <span className="text-sm font-semibold text-ink">Your Onboarding Brief</span>
+                </div>
+                <p className="text-sm text-ink leading-relaxed whitespace-pre-wrap">{onboardBrief}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'digest' && <BrainDigestPanel />}
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* CalendarView                                                                 */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+const WEB_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const WEB_WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+const WEB_TODAY = new Date()
+const WEB_EVENT_COLORS: Record<string, string> = {
+  meeting_video: '#6c5ce7', meeting_audio: '#0ea5e9',
+  company: '#f59e0b', holiday: '#22c55e', all_day: '#94a3b8',
+}
+
+function isWebSameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+export function CalendarView({ isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
+  const { bgType } = useDashboard()
+  const [currentDate, setCurrentDate] = useState(new Date(WEB_TODAY))
+  const [events, setEvents] = useState<any[]>([])
+  const [eventsLoading, setEventsLoading] = useState(false)
+  const [selectedDay, setSelectedDay] = useState<Date>(WEB_TODAY)
+  const [selectedEvent, setSelectedEvent] = useState<any>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [digest, setDigest] = useState<any>(null)
+  const [digestLoading, setDigestLoading] = useState(true)
+  const [newTitle, setNewTitle] = useState('')
+  const [newType, setNewType] = useState('meeting_video')
+  const [newDesc, setNewDesc] = useState('')
+  const [newAgenda, setNewAgenda] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createErr, setCreateErr] = useState('')
+  const [suggestions, setSuggestions] = useState<any>(null)
+  const titleDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const loadEvents = async () => {
+    setEventsLoading(true)
+    try {
+      const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+      const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      const d = await getCalendarEvents({ start: start.toISOString(), end: end.toISOString() })
+      setEvents(d?.events || [])
+    } catch { /* silent */ } finally { setEventsLoading(false) }
+  }
+
+  useEffect(() => { loadEvents() }, [currentDate])
+  useEffect(() => { apiGetDailyDigest().then(d => setDigest(d?.digest)).catch(() => {}).finally(() => setDigestLoading(false)) }, [])
+
+  useEffect(() => {
+    if (!newTitle.trim()) { setSuggestions(null); return }
+    if (titleDebounce.current) clearTimeout(titleDebounce.current)
+    titleDebounce.current = setTimeout(async () => {
+      try { const d = await getEventSuggestions(newTitle.trim()); setSuggestions(d); if (d?.agendaSuggestion && !newAgenda) setNewAgenda(d.agendaSuggestion) } catch { /* silent */ }
+    }, 600)
+  }, [newTitle])
+
+  const handleCreate = async () => {
+    if (!newTitle.trim()) return setCreateErr('Title required')
+    setCreating(true); setCreateErr('')
+    const startTime = new Date(selectedDay); startTime.setHours(10, 0, 0, 0)
+    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000)
+    try {
+      await apiCreateCalendarEvent({ title: newTitle.trim(), eventType: newType, description: newDesc, agenda: newAgenda, startTime: startTime.toISOString(), endTime: endTime.toISOString() })
+      setShowCreate(false); setNewTitle(''); setNewDesc(''); setNewAgenda('')
+      loadEvents()
+    } catch (e: any) { setCreateErr(e.message) } finally { setCreating(false) }
+  }
+
+  const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
+  const calCells: (Date | null)[] = [
+    ...Array(firstDay.getDay()).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => new Date(currentDate.getFullYear(), currentDate.getMonth(), i + 1)),
+  ]
+  const eventsOnDay = (d: Date) => events.filter(e => isWebSameDay(new Date(e.startTime), d))
+  const selectedDayEvents = eventsOnDay(selectedDay)
+  const upcoming = events.filter(e => new Date(e.startTime) > new Date() && new Date(e.startTime) <= new Date(Date.now() + 7 * 86400000)).slice(0, 5)
+  const fmtT = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const fmtD = (iso: string) => new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+
+  // needed for digest import alias
+  const apiGetDailyDigest = webGetDailyDigest
+
+  return (
+    <div className={cn("flex h-full w-full flex-col", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
+      <ViewHeader title="Calendar" subtitle="Schedule meetings, track events, and start calls powered by the Brain" isNarrow={isNarrow}
+        action={<button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-purple px-4 py-2 text-sm font-bold text-white hover:opacity-90"><Plus className="size-4" /> New Event</button>} />
+
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-y-auto p-5 border-r border-black/5">
+          {!digestLoading && digest?.morningBrief && (
+            <div className="mb-5 rounded-2xl border border-purple/10 bg-purple/5 p-4">
+              <div className="flex items-center gap-2 mb-2"><Sparkles className="size-4 text-purple" /><span className="text-xs font-bold text-purple">Morning Brief</span></div>
+              <p className="text-xs text-ink leading-relaxed line-clamp-3">{digest.morningBrief}</p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth() - 1); setCurrentDate(d) }}
+              className="flex size-8 items-center justify-center rounded-xl border border-black/10 hover:bg-black/5"><ChevronLeft className="size-4" /></button>
+            <h2 className="text-base font-bold text-ink">{WEB_MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}</h2>
+            <button onClick={() => { const d = new Date(currentDate); d.setMonth(d.getMonth() + 1); setCurrentDate(d) }}
+              className="flex size-8 items-center justify-center rounded-xl border border-black/10 hover:bg-black/5"><ChevronRight className="size-4" /></button>
+          </div>
+
+          <div className="grid grid-cols-7 mb-2">
+            {WEB_WEEKDAYS.map(d => <div key={d} className="text-center text-[10px] font-semibold text-black/30 uppercase tracking-wider py-1">{d}</div>)}
+          </div>
+
+          <div className="grid grid-cols-7 gap-0.5 mb-5">
+            {calCells.map((day, idx) => {
+              if (!day) return <div key={`e-${idx}`} />
+              const isToday = isWebSameDay(day, WEB_TODAY)
+              const isSelected = isWebSameDay(day, selectedDay)
+              const dayEvs = eventsOnDay(day)
+              return (
+                <button key={day.toISOString()} onClick={() => setSelectedDay(new Date(day))}
+                  className={cn("flex flex-col items-center py-1.5 rounded-xl transition-all", isSelected ? "bg-purple/10" : "hover:bg-black/3")}>
+                  <span className={cn("flex size-7 items-center justify-center rounded-full text-sm font-semibold",
+                    isToday && !isSelected ? "bg-purple/15 text-purple" : "",
+                    isSelected ? "bg-purple text-white" : "text-ink")}>
+                    {day.getDate()}
+                  </span>
+                  <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center max-w-[30px]">
+                    {dayEvs.slice(0, 3).map((e, i) => <div key={i} className="size-1.5 rounded-full" style={{ backgroundColor: WEB_EVENT_COLORS[e.eventType] || '#6c5ce7' }} />)}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          <div>
+            <h3 className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-3">
+              {isWebSameDay(selectedDay, WEB_TODAY) ? 'Today' : fmtD(selectedDay.toISOString())}
+              <span className="ml-1 text-black/30">· {selectedDayEvents.length} event{selectedDayEvents.length !== 1 ? 's' : ''}</span>
+            </h3>
+            {eventsLoading && <div className="flex items-center gap-2 text-ink-soft text-xs py-3"><Loader2 className="size-4 animate-spin" /> Loading…</div>}
+            {!eventsLoading && selectedDayEvents.length === 0 && (
+              <div className="flex flex-col items-center gap-2 py-8 text-center">
+                <Calendar className="size-10 text-black/10" />
+                <p className="text-xs text-ink-soft">No events. Click + New Event to create one.</p>
+              </div>
+            )}
+            <div className="space-y-2">
+              {selectedDayEvents.map(event => (
+                <button key={event._id} onClick={() => setSelectedEvent(event)} className="w-full text-left rounded-2xl border border-black/5 p-3 hover:border-purple/20 hover:shadow-sm transition-all"
+                  style={{ borderLeftWidth: 3, borderLeftColor: WEB_EVENT_COLORS[event.eventType] || '#6c5ce7' }}>
+                  <p className="text-sm font-semibold text-ink">{event.title}</p>
+                  {!event.isAllDay && <p className="text-xs text-ink-soft mt-0.5">{fmtT(event.startTime)} – {fmtT(event.endTime)}</p>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {!isNarrow && (
+          <div className="w-72 shrink-0 overflow-y-auto p-5 space-y-5">
+            {selectedEvent ? (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-ink">Event Details</h3>
+                  <button onClick={() => setSelectedEvent(null)} className="text-black/30 hover:text-black"><X className="size-4" /></button>
+                </div>
+                <div className="h-1.5 rounded-full mb-4" style={{ backgroundColor: WEB_EVENT_COLORS[selectedEvent.eventType] || '#6c5ce7' }} />
+                <h2 className="text-base font-bold text-ink mb-2">{selectedEvent.title}</h2>
+                <p className="text-xs text-ink-soft mb-1"><Clock className="inline size-3 mr-1" />{fmtD(selectedEvent.startTime)} · {fmtT(selectedEvent.startTime)} – {fmtT(selectedEvent.endTime)}</p>
+                {selectedEvent.summary && (
+                  <div className="mt-3 rounded-xl bg-purple/5 border border-purple/10 p-3">
+                    <p className="text-[11px] font-semibold text-purple mb-1">AI Summary</p>
+                    <p className="text-xs text-ink leading-relaxed">{selectedEvent.summary}</p>
+                  </div>
+                )}
+                {(selectedEvent.eventType === 'meeting_video' || selectedEvent.eventType === 'meeting_audio') && selectedEvent.status === 'scheduled' && (
+                  <button onClick={() => apiStartMeeting(selectedEvent._id).then(d => window.alert(`Room: ${d.roomId}`)).catch((e: any) => window.alert(e.message))}
+                    className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-purple py-3 text-sm font-bold text-white hover:opacity-90">
+                    <Video className="size-4" /> Start Meeting
+                  </button>
+                )}
+                {selectedEvent.status === 'live' && (
+                  <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 p-3">
+                    <div className="size-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs font-semibold text-emerald-700">Meeting is live</span>
+                  </div>
+                )}
+                <button onClick={() => apiDeleteCalendarEvent(selectedEvent._id).then(() => { setSelectedEvent(null); loadEvents() })}
+                  className="mt-3 w-full rounded-xl border border-red-100 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 transition-colors">
+                  Cancel Event
+                </button>
+              </div>
+            ) : (
+              <div>
+                <h3 className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-3">Upcoming (7 days)</h3>
+                {upcoming.length === 0 ? <p className="text-xs text-ink-soft">No upcoming events in the next 7 days.</p>
+                  : upcoming.map(event => (
+                    <button key={event._id} onClick={() => setSelectedEvent(event)} className="w-full text-left rounded-xl border border-black/5 p-3 mb-2 hover:border-purple/20 transition-all">
+                      <p className="text-xs font-semibold text-ink">{event.title}</p>
+                      <p className="text-[10px] text-ink-soft mt-0.5">{fmtD(event.startTime)}</p>
+                      <div className="mt-1 h-0.5 rounded-full w-10" style={{ backgroundColor: WEB_EVENT_COLORS[event.eventType] }} />
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-ink">New Event</h2>
+              <button onClick={() => setShowCreate(false)} className="flex size-8 items-center justify-center rounded-xl bg-black/5 hover:bg-black/10"><X className="size-4 text-black/50" /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-black/40 mb-2">Event Type</p>
+                <div className="flex gap-2 flex-wrap">
+                  {[{ key: 'meeting_video', label: 'Video' }, { key: 'meeting_audio', label: 'Audio' }, { key: 'company', label: 'Company' }, { key: 'all_day', label: 'All Day' }].map(t => (
+                    <button key={t.key} onClick={() => setNewType(t.key)}
+                      className={cn("rounded-xl px-3 py-1.5 text-xs font-semibold border transition-all",
+                        newType === t.key ? "border-purple bg-purple/10 text-purple" : "border-black/10 text-ink-soft hover:border-purple/30")}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-black/40 block mb-1.5">Title</label>
+                <input type="text" placeholder="e.g. Weekly Team Sync" value={newTitle} onChange={e => setNewTitle(e.target.value)}
+                  className="w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple/20" />
+                {suggestions?.titleSuggestions?.length > 0 && (
+                  <div className="flex gap-2 flex-wrap mt-2">
+                    {suggestions.titleSuggestions.slice(0, 3).map((s: string) => (
+                      <button key={s} onClick={() => setNewTitle(s)} className="rounded-xl bg-purple/10 px-2.5 py-1 text-[11px] font-semibold text-purple hover:bg-purple/20">
+                        <Sparkles className="inline size-3 mr-1" />{s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {suggestions?.conflicts?.length > 0 && (
+                  <p className="mt-2 text-xs text-red-500 flex items-center gap-1"><AlertCircle className="size-3" /> {suggestions.conflicts.length} scheduling conflict(s)</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 rounded-xl bg-black/3 px-4 py-2.5">
+                <Calendar className="size-4 text-purple" />
+                <span className="text-xs font-semibold text-ink">{fmtD(selectedDay.toISOString())} · 10:00 AM – 11:00 AM</span>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-black/40 block mb-1.5">Agenda (optional)</label>
+                <textarea value={newAgenda} onChange={e => setNewAgenda(e.target.value)} rows={3} placeholder="Meeting agenda (auto-filled from brain)"
+                  className="w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple/20" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-black/40 block mb-1.5">Description (optional)</label>
+                <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
+                  className="w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple/20" />
+              </div>
+              {createErr && <p className="text-xs text-red-500">{createErr}</p>}
+              <button onClick={handleCreate} disabled={creating || !newTitle.trim()}
+                className="w-full rounded-xl bg-purple py-3 text-sm font-bold text-white disabled:opacity-50 hover:opacity-90">
+                {creating ? <Loader2 className="size-4 animate-spin mx-auto" /> : 'Create Event →'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 /* ---------------- Profile ---------------- */
 
 
@@ -3303,6 +3929,27 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
     }
   })
 
+  // ── Brain: Daily Digest (morning brief from meeting transcripts + group chats) ──
+  const { data: digestData, isLoading: isDigestLoading } = useQuery({
+    queryKey: ['dailyDigest'],
+    queryFn: async () => {
+      const res = await getDailyDigest()
+      return res?.digest || null
+    },
+    staleTime: 5 * 60 * 1000, // Refresh every 5 min
+  })
+
+  // ── Real calendar events from the org (from /api/v1/events) ──
+  const { data: calendarEvents = [] } = useQuery({
+    queryKey: ['calendarEvents', currentDate.getFullYear(), currentDate.getMonth()],
+    queryFn: async () => {
+      const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+      const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      const res = await getCalendarEvents({ start: start.toISOString(), end: end.toISOString() })
+      return res?.events || []
+    },
+  })
+
   // Modal Form State
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -3494,6 +4141,32 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
     <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white">
       {/* Left: Monthly Grid */}
       <div className="flex-1 flex flex-col p-6 border-r border-black/5 overflow-y-auto min-w-0">
+
+        {/* ── Morning Brief (Brain Daily Digest) ── */}
+        {(isDigestLoading || digestData) && (
+          <div className="mb-6 rounded-[20px] border border-purple/15 bg-gradient-to-br from-purple/5 via-purple/3 to-transparent p-4 animate-in fade-in duration-300">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="size-6 rounded-xl bg-purple/10 flex items-center justify-center">
+                <Sparkles className="size-3.5 text-purple" />
+              </div>
+              <span className="text-[11px] font-extrabold uppercase tracking-widest text-purple">Your Morning Brief</span>
+              <span className="ml-auto text-[10px] text-ink-soft">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+            </div>
+            {isDigestLoading ? (
+              <div className="space-y-1.5">
+                <div className="h-3 w-3/4 rounded-full bg-black/5 animate-pulse" />
+                <div className="h-3 w-1/2 rounded-full bg-black/5 animate-pulse" />
+              </div>
+            ) : (
+              <p className="text-[13px] text-ink leading-relaxed">
+                {typeof digestData === 'string'
+                  ? digestData
+                  : digestData?.summary || digestData?.brief || 'No activity to brief on yet. Once your team starts meetings and group conversations, Aida will summarize key points here.'}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-6">
           <div className="flex flex-col">
             <h3 className="text-xl font-bold text-ink">
@@ -3549,6 +4222,17 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
               )
             })
 
+            // Also merge in real org calendar events from /api/v1/events
+            const dayCalEvents = calendarEvents.filter((ev: any) => {
+              const ed = new Date(ev.startTime)
+              return (
+                ed.getDate() === dayNum &&
+                ed.getMonth() === cellDateMonth &&
+                ed.getFullYear() === cellDateYear
+              )
+            })
+            const hasOrgEvent = dayCalEvents.length > 0
+
             const hasUrgent = dayTasks.some((t: any) => t.priority === 'urgent')
             const hasMeeting = dayTasks.some((t: any) => t.type === 'meeting' && t.priority !== 'urgent')
             const hasEvent = dayTasks.some((t: any) => t.type === 'event' && t.priority !== 'urgent')
@@ -3596,6 +4280,9 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                   )}
                   {hasTask && (
                     <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-[#6366f1]")} title="Task" />
+                  )}
+                  {hasOrgEvent && (
+                    <span className={cn("size-1.5 rounded-full ring-1 ring-purple/30", selected ? "bg-white" : "bg-purple")} title="Org Event" />
                   )}
                 </div>
               </button>
