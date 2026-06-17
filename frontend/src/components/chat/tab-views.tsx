@@ -59,7 +59,7 @@ import {
   profile,
   type Friend,
 } from '@/lib/chat-data'
-import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite, getDailyDigest, getCalendarEvents } from '@/lib/api'
+import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite } from '@/lib/api'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { useSocket } from '@/contexts/AppContext'
@@ -547,8 +547,8 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                       {contact.full_name || contact.username}
                     </p>
                     <p className="truncate text-[10px] text-black/40">
-                      {effectiveNarrow 
-                        ? (contact.isOnline ? "Online" : "Away") 
+                      {effectiveNarrow
+                        ? (contact.isOnline ? "Online" : "Away")
                         : (contact.org_role || (contact.role === 'admin' ? contact.status_message : null) || '@' + (contact.username || ''))}
                     </p>
                   </div>
@@ -1188,10 +1188,10 @@ import {
 type BrainTab = 'search' | 'seed' | 'onboard' | 'digest'
 
 const BRAIN_SOURCE_TYPES = [
-  { key: 'text',    label: 'Text / Paste', icon: <FileText className="size-4" /> },
-  { key: 'url',     label: 'Web Page URL', icon: <Link2 className="size-4" /> },
-  { key: 'youtube', label: 'YouTube',      icon: <Search className="size-4" /> },
-  { key: 'file',    label: 'File Upload',  icon: <Upload className="size-4" /> },
+  { key: 'text', label: 'Text / Paste', icon: <FileText className="size-4" /> },
+  { key: 'url', label: 'Web Page URL', icon: <Link2 className="size-4" /> },
+  { key: 'youtube', label: 'YouTube', icon: <Search className="size-4" /> },
+  { key: 'file', label: 'File Upload', icon: <Upload className="size-4" /> },
 ]
 
 function BrainDigestPanel() {
@@ -1477,21 +1477,21 @@ export function BrainView({ isNarrow = false }: { onMessage?: (user: any) => voi
               </div>
               {jobsLoading ? <div className="flex items-center gap-2 text-ink-soft text-xs"><Loader2 className="size-4 animate-spin" /> Loading…</div>
                 : jobs.length === 0 ? <p className="text-xs text-ink-soft">No ingestion jobs yet.</p>
-                : (
-                  <div className="space-y-2">
-                    {jobs.slice(0, 8).map((j: any) => (
-                      <div key={j._id} className="flex items-center gap-3 rounded-xl border border-black/5 bg-white p-3">
-                        <div className={cn("size-2 rounded-full shrink-0",
-                          j.status === 'completed' ? 'bg-emerald-500' : j.status === 'failed' ? 'bg-red-500' : j.status === 'processing' ? 'bg-purple animate-pulse' : 'bg-amber-400')} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-ink truncate">{j.title || j.sourceType}</p>
-                          <p className="text-[10px] text-ink-soft capitalize">{j.status}</p>
+                  : (
+                    <div className="space-y-2">
+                      {jobs.slice(0, 8).map((j: any) => (
+                        <div key={j._id} className="flex items-center gap-3 rounded-xl border border-black/5 bg-white p-3">
+                          <div className={cn("size-2 rounded-full shrink-0",
+                            j.status === 'completed' ? 'bg-emerald-500' : j.status === 'failed' ? 'bg-red-500' : j.status === 'processing' ? 'bg-purple animate-pulse' : 'bg-amber-400')} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-ink truncate">{j.title || j.sourceType}</p>
+                            <p className="text-[10px] text-ink-soft capitalize">{j.status}</p>
+                          </div>
+                          <span className="text-[10px] text-black/30">{new Date(j.createdAt).toLocaleDateString()}</span>
                         </div>
-                        <span className="text-[10px] text-black/30">{new Date(j.createdAt).toLocaleDateString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
             </div>
           </div>
         )}
@@ -1528,8 +1528,8 @@ export function BrainView({ isNarrow = false }: { onMessage?: (user: any) => voi
 /* CalendarView                                                                 */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-const WEB_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
-const WEB_WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+const WEB_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const WEB_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const WEB_TODAY = new Date()
 const WEB_EVENT_COLORS: Record<string, string> = {
   meeting_video: '#6c5ce7', meeting_audio: '#0ea5e9',
@@ -1570,7 +1570,7 @@ export function CalendarView({ isNarrow = false }: { onMessage?: (user: any) => 
   }
 
   useEffect(() => { loadEvents() }, [currentDate])
-  useEffect(() => { apiGetDailyDigest().then(d => setDigest(d?.digest)).catch(() => {}).finally(() => setDigestLoading(false)) }, [])
+  useEffect(() => { apiGetDailyDigest().then(d => setDigest(d?.digest)).catch(() => { }).finally(() => setDigestLoading(false)) }, [])
 
   useEffect(() => {
     if (!newTitle.trim()) { setSuggestions(null); return }
@@ -2306,7 +2306,7 @@ export function ProfileView({ user, onEdit }: { user: any, onEdit: () => void })
                 <Pencil className="size-4" />
                 Edit profile
               </button>
-              
+
               {user?.organization && (
                 <button
                   type="button"
@@ -3873,13 +3873,13 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
 function getCalendarCells(date: Date) {
   const year = date.getFullYear()
   const month = date.getMonth()
-  
+
   const firstDayIndex = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const prevMonthDays = new Date(year, month, 0).getDate()
-  
+
   const cells: { date: Date; isCurrentMonth: boolean }[] = []
-  
+
   // Previous month padding
   for (let i = firstDayIndex - 1; i >= 0; i--) {
     cells.push({
@@ -3887,7 +3887,7 @@ function getCalendarCells(date: Date) {
       isCurrentMonth: false,
     })
   }
-  
+
   // Current month days
   for (let i = 1; i <= daysInMonth; i++) {
     cells.push({
@@ -3895,7 +3895,7 @@ function getCalendarCells(date: Date) {
       isCurrentMonth: true,
     })
   }
-  
+
   // Next month padding to fill 42 cells (6 rows * 7 columns)
   const nextPaddingCount = 42 - cells.length
   for (let i = 1; i <= nextPaddingCount; i++) {
@@ -3904,7 +3904,7 @@ function getCalendarCells(date: Date) {
       isCurrentMonth: false,
     })
   }
-  
+
   return cells
 }
 
@@ -3919,7 +3919,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<any | null>(null)
-  
+
   // Query to fetch tasks
   const { data: tasks = [], refetch: refetchTasksList, isLoading: isTasksLoading } = useQuery({
     queryKey: ['tasks'],
@@ -3933,7 +3933,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
   const { data: digestData, isLoading: isDigestLoading } = useQuery({
     queryKey: ['dailyDigest'],
     queryFn: async () => {
-      const res = await getDailyDigest()
+      const res = await webGetDailyDigest()
       return res?.digest || null
     },
     staleTime: 5 * 60 * 1000, // Refresh every 5 min
@@ -3970,14 +3970,14 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
     setDescription('')
     setType('meeting')
     setMeetingType('video')
-    
+
     // Default times: starting at selected date next hour
     const now = new Date(selectedDate)
     now.setHours(new Date().getHours() + 1, 0, 0, 0)
     const startStr = formatDateForInput(now)
     now.setHours(now.getHours() + 1)
     const endStr = formatDateForInput(now)
-    
+
     setStartTime(startStr)
     setEndTime(endStr)
     setPriority('medium')
@@ -3996,7 +3996,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
     setStartTime(formatDateForInput(new Date(task.start_time)))
     setEndTime(formatDateForInput(new Date(task.end_time)))
     setPriority(task.priority || 'medium')
-    
+
     const hasRec = task.recipients && task.recipients.length > 0
     setNotifyAll(!hasRec)
     setSelectedRecipients(task.recipients ? task.recipients.map((r: any) => typeof r === 'string' ? r : (r._id || r.id || String(r))) : [])
@@ -4331,7 +4331,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                           Event
                         </span>
                       )}
-                      
+
                       <span className={cn(
                         "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase",
                         task.priority === 'urgent' && "bg-red-50 text-red-500",
@@ -4578,7 +4578,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                           onChange={(e) => setSearchQuery(e.target.value)}
                         />
                       </div>
-                      
+
                       <button
                         type="button"
                         onClick={() => {
