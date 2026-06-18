@@ -377,14 +377,11 @@ export function ChatList({
                     const unread = getUnread(chat)
                     const lm = chat.latestMessage
                     const isSystem = lm && (lm.message_type === 'system' || lm.is_announcement === true);
-
-                    // ── NEW ──
                     const isBotMsg = lm && (
                       lm.senderIsBot ||
                       lm.sender?.is_bot ||
                       lm.sender?.username?.toLowerCase() === 'aida'
                     );
-
                     let preview = (isSystem || isBotMsg) ? null : lm?.content;
                     if (!preview && lm && !isSystem && !isBotMsg) {
                       if (lm.message_type === 'image') preview = '📷 Image';
