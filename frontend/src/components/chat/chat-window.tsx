@@ -464,7 +464,7 @@ export function ChatWindow({
       } finally {
         setIsAiSuggesting(false)
       }
-    }, val.trim().length > 0 ? 300 : 200)
+    }, val.trim().length > 0 ? 600 : 250)
   }
 
   const handleMentionSelect = (member: any) => {
