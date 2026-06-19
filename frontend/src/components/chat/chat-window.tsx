@@ -342,6 +342,19 @@ export function ChatWindow({
       setMessages(prev => prev.map(p => p._id === m._id ? { ...p, ...m } : p))
     }
 
+    // Backend emits `message_edited` after a successful edit (see editMessage in
+    // Backend/controllers/messageController.ts). Patch the message text + mark as edited.
+    const onMsgEdited = (msg: any) => {
+      const m = msg?.data || msg
+      if (!m?._id && !m?.id) return
+      const id = m._id || m.id
+      setMessages(prev => prev.map(p =>
+        (p._id === id || p.id === id)
+          ? { ...p, content: m.content ?? p.content, text: m.content ?? m.text ?? p.text, isEdited: true, editedAt: m.editedAt || new Date().toISOString() }
+          : p
+      ))
+    }
+
     const onMsgDeleted = ({ messageId }: any) => {
       setMessages(prev => prev.map(p =>
         p._id === messageId ? { ...p, isDeleted: true, content: 'This message was deleted' } : p
@@ -388,6 +401,7 @@ export function ChatWindow({
 
     socket.on('new_message', onNewMsg)
     socket.on('message_updated', onMsgUpdated)
+    socket.on('message_edited', onMsgEdited)
     socket.on('message_deleted', onMsgDeleted)
     socket.on('message_reaction', onMsgReaction)
     socket.on('messages_read', onMessagesRead)
@@ -397,6 +411,7 @@ export function ChatWindow({
     return () => {
       socket.off('new_message', onNewMsg)
       socket.off('message_updated', onMsgUpdated)
+      socket.off('message_edited', onMsgEdited)
       socket.off('message_deleted', onMsgDeleted)
       socket.off('message_reaction', onMsgReaction)
       socket.off('messages_read', onMessagesRead)

@@ -336,6 +336,15 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
         return isOwn(msg) && ms < 2 * 60 * 1000
     }
 
+    // Backend enforces a 4-minute edit window (EDIT_WINDOW_MS in messageController.ts).
+    // Hide the Edit menu item once the window has lapsed so the user doesn't see an action
+    // that will fail with 403 EDIT_WINDOW_EXPIRED.
+    const canEdit = (msg: Msg) => {
+        if (!isOwn(msg) || msg.isDeleted) return false
+        const ms = Date.now() - new Date(msg.createdAt).getTime()
+        return ms < 4 * 60 * 1000
+    }
+
     return (
         /* Full viewport overlay — backdrop closes on click */
         <div className="fixed inset-0 z-50 pointer-events-none">
@@ -586,12 +595,14 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
                                 </button>
                                 {own && !msg?.isDeleted && (
                                     <>
-                                        <button
-                                            onClick={() => { setEditingId(contextMenu.msgId); setEditText(msg?.content || ''); setContextMenu(null) }}
-                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-black hover:bg-black/5 transition-colors"
-                                        >
-                                            <Edit2 className="size-4 text-black/40" /> Edit
-                                        </button>
+                                        {canEdit(msg!) && (
+                                            <button
+                                                onClick={() => { setEditingId(contextMenu.msgId); setEditText(msg?.content || ''); setContextMenu(null) }}
+                                                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-black hover:bg-black/5 transition-colors"
+                                            >
+                                                <Edit2 className="size-4 text-black/40" /> Edit
+                                            </button>
+                                        )}
                                         {canDeleteForAll(msg!) && (
                                             <button onClick={() => handleDelete(contextMenu.msgId, true)} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
                                                 <Trash2 className="size-4" /> Delete for Everyone
