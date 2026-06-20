@@ -10,18 +10,25 @@ export const Route = createFileRoute("/login")({
     validateSearch: (search: Record<string, unknown>) => {
         return {
             reason: (search.reason as string) || undefined,
+            email: (search.email as string) || undefined,
         };
     },
     component: Login,
 });
 
+// Map signup-state to the screen we should land on after login.
+const routeForStep = (step?: string, onboardingComplete?: boolean): '/dashboard' | '/setup-profile' => {
+    if (onboardingComplete || step === "complete") return "/dashboard";
+    return "/setup-profile";
+};
+
 function Login() {
-    const [email, setEmail] = useState("");
+    const search = useSearch({ from: '/login' });
+    const [email, setEmail] = useState(typeof search.email === 'string' ? search.email : "");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
-    const search = useSearch({ from: '/login' });
     const sessionExpired = search.reason === 'expired';
 
     useEffect(() => {
@@ -55,7 +62,8 @@ function Login() {
                 localStorage.setItem('refresh_token', refreshToken);
                 localStorage.setItem('user', JSON.stringify(user));
                 toast.success('Welcome back to Bubblespace!');
-                navigate({ to: user?.onboardingComplete ? '/dashboard' : '/setup-profile' });
+                // Resume at the exact step the user is on (resumable state machine).
+                navigate({ to: routeForStep(user?.onboardingStep, user?.onboardingComplete) });
             }
         } catch (error: any) {
             toast.error(error.message || 'Invalid credentials');

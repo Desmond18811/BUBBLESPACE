@@ -62,7 +62,10 @@ export function SetupProfileView({
 }) {
     const navigate = useNavigate()
     const isAdmin = user?.role === 'admin'
-    const [step, setStep] = useState<1 | 2 | 3>(1)
+    // Resume the wizard at the step the backend says the user is on.
+    // 'awaiting_org' means profile (step 1) was already saved — jump to step 2.
+    const initialStep: 1 | 2 | 3 = user?.onboardingStep === 'awaiting_org' && isAdmin ? 2 : 1
+    const [step, setStep] = useState<1 | 2 | 3>(initialStep)
     const [loading, setLoading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState<string>('')
     const [successInvite, setSuccessInvite] = useState<{ inviteCode: string; orgName: string; userData: any } | null>(null)

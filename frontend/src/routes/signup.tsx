@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, Mail, Lock, User, Sparkles, Eye, EyeOff } from "lucide-react";
 import { motion } from "motion/react";
-import { register } from "@/lib/api";
+import { register, checkUserStatus } from "@/lib/api";
 import { generateKeyPair } from "@/lib/crypto-utils";
 import { storePrivateKey } from "@/lib/key-storage";
 import { toast } from "sonner";
@@ -67,26 +67,56 @@ function Signup() {
 
         setLoading(true);
         try {
+            const normalizedEmail = email.trim().toLowerCase();
+
+            // Pre-flight: if this email already has an account, route the user
+            // instead of POSTing /register and getting a generic 409.
+            try {
+                const status = await checkUserStatus(normalizedEmail);
+                if (status.exists) {
+                    if (status.nextAction === "verify_otp") {
+                        toast.message("Picking up where you left off — let's finish OTP verification.");
+                        navigate({ to: '/verify-otp', search: { email: normalizedEmail } as any });
+                        return;
+                    }
+                    if (status.nextAction === "login_then_setup" || status.nextAction === "login") {
+                        toast.message("An account with this email already exists. Please log in.");
+                        navigate({ to: '/login', search: { email: normalizedEmail } as any });
+                        return;
+                    }
+                }
+            } catch {
+                // Probe is best-effort; fall through to the real register call.
+            }
+
             const { publicKey, secretKey } = generateKeyPair();
             await storePrivateKey(secretKey);
 
             const response = await register({
-                email,
+                email: normalizedEmail,
                 password,
                 confirm_password: confirmPassword,
                 full_name: name,
                 publicKey,
+                signupKind: signupMode,
                 org_name: signupMode === "organization" ? orgName : undefined,
                 org_industry: signupMode === "organization" ? orgIndustry : undefined,
                 org_size: signupMode === "organization" ? orgSize : undefined,
                 inviteCode: inviteCode || undefined,
             });
 
-            toast.success('Account created! Check your email for a verification code.');
+            toast.success(response?.data?.resumed
+                ? 'Resuming signup — a fresh OTP has been sent.'
+                : 'Account created! Check your email for a verification code.');
             // @ts-ignore - state support
-            navigate({ to: '/verify-otp', search: { email: response.data?.email || email }, state: { email: response.data?.email || email } });
+            navigate({ to: '/verify-otp', search: { email: response.data?.email || normalizedEmail }, state: { email: response.data?.email || normalizedEmail } });
         } catch (error: any) {
-            toast.error(error.message || 'Registration failed');
+            if (error?.status === 409 && error?.data?.requiresLogin) {
+                toast.message("An account with this email already exists. Please log in.");
+                navigate({ to: '/login', search: { email: email.trim().toLowerCase() } as any });
+            } else {
+                toast.error(error.message || 'Registration failed');
+            }
         } finally {
             setLoading(false);
         }
