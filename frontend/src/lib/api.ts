@@ -92,7 +92,9 @@ export const getAuthHeaders = () => {
 const handleResponse = async (res: Response) => {
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        const error: any = new Error(err.message || `Request failed: ${res.status}`);
+        // Backend controllers inconsistently use `message` or `error` for error
+        // text — read either so the UI never falls back to "Request failed: NNN".
+        const error: any = new Error(err.message || err.error || `Request failed: ${res.status}`);
         error.status = res.status;
         error.code = err.code;
         error.data = err.data;
@@ -1722,6 +1724,40 @@ export const ingestOrgDocument = async (data: { title: string; content: string; 
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
+// Brain ingestion from a URL — YouTube transcript or generic web page.
+export const ingestOrgDocumentFromUrl = async (data: { url: string; title?: string; department?: string; accessLevel?: string; tags?: string[] }) => {
+    const res = await fetch(`${BASE_URL}/org/documents/from-url`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+};
+
+// Brain ingestion from a browser File (PDF/txt/md), via multipart upload.
+export const ingestOrgDocumentFromFile = async (params: {
+    file: File;
+    title?: string;
+    department?: string;
+    accessLevel?: string;
+    tags?: string[];
+}) => {
+    const form = new FormData();
+    form.append('file', params.file);
+    if (params.title) form.append('title', params.title);
+    if (params.department) form.append('department', params.department);
+    if (params.accessLevel) form.append('accessLevel', params.accessLevel);
+    if (params.tags) form.append('tags', JSON.stringify(params.tags));
+
+    const token = localStorage.getItem('access_token');
+    const res = await fetch(`${BASE_URL}/org/documents/from-file`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
     });
     return handleResponse(res);
 };

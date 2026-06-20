@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { 
@@ -6,7 +6,7 @@ import {
     ArrowRight, ArrowLeft, Upload, FileText, X, Check, 
     MapPin, Smile, Globe, Bookmark, Plus, Copy, Share
 } from 'lucide-react'
-import { setupProfile, uploadAvatar, onboardOrgBrain, ingestOrgDocument, getOrgInviteCode } from '@/lib/api'
+import { setupProfile, uploadAvatar, onboardOrgBrain, ingestOrgDocument, ingestOrgDocumentFromUrl, ingestOrgDocumentFromFile, getOrgInviteCode } from '@/lib/api'
 import { toast } from 'sonner'
 import { BubblespaceLogo } from '../logo'
 import { countries } from '@/lib/countries'
@@ -109,7 +109,60 @@ export function SetupProfileView({
 
     // Document Ingestion (Admins only)
     const [documents, setDocuments] = useState<{ name: string; content: string }[]>([])
+    const [pendingFiles, setPendingFiles] = useState<File[]>([])
+    const [pendingUrls, setPendingUrls] = useState<{ url: string; title: string }[]>([])
+    const [urlInput, setUrlInput] = useState('')
+    const [urlTitleInput, setUrlTitleInput] = useState('')
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // ── Draft persistence so a mid-setup reload / tab-close doesn't lose work.
+    // pendingFiles + avatar (browser File objects) are intentionally NOT persisted —
+    // they aren't serializable. Everything else (text/URL/orgInfo) survives a refresh.
+    const draftKey = `bubble_setup_profile_draft_v1_${user?.id || user?._id || user?.email || 'anon'}`
+    const hydratedRef = useRef(false)
+
+    // Hydrate the draft on first render. We do it synchronously inside an effect
+    // so the initial paint already reflects what the user had before they left.
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(draftKey)
+            if (raw) {
+                const d = JSON.parse(raw)
+                if (d.formData && typeof d.formData === 'object') {
+                    setFormData(prev => ({ ...prev, ...d.formData }))
+                }
+                if (typeof d.businessDesc === 'string') setBusinessDesc(d.businessDesc)
+                if (typeof d.orgIndustry === 'string' && d.orgIndustry) setOrgIndustry(d.orgIndustry)
+                if (d.orgSize) setOrgSize(d.orgSize)
+                if (Array.isArray(d.documents)) setDocuments(d.documents)
+                if (Array.isArray(d.pendingUrls)) setPendingUrls(d.pendingUrls)
+                if (typeof d.urlInput === 'string') setUrlInput(d.urlInput)
+                if (typeof d.urlTitleInput === 'string') setUrlTitleInput(d.urlTitleInput)
+                if (d.step === 2 || d.step === 3) setStep(d.step)
+            }
+        } catch {
+            // Corrupt draft — ignore.
+        } finally {
+            hydratedRef.current = true
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    // Auto-save on any meaningful change. Skipped until hydration completes so
+    // we don't blow away the saved draft on mount.
+    useEffect(() => {
+        if (!hydratedRef.current) return
+        const draft = {
+            formData, businessDesc, orgIndustry, orgSize,
+            documents, pendingUrls, urlInput, urlTitleInput,
+            step,
+        }
+        try { localStorage.setItem(draftKey, JSON.stringify(draft)) } catch {}
+    }, [draftKey, formData, businessDesc, orgIndustry, orgSize, documents, pendingUrls, urlInput, urlTitleInput, step])
+
+    const clearDraft = () => {
+        try { localStorage.removeItem(draftKey) } catch {}
+    }
 
     const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -125,13 +178,25 @@ export function SetupProfileView({
     }
 
     const processFiles = (fileList: FileList) => {
+        const textExts = ['.txt', '.md', '.json', '.csv']
         for (let i = 0; i < fileList.length; i++) {
             const file = fileList[i]
-            const validTypes = ['.txt', '.md', '.json', '.csv']
             const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
-            
-            if (!validTypes.includes(extension)) {
-                toast.error(`Invalid format: ${file.name}. Only .txt, .md, .json, and .csv are supported for brain training.`)
+            const isPdf = extension === '.pdf' || file.type === 'application/pdf'
+            const isText = textExts.includes(extension) || file.type.startsWith('text/')
+
+            if (isPdf) {
+                // PDFs go straight to the server for extraction — no FileReader.
+                setPendingFiles(prev => {
+                    if (prev.some(f => f.name === file.name && f.size === file.size)) return prev
+                    return [...prev, file]
+                })
+                toast.success(`Queued "${file.name}" for ingestion.`)
+                continue
+            }
+
+            if (!isText) {
+                toast.error(`Unsupported format: ${file.name}. Use PDF, TXT, MD, JSON, or CSV.`)
                 continue
             }
 
@@ -154,6 +219,29 @@ export function SetupProfileView({
 
     const handleRemoveDoc = (index: number) => {
         setDocuments(prev => prev.filter((_, i) => i !== index))
+    }
+
+    const handleRemoveFile = (index: number) => {
+        setPendingFiles(prev => prev.filter((_, i) => i !== index))
+    }
+
+    const handleAddUrl = () => {
+        const url = urlInput.trim()
+        if (!url) {
+            toast.error('Paste a URL (YouTube, ChatGPT share link, article, etc.) first.')
+            return
+        }
+        if (!/^https?:\/\//i.test(url)) {
+            toast.error('URL must start with http:// or https://')
+            return
+        }
+        setPendingUrls(prev => [...prev, { url, title: urlTitleInput.trim() }])
+        setUrlInput('')
+        setUrlTitleInput('')
+    }
+
+    const handleRemoveUrl = (index: number) => {
+        setPendingUrls(prev => prev.filter((_, i) => i !== index))
     }
 
     const handleBackToAuth = () => {
@@ -203,6 +291,7 @@ export function SetupProfileView({
             })
             
             toast.success('Your profile setup is complete!')
+            clearDraft()
             onComplete(res.data)
         } catch (err: any) {
             toast.error(err.message || 'Profile setup failed')
@@ -259,22 +348,66 @@ export function SetupProfileView({
                 }
             }
 
-            if (documents.length > 0) {
-                for (let i = 0; i < documents.length; i++) {
-                    const doc = documents[i]
-                    setUploadProgress(`Training brain with document ${i + 1} of ${documents.length}: ${doc.name}...`)
+            // Drain all three brain-ingestion queues. Partial failures are reported
+            // but do not abort the workspace setup.
+            const totalAssets = documents.length + pendingFiles.length + pendingUrls.length
+            const failures: string[] = []
+            let done = 0
+
+            for (const doc of documents) {
+                done++
+                setUploadProgress(`Training brain ${done}/${totalAssets}: ${doc.name}...`)
+                try {
                     await ingestOrgDocument({
                         title: doc.name,
                         content: doc.content,
                         department: 'general',
                         accessLevel: 'public',
-                        tags: ['onboarding', 'knowledge-training']
+                        tags: ['onboarding', 'knowledge-text'],
                     })
+                } catch (e) {
+                    failures.push(`text "${doc.name}"`)
                 }
+            }
+
+            for (const file of pendingFiles) {
+                done++
+                setUploadProgress(`Training brain ${done}/${totalAssets}: ${file.name}...`)
+                try {
+                    await ingestOrgDocumentFromFile({
+                        file,
+                        department: 'general',
+                        accessLevel: 'public',
+                        tags: ['onboarding', 'knowledge-file'],
+                    })
+                } catch (e) {
+                    failures.push(`file "${file.name}"`)
+                }
+            }
+
+            for (const u of pendingUrls) {
+                done++
+                setUploadProgress(`Training brain ${done}/${totalAssets}: ${u.title || u.url}...`)
+                try {
+                    await ingestOrgDocumentFromUrl({
+                        url: u.url,
+                        title: u.title || undefined,
+                        department: 'general',
+                        accessLevel: 'public',
+                        tags: ['onboarding', 'knowledge-url'],
+                    })
+                } catch (e) {
+                    failures.push(`url "${u.url}"`)
+                }
+            }
+
+            if (failures.length > 0) {
+                toast.error(`Workspace created, but ${failures.length} item(s) could not be ingested: ${failures.join(', ')}. Re-add them later in the Brain section.`)
             }
             
             toast.success("Organization brain and profile setup is fully configured!")
-            
+            clearDraft()
+
             if (inviteCode) {
                 setSuccessInvite({
                     inviteCode,
@@ -892,7 +1025,7 @@ export function SetupProfileView({
                                 >
                                     <div>
                                         <h2 className="text-2xl font-bold font-display text-ink">Train Your Collective Brain</h2>
-                                        <p className="text-ink-soft text-sm mt-1">Upload business documents to train the company's brain (supports .txt, .md, .csv, .json).</p>
+                                        <p className="text-ink-soft text-sm mt-1">Upload PDFs/TXT/MD/CSV/JSON, paste YouTube or article URLs, or write content directly — everything goes into your workspace's vector store.</p>
                                     </div>
 
                                     <div className="space-y-4">
@@ -901,20 +1034,96 @@ export function SetupProfileView({
                                             onClick={() => fileInputRef.current?.click()}
                                             className="border-2 border-dashed border-purple/35 rounded-2xl p-6 flex flex-col items-center justify-center bg-purple-soft/5 hover:bg-purple-soft/10 cursor-pointer transition-all duration-300 group"
                                         >
-                                            <input 
-                                                type="file" 
-                                                multiple 
-                                                className="hidden" 
+                                            <input
+                                                type="file"
+                                                multiple
+                                                className="hidden"
                                                 ref={fileInputRef}
-                                                accept=".txt,.md,.json,.csv"
+                                                accept=".pdf,.txt,.md,.json,.csv,application/pdf,text/plain,text/markdown,text/csv,application/json"
                                                 onChange={handleFileChange}
                                             />
                                             <div className="size-12 rounded-xl bg-purple-soft/40 flex items-center justify-center text-purple transition-transform group-hover:scale-110 duration-200">
                                                 <Upload className="h-6 w-6" />
                                             </div>
                                             <span className="font-bold text-ink mt-3 text-sm">Select files or drag here</span>
-                                            <span className="text-[10px] text-ink-soft mt-1">Supports Text, Markdown, CSV, and JSON (max 5MB)</span>
+                                            <span className="text-[10px] text-ink-soft mt-1">PDF, Text, Markdown, CSV, JSON (up to 20MB each)</span>
                                         </div>
+
+                                        {/* PDFs queued for server-side extraction */}
+                                        {pendingFiles.length > 0 && (
+                                            <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                                                <div className="text-[10px] font-bold text-ink uppercase tracking-wider">Files Queued ({pendingFiles.length})</div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {pendingFiles.map((file, idx) => (
+                                                        <div key={idx} className="flex items-center justify-between bg-white border border-border p-2.5 rounded-xl text-xs shadow-sm">
+                                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                                <FileText className="h-4 w-4 text-purple flex-shrink-0" />
+                                                                <span className="font-semibold text-ink truncate">{file.name}</span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveFile(idx)}
+                                                                className="text-muted-foreground hover:text-red-500 p-0.5 hover:bg-slate-50 rounded-lg transition-colors"
+                                                            >
+                                                                <X className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* URL / YouTube / Article ingestion */}
+                                        <div className="rounded-2xl border border-purple/15 bg-purple-soft/5 p-4 space-y-2">
+                                            <div className="text-[10px] font-bold text-ink uppercase tracking-wider">Import from URL</div>
+                                            <p className="text-[11px] text-ink-soft">Paste a YouTube link (we fetch the transcript), a ChatGPT share link, or any public article URL.</p>
+                                            <input
+                                                type="text"
+                                                value={urlTitleInput}
+                                                onChange={e => setUrlTitleInput(e.target.value)}
+                                                placeholder="Optional title (e.g. Q3 Strategy Talk)"
+                                                className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-ink focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none"
+                                            />
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="url"
+                                                    value={urlInput}
+                                                    onChange={e => setUrlInput(e.target.value)}
+                                                    placeholder="https://youtube.com/watch?v=…  or  https://…"
+                                                    className="flex-1 bg-white border border-border rounded-xl px-3 py-2 text-sm text-ink focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddUrl}
+                                                    className="px-4 rounded-xl bg-purple text-white font-bold text-xs hover:opacity-95 active:scale-95 transition-all"
+                                                >
+                                                    Add
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {pendingUrls.length > 0 && (
+                                            <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                                                <div className="text-[10px] font-bold text-ink uppercase tracking-wider">URLs Queued ({pendingUrls.length})</div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {pendingUrls.map((u, idx) => (
+                                                        <div key={idx} className="flex items-center justify-between bg-white border border-border p-2.5 rounded-xl text-xs shadow-sm">
+                                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                                <FileText className="h-4 w-4 text-purple flex-shrink-0" />
+                                                                <span className="font-semibold text-ink truncate">{u.title || u.url}</span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveUrl(idx)}
+                                                                className="text-muted-foreground hover:text-red-500 p-0.5 hover:bg-slate-50 rounded-lg transition-colors"
+                                                            >
+                                                                <X className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Uploaded Documents List */}
                                         {documents.length > 0 && (
