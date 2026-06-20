@@ -48,7 +48,9 @@ function VerifyOTPPage() {
             localStorage.setItem("user", JSON.stringify(user));
 
             toast.success("Email verified! Welcome to Bubblespace.");
-            navigate({ to: "/dashboard" });
+            // New users must finish profile setup before reaching the app, so the
+            // backend can mark onboardingComplete (it's false until /profile/setup).
+            navigate({ to: user?.onboardingComplete ? "/dashboard" : "/setup-profile" });
         } catch (error: any) {
             toast.error(error.message || "Verification failed");
         } finally {

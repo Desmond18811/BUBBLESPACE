@@ -329,6 +329,26 @@ export function AppProvider({ children, user }: AppProviderProps) {
             }))
         })
 
+        sock?.on('message_deleted', ({ messageId, chatId }: { messageId: string, chatId: string }) => {
+            if (!messageId) return
+            setChats(prev => prev.map(c => {
+                const cid = c._id || c.id
+                if (String(cid) !== String(chatId)) return c
+                const latestId = c.latestMessage?._id || c.latestMessage?.id
+                if (c.latestMessage && String(latestId) === String(messageId)) {
+                    return {
+                        ...c,
+                        latestMessage: {
+                            ...c.latestMessage,
+                            content: '🚫 This message was deleted',
+                            message_type: 'text'
+                        }
+                    }
+                }
+                return c
+            }))
+        })
+
         sock?.on('incoming_call', (data: { fromUserId: string; roomId: string; callerName?: string; callerAvatar?: string; type?: 'voice' | 'video' }) => {
             setCallState(prev => {
                 if (prev.status !== 'idle') {
@@ -400,6 +420,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('chat_deleted')
             sock?.off('messages_read')
             sock?.off('message_reaction')
+            sock?.off('message_deleted')
             sock?.off('meeting_ended')
         }
     }, [user?.id, user?._id])

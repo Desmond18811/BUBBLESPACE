@@ -55,7 +55,7 @@ function Login() {
                 localStorage.setItem('refresh_token', refreshToken);
                 localStorage.setItem('user', JSON.stringify(user));
                 toast.success('Welcome back to Bubblespace!');
-                navigate({ to: '/dashboard' });
+                navigate({ to: user?.onboardingComplete ? '/dashboard' : '/setup-profile' });
             }
         } catch (error: any) {
             toast.error(error.message || 'Invalid credentials');

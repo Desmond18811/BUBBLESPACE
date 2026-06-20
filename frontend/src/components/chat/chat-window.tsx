@@ -194,6 +194,7 @@ export function ChatWindow({
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
   const [isAiSuggesting, setIsAiSuggesting] = useState(false)
+  const [aidaUnavailable, setAidaUnavailable] = useState(false)
   const suggestDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Audio Recording State
@@ -468,14 +469,22 @@ export function ChatWindow({
     // If empty, fetch "start" suggestions
     const query = val.trim() || "Hi"
 
+    // Aida isn't configured on this deployment — stop trying so we don't spam 503s.
+    if (aidaUnavailable) return
+
     suggestDebounce.current = setTimeout(async () => {
       if (!chatId) return
       setIsAiSuggesting(true)
       try {
         const res = await getAidaWritingSuggestions(query, chatId)
         setAiSuggestions(res.suggestions || [])
-      } catch (err) {
-        console.error('Failed to get AI suggestions:', err)
+      } catch (err: any) {
+        if (err?.status === 503 || err?.code === 'AIDA_UNCONFIGURED') {
+          setAidaUnavailable(true)
+          setAiSuggestions([])
+        } else {
+          console.error('Failed to get AI suggestions:', err)
+        }
       } finally {
         setIsAiSuggesting(false)
       }
@@ -1324,8 +1333,17 @@ export function ChatWindow({
           </div>
         )}
 
+        {/* Aida unavailable notice */}
+        {aidaUnavailable && (
+          <div className="absolute inset-x-6 bottom-24 z-20 flex justify-center pb-2">
+            <span className="rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-ink-soft shadow-lg border border-black/5 backdrop-blur-xl">
+              Aida suggestions are unavailable on this workspace
+            </span>
+          </div>
+        )}
+
         {/* Suggestions Bar */}
-        {aiSuggestions.length > 0 && (
+        {!aidaUnavailable && aiSuggestions.length > 0 && (
           <div className="absolute inset-x-6 bottom-24 z-20 flex gap-2 overflow-x-auto pb-2 scrollbar-hide animate-in slide-in-from-bottom-2 duration-300">
             {aiSuggestions.map((s, i) => (
               <button
