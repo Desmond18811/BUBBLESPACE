@@ -183,10 +183,11 @@ export function SetupProfileView({
             const file = fileList[i]
             const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
             const isPdf = extension === '.pdf' || file.type === 'application/pdf'
+            const isDocx = extension === '.docx' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             const isText = textExts.includes(extension) || file.type.startsWith('text/')
 
-            if (isPdf) {
-                // PDFs go straight to the server for extraction — no FileReader.
+            if (isPdf || isDocx) {
+                // PDF/DOCX go straight to the server for extraction — no FileReader.
                 setPendingFiles(prev => {
                     if (prev.some(f => f.name === file.name && f.size === file.size)) return prev
                     return [...prev, file]
@@ -196,7 +197,7 @@ export function SetupProfileView({
             }
 
             if (!isText) {
-                toast.error(`Unsupported format: ${file.name}. Use PDF, TXT, MD, JSON, or CSV.`)
+                toast.error(`Unsupported format: ${file.name}. Use PDF, DOCX, TXT, MD, JSON, or CSV.`)
                 continue
             }
 
@@ -352,19 +353,21 @@ export function SetupProfileView({
             // but do not abort the workspace setup.
             const totalAssets = documents.length + pendingFiles.length + pendingUrls.length
             const failures: string[] = []
+            let embedWarnings = 0 // saved but not embedded (searchable)
             let done = 0
 
             for (const doc of documents) {
                 done++
                 setUploadProgress(`Training brain ${done}/${totalAssets}: ${doc.name}...`)
                 try {
-                    await ingestOrgDocument({
+                    const r = await ingestOrgDocument({
                         title: doc.name,
                         content: doc.content,
                         department: 'general',
                         accessLevel: 'public',
                         tags: ['onboarding', 'knowledge-text'],
                     })
+                    if (r?.warning) embedWarnings++
                 } catch (e) {
                     failures.push(`text "${doc.name}"`)
                 }
@@ -374,12 +377,13 @@ export function SetupProfileView({
                 done++
                 setUploadProgress(`Training brain ${done}/${totalAssets}: ${file.name}...`)
                 try {
-                    await ingestOrgDocumentFromFile({
+                    const r = await ingestOrgDocumentFromFile({
                         file,
                         department: 'general',
                         accessLevel: 'public',
                         tags: ['onboarding', 'knowledge-file'],
                     })
+                    if (r?.warning) embedWarnings++
                 } catch (e) {
                     failures.push(`file "${file.name}"`)
                 }
@@ -389,13 +393,14 @@ export function SetupProfileView({
                 done++
                 setUploadProgress(`Training brain ${done}/${totalAssets}: ${u.title || u.url}...`)
                 try {
-                    await ingestOrgDocumentFromUrl({
+                    const r = await ingestOrgDocumentFromUrl({
                         url: u.url,
                         title: u.title || undefined,
                         department: 'general',
                         accessLevel: 'public',
                         tags: ['onboarding', 'knowledge-url'],
                     })
+                    if (r?.warning) embedWarnings++
                 } catch (e) {
                     failures.push(`url "${u.url}"`)
                 }
@@ -403,6 +408,8 @@ export function SetupProfileView({
 
             if (failures.length > 0) {
                 toast.error(`Workspace created, but ${failures.length} item(s) could not be ingested: ${failures.join(', ')}. Re-add them later in the Brain section.`)
+            } else if (embedWarnings > 0) {
+                toast.warning(`${embedWarnings} item(s) were saved but aren't searchable yet (embeddings unavailable). Aida can't recall them until re-ingested.`)
             }
             
             toast.success("Organization brain and profile setup is fully configured!")
@@ -1039,7 +1046,7 @@ export function SetupProfileView({
                                                 multiple
                                                 className="hidden"
                                                 ref={fileInputRef}
-                                                accept=".pdf,.txt,.md,.json,.csv,application/pdf,text/plain,text/markdown,text/csv,application/json"
+                                                accept=".pdf,.docx,.txt,.md,.json,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,application/json"
                                                 onChange={handleFileChange}
                                             />
                                             <div className="size-12 rounded-xl bg-purple-soft/40 flex items-center justify-center text-purple transition-transform group-hover:scale-110 duration-200">
