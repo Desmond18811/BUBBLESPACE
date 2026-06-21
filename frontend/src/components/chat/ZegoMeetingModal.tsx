@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { Video, Phone, X, Mic, MicOff, VideoOff, FileText, ChevronRight } from 'lucide-react'
 import { createMeeting, addMeetingTranscriptChunk, endMeeting } from '@/lib/api'
+import { useSocket } from '@/contexts/AppContext'
 
 interface TranscriptEntry {
   speaker: string
@@ -16,6 +17,7 @@ export function ZegoMeetingModal({ roomId, type, userId, userName, onClose }: {
   userAvatar?: string
   onClose: () => void
 }) {
+  const { socket } = useSocket()
   const containerRef = useRef<HTMLDivElement>(null)
   const [zegoReady, setZegoReady] = useState(false)
   const [zegoError, setZegoError] = useState<string | null>(null)
@@ -80,6 +82,10 @@ export function ZegoMeetingModal({ roomId, type, userId, userName, onClose }: {
               if (active) {
                 setTranscript(prev => [...prev, entry])
               }
+
+              // Real-time Socket.io relay so other participants see live captions
+              // and the server saves the chunk immediately (parity with LiveKit).
+              socket?.emit('meeting_transcript_chunk', { roomId, speaker: userName || 'You', text })
 
               if (meetingDbId) {
                 addMeetingTranscriptChunk(meetingDbId, {
