@@ -47,6 +47,7 @@ import { toast } from 'sonner'
 
 interface TranscriptEntry {
   speaker: string
+  speakerId?: string
   text: string
   time: string
 }
@@ -97,18 +98,23 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
 
   // Socket Listener for incoming live transcripts
   useEffect(() => {
-    const handleTranscriptChunk = (data: { roomId: string, speaker: string, text: string }) => {
-      if (data.roomId === roomId) {
-        const now = new Date()
-        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        setTranscript(prev => [...prev, { speaker: data.speaker, text: data.text, time: timeStr }])
-      }
+    const handleTranscriptChunk = (data: { roomId: string, speaker: string, speakerId?: string, text: string }) => {
+      if (data.roomId !== roomId) return
+      // Ignore the echo of our own chunk — we already appended it locally in onresult.
+      if (data.speakerId && data.speakerId === userId) return
+      const now = new Date()
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      setTranscript(prev => {
+        // Guard against duplicates (e.g. server re-broadcast) keyed by speaker+text.
+        if (prev.some(e => e.speakerId === data.speakerId && e.text === data.text && e.time === timeStr)) return prev
+        return [...prev, { speaker: data.speaker, speakerId: data.speakerId, text: data.text, time: timeStr }]
+      })
     }
     socket?.on('meeting_transcript_chunk', handleTranscriptChunk)
     return () => {
       socket?.off('meeting_transcript_chunk', handleTranscriptChunk)
     }
-  }, [socket, roomId])
+  }, [socket, roomId, userId])
 
   // Join meeting room and listen for meeting_ended
   useEffect(() => {
@@ -188,18 +194,21 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
 
               const now = new Date()
               const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              const entry: TranscriptEntry = { speaker: userName || 'You', text, time: timeStr }
+              // Web Speech only transcribes THIS browser's mic, so the local user is always
+              // the true speaker — stamp the chunk with their full user id for attribution.
+              const entry: TranscriptEntry = { speaker: userName || 'You', speakerId: userId, text, time: timeStr }
 
               if (active) {
                 setTranscript(prev => [...prev, entry])
               }
 
-              // Real-time socket transcript relay
-              socket?.emit('meeting_transcript_chunk', { roomId, speaker: userName || 'You', text })
+              // Real-time socket transcript relay (speakerId lets peers attribute + dedupe)
+              socket?.emit('meeting_transcript_chunk', { roomId, speaker: userName || 'You', speakerId: userId, text })
 
               if (meetingDbIdRef.current) {
                 addMeetingTranscriptChunk(meetingDbIdRef.current, {
                   speaker: userName || 'You',
+                  speakerId: userId,
                   text,
                   timestamp: Date.now(),
                 }).catch(console.error)

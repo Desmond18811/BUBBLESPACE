@@ -50,7 +50,7 @@ import { useChats } from '@/contexts/AppContext'
 import { useTheme } from 'next-themes'
 import { CreateGroupModal } from './create-group-modal'
 import { useState, useEffect, useRef } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, getSecureMediaUrl } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { updateProfile, uploadAvatar, uploadBackground, searchUsers, getMyContacts, addContact, getSuggestions, removeContact as removeContactApi, blockUser, fetchTasks, createTaskFull, updateTaskFull, deleteTaskFull, fetchAiDescription } from '@/lib/api'
@@ -67,8 +67,19 @@ import { MessageOverlay } from '@/components/chat/message-overlay'
 import { ZegoMeetingModal } from '@/components/chat/ZegoMeetingModal'
 import { countries } from '@/lib/countries'
 
-// Next.js Image polyfill for Vite
-const Image = ({ src, alt, className, ...rest }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string; alt?: string; width?: number; height?: number }) => <img src={src} alt={alt} className={className} {...rest} />
+// Next.js Image polyfill for Vite.
+// Resolves backend media (Filebase, http(s), blob, and backend-relative /uploads paths)
+// via getSecureMediaUrl so avatars/backgrounds load correctly, while leaving bundled
+// public assets (/placeholder.svg, /themes/*.png, …) untouched.
+const resolveImageSrc = (src?: string): string => {
+  if (!src) return '/placeholder.svg'
+  // Bundled public assets are root-relative but NOT backend uploads — serve as-is.
+  if (src.startsWith('/') && !src.startsWith('/uploads') && !src.startsWith('/api')) return src
+  return getSecureMediaUrl(src) || '/placeholder.svg'
+}
+const Image = ({ src, alt, className, ...rest }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string; alt?: string; width?: number; height?: number }) => {
+  return <img src={resolveImageSrc(src)} alt={alt} className={className} {...rest} />
+}
 
 const INDUSTRIES = [
   "Technology & Software",
@@ -2469,12 +2480,9 @@ export function EditView({
   }
 
   const handleBgSelect = async (type: string) => {
+    // Background image is cosmetic only — it does NOT change the light/dark text theme
+    // (that's the separate Appearance toggle), so picking "Light" can't blank the dashboard.
     setBgType(type)
-    if (type === 'dark') {
-      setTheme('dark')
-    } else {
-      setTheme('light')
-    }
     try {
       const res = await updateProfile({ app_background: type })
       setUser(res.data)

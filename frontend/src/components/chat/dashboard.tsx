@@ -133,6 +133,11 @@ export function Dashboard({
 
   const user = userData
 
+  // Apply the user's saved page-background image. NOTE: the background-image picker is
+  // purely cosmetic and is intentionally decoupled from the light/dark *text* theme — the
+  // app keeps its defined dark frame + readable (light-themed) content panel regardless, so
+  // selecting "Light" no longer blanks the dashboard. The light/dark text theme is driven
+  // separately (mobile appearance toggle).
   React.useEffect(() => {
     if (user) {
       if (user.app_background) {
@@ -141,14 +146,9 @@ export function Dashboard({
         } else {
           setBgType(user.app_background)
         }
-        if (user.app_background === 'dark') {
-          setTheme('dark')
-        } else {
-          setTheme('light')
-        }
       }
     }
-  }, [user, setBgType, setTheme])
+  }, [user, setBgType])
 
   // Security: Prevent unauthorized chat access
   React.useEffect(() => {

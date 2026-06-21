@@ -320,6 +320,9 @@ export const updateGroupChat = async (
         groupIcon?: string;
         groupDescription?: string;
         allowMembersToShareInvite?: boolean;
+        maxMembers?: number;
+        transcriptPolicy?: 'email' | 'save' | 'off';
+        resources?: { label: string; url?: string; type?: 'link' | 'file'; addedAt?: string }[];
     }
 ) => {
     const res = await fetch(`${BASE_URL}/chat/group/update`, {
@@ -1246,7 +1249,7 @@ export const fetchMeetingById = async (id: string) => {
  */
 export const addMeetingTranscriptChunk = async (
     meetingId: string,
-    chunk: { speaker?: string; text: string; timestamp?: number }
+    chunk: { speaker?: string; speakerId?: string; text: string; timestamp?: number }
 ) => {
     const res = await fetch(`${BASE_URL}/meetings/${meetingId}/transcript`, {
         method: 'POST',

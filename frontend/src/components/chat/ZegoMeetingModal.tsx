@@ -4,6 +4,7 @@ import { createMeeting, addMeetingTranscriptChunk, endMeeting } from '@/lib/api'
 
 interface TranscriptEntry {
   speaker: string
+  speakerId?: string
   text: string
   time: string
 }
@@ -75,7 +76,9 @@ export function ZegoMeetingModal({ roomId, type, userId, userName, onClose }: {
 
               const now = new Date()
               const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              const entry: TranscriptEntry = { speaker: userName || 'You', text, time: timeStr }
+              // Web Speech transcribes only this browser's mic, so stamp the local user's
+              // full id for reliable "who said what" attribution in the saved transcript.
+              const entry: TranscriptEntry = { speaker: userName || 'You', speakerId: userId, text, time: timeStr }
 
               if (active) {
                 setTranscript(prev => [...prev, entry])
@@ -84,6 +87,7 @@ export function ZegoMeetingModal({ roomId, type, userId, userName, onClose }: {
               if (meetingDbId) {
                 addMeetingTranscriptChunk(meetingDbId, {
                   speaker: userName || 'Guest',
+                  speakerId: userId,
                   text,
                   timestamp: Date.now(),
                 }).catch(console.error)

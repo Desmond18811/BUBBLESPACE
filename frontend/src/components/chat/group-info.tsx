@@ -479,6 +479,12 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
   const currentUserId = currentUser.id || currentUser._id || ''
   const adminId = conv.groupAdmin?._id || conv.groupAdmin?.id || conv.groupAdmin
 
+  // Collapse long member lists: show the first 3, then reveal the rest on demand.
+  const [showAllMembers, setShowAllMembers] = useState(false)
+  const COLLAPSED_COUNT = 3
+  const visibleMembers = showAllMembers ? members : members.slice(0, COLLAPSED_COUNT)
+  const hiddenCount = members.length - visibleMembers.length
+
   return (
     <div className="flex flex-col rounded-3xl p-5 relative animate-in fade-in" style={glass.card}>
       {onClose && (
@@ -492,8 +498,8 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
         </button>
       )}
       <h2 className="text-[17px] font-bold text-ink mb-3">Members ({members.length})</h2>
-      <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-        {members.map((m: any) => {
+      <div className={cn("space-y-1.5 pr-1", showAllMembers && "max-h-[260px] overflow-y-auto")}>
+        {visibleMembers.map((m: any) => {
           const isMemberAdmin = adminId && String(m._id || m.id) === String(adminId)
           const isMe = String(m._id || m.id) === String(currentUserId)
           return (
@@ -545,6 +551,16 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
           <p className="py-4 text-center text-xs text-ink-soft italic">No members found</p>
         )}
       </div>
+      {members.length > COLLAPSED_COUNT && (
+        <button
+          type="button"
+          onClick={() => setShowAllMembers(v => !v)}
+          className="mt-2.5 flex items-center justify-center gap-1 rounded-xl py-2 text-[12px] font-bold text-purple hover:bg-purple/5 transition-colors"
+        >
+          {showAllMembers ? 'Show less' : `Show all ${members.length} members`}
+          <ChevronDown className={cn("size-3.5 transition-transform", showAllMembers && "rotate-180")} />
+        </button>
+      )}
     </div>
   )
 }
@@ -671,10 +687,21 @@ function GroupProfileCard({
   )
 
   const [allowShare, setAllowShare] = useState(conv.allowMembersToShareInvite ?? true)
+  const [maxMembers, setMaxMembers] = useState<number>(conv.maxMembers || 0)
+  const [transcriptPolicy, setTranscriptPolicy] = useState<'email' | 'save' | 'off'>(conv.transcriptPolicy || 'save')
+  const [resources, setResources] = useState<any[]>(conv.resources || [])
+  const [newResLabel, setNewResLabel] = useState('')
+  const [newResUrl, setNewResUrl] = useState('')
+
+  const memberCount = (conv.members || conv.users || []).length
 
   const handleSave = async () => {
     if (!name.trim()) {
       toast.error('Group name cannot be empty.')
+      return
+    }
+    if (maxMembers > 0 && maxMembers < memberCount) {
+      toast.error(`Member cap can't be lower than the current ${memberCount} members.`)
       return
     }
     setIsSaving(true)
@@ -684,6 +711,8 @@ function GroupProfileCard({
         chatName: name.trim(),
         groupDescription: bio.trim(),
         groupIcon: avatar,
+        maxMembers: Number(maxMembers) || 0,
+        transcriptPolicy,
       })
       toast.success('Group settings updated!')
       setIsEditing(false)
@@ -693,6 +722,33 @@ function GroupProfileCard({
     } finally {
       setIsSaving(false)
     }
+  }
+
+  // Resources (group docs/links that feed the AI) persist immediately so they're not lost
+  // if the admin closes the panel without hitting Save.
+  const persistResources = async (next: any[]) => {
+    setResources(next)
+    try {
+      const { updateGroupChat } = await import('@/lib/api')
+      const res = await updateGroupChat(conv.id || conv._id, { resources: next })
+      if (onUpdate) onUpdate(res.conversation || res.data || res)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update resources')
+    }
+  }
+
+  const addResource = () => {
+    if (!newResLabel.trim() || !newResUrl.trim()) {
+      toast.error('Add both a label and a URL.')
+      return
+    }
+    persistResources([...resources, { label: newResLabel.trim(), url: newResUrl.trim(), type: 'link' }])
+    setNewResLabel('')
+    setNewResUrl('')
+  }
+
+  const removeResource = (idx: number) => {
+    persistResources(resources.filter((_, i) => i !== idx))
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -790,6 +846,98 @@ function GroupProfileCard({
             />
           </div>
 
+          {/* Member cap */}
+          <div className="border-t border-black/5 pt-3">
+            <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Member limit</label>
+            <p className="text-[10px] text-ink-soft leading-tight mt-0.5 mb-1.5">Maximum people allowed in this group. 0 = unlimited. Currently {memberCount} members.</p>
+            <input
+              type="number"
+              min={0}
+              value={maxMembers}
+              onChange={e => setMaxMembers(Math.max(0, parseInt(e.target.value || '0', 10)))}
+              className="w-full bg-white border border-black/10 rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-purple"
+            />
+          </div>
+
+          {/* Transcript policy */}
+          <div className="border-t border-black/5 pt-3">
+            <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Meeting transcripts</label>
+            <p className="text-[10px] text-ink-soft leading-tight mt-0.5 mb-1.5">What happens to transcripts of this group's meetings.</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([
+                { val: 'email', label: 'Email members' },
+                { val: 'save', label: 'Save only' },
+                { val: 'off', label: 'Off' },
+              ] as const).map(opt => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => setTranscriptPolicy(opt.val)}
+                  className={cn(
+                    'py-2 rounded-xl text-[11px] font-bold border transition-all',
+                    transcriptPolicy === opt.val
+                      ? 'border-purple bg-purple/10 text-purple'
+                      : 'border-black/10 text-ink-soft hover:bg-black/5'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Group resources (feed the AI) */}
+          <div className="border-t border-black/5 pt-3">
+            <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Resources</label>
+            <p className="text-[10px] text-ink-soft leading-tight mt-0.5 mb-2">Links &amp; docs that give the group's AI context.</p>
+            {resources.length > 0 && (
+              <div className="space-y-1.5 mb-2">
+                {resources.map((r: any, i: number) => (
+                  <div key={i} className="flex items-center gap-2 bg-white border border-black/10 rounded-xl px-2.5 py-1.5">
+                    <Link2 className="size-3.5 text-purple shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-bold text-ink truncate">{r.label}</p>
+                      {r.url && <p className="text-[9px] text-ink-soft truncate">{r.url}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeResource(i)}
+                      className="shrink-0 text-black/30 hover:text-red-500 transition-colors"
+                      aria-label="Remove resource"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <input
+                type="text"
+                value={newResLabel}
+                onChange={e => setNewResLabel(e.target.value)}
+                placeholder="Label (e.g. Team handbook)"
+                className="w-full bg-white border border-black/10 rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-purple"
+              />
+              <div className="flex gap-1.5">
+                <input
+                  type="url"
+                  value={newResUrl}
+                  onChange={e => setNewResUrl(e.target.value)}
+                  placeholder="https://…"
+                  className="flex-1 bg-white border border-black/10 rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-purple"
+                />
+                <button
+                  type="button"
+                  onClick={addResource}
+                  className="px-3 rounded-xl bg-purple/10 text-purple text-xs font-bold hover:bg-purple/20 transition-all"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-2">
             <button
               onClick={handleSave}
@@ -802,6 +950,8 @@ function GroupProfileCard({
               onClick={() => {
                 setName(conv.chatName || conv.name || '')
                 setBio(conv.groupDescription || conv.bio || '')
+                setMaxMembers(conv.maxMembers || 0)
+                setTranscriptPolicy(conv.transcriptPolicy || 'save')
                 setIsEditing(false)
               }}
               className="flex-1 py-2 border border-black/10 text-ink text-xs font-bold rounded-xl active:scale-95 transition-all cursor-pointer text-center"
