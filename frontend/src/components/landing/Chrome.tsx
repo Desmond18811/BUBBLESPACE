@@ -17,17 +17,17 @@ export function Nav() {
             className="fixed inset-x-0 top-0 z-40 border-b border-transparent transition-colors"
         >
             <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-                <a href="#" className="flex items-center gap-2">
+                <Link to="/" className="flex items-center gap-2">
                     <BubblespaceLogo className="size-8" />
                     <span className="font-display text-lg font-bold tracking-tight text-foreground">
                         Bubblespace
                     </span>
-                </a>
+                </Link>
                 <nav className="hidden items-center gap-7 text-sm font-medium text-muted-foreground md:flex">
-                    <a href="#features" className="hover:text-foreground">Features</a>
-                    <a href="#how" className="hover:text-foreground">How it works</a>
-                    <a href="#use-cases" className="hover:text-foreground">Use cases</a>
-                    <a href="#faq" className="hover:text-foreground">FAQ</a>
+                    <Link to="/" hash="features" className="hover:text-foreground">Features</Link>
+                    <Link to="/" hash="how" className="hover:text-foreground">How it works</Link>
+                    <Link to="/" hash="use-cases" className="hover:text-foreground">Use cases</Link>
+                    <Link to="/" hash="faq" className="hover:text-foreground">FAQ</Link>
                 </nav>
                 <Link
                     to="/login"
