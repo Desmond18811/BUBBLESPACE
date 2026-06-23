@@ -20,6 +20,12 @@ import { Route as DashboardProfileImport } from './routes/dashboard/profile'
 import { Route as DashboardEditProfileImport } from './routes/dashboard/edit-profile'
 import { Route as SetupProfileImport } from './routes/setup-profile'
 import { Route as DashboardChatImport } from './routes/dashboard/chat.$chatId'
+import { Route as PrivacyImport } from './routes/privacy'
+import { Route as TermsImport } from './routes/terms'
+import { Route as SecurityImport } from './routes/security'
+import { Route as StatusImport } from './routes/status'
+import { Route as DashboardBrainImport } from './routes/dashboard/brain'
+import { Route as DashboardCalendarImport } from './routes/dashboard/calendar'
 
 const IndexRoute = IndexImport.update({
     path: '/',
@@ -107,6 +113,16 @@ const DashboardChatRoute = DashboardChatImport.update({
     getParentRoute: () => DashboardRoute,
 } as any)
 
+const DashboardBrainRoute = DashboardBrainImport.update({
+    path: '/brain',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
+const DashboardCalendarRoute = DashboardCalendarImport.update({
+    path: '/calendar',
+    getParentRoute: () => DashboardRoute,
+} as any)
+
 const DashboardRoute = DashboardImport.update({
     path: '/dashboard',
     getParentRoute: () => rootRoute,
@@ -120,10 +136,32 @@ const DashboardRoute = DashboardImport.update({
     DashboardProfileRoute,
     DashboardEditProfileRoute,
     DashboardChatRoute,
+    DashboardBrainRoute,
+    DashboardCalendarRoute,
 ] as any) as any
 
 const SetupProfileRoute = SetupProfileImport.update({
     path: '/setup-profile',
+    getParentRoute: () => rootRoute,
+} as any)
+
+const PrivacyRoute = PrivacyImport.update({
+    path: '/privacy',
+    getParentRoute: () => rootRoute,
+} as any)
+
+const TermsRoute = TermsImport.update({
+    path: '/terms',
+    getParentRoute: () => rootRoute,
+} as any)
+
+const SecurityRoute = SecurityImport.update({
+    path: '/security',
+    getParentRoute: () => rootRoute,
+} as any)
+
+const StatusRoute = StatusImport.update({
+    path: '/status',
     getParentRoute: () => rootRoute,
 } as any)
 
@@ -138,6 +176,10 @@ export const routeTree = (rootRoute as any).addChildren([
     GoogleCallbackRoute,
     NotFoundRoute,
     SetupProfileRoute,
+    PrivacyRoute,
+    TermsRoute,
+    SecurityRoute,
+    StatusRoute,
 ] as any) as any
 
 declare module '@tanstack/react-router' {
@@ -152,6 +194,10 @@ declare module '@tanstack/react-router' {
     '/auth/google/callback': any
     '/404': any
     '/setup-profile': any
+    '/privacy': any
+    '/terms': any
+    '/security': any
+    '/status': any
     '/dashboard/': any
     '/dashboard/all': any
     '/dashboard/work': any
@@ -161,6 +207,8 @@ declare module '@tanstack/react-router' {
     '/dashboard/profile': any
     '/dashboard/edit-profile': any
     '/dashboard/chat/$chatId': any
+    '/dashboard/brain': any
+    '/dashboard/calendar': any
   }
 }
 

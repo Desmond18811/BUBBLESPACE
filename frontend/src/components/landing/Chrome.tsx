@@ -49,10 +49,10 @@ export function Footer() {
                     <span className="font-display font-bold text-foreground">Bubblespace</span>
                 </div>
                 <nav className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
-                    <a href="#" className="hover:text-foreground">Privacy</a>
-                    <a href="#" className="hover:text-foreground">Terms</a>
-                    <a href="#" className="hover:text-foreground">Security</a>
-                    <a href="#" className="hover:text-foreground">Status</a>
+                    <Link to="/privacy" className="hover:text-foreground">Privacy</Link>
+                    <Link to="/terms" className="hover:text-foreground">Terms</Link>
+                    <Link to="/security" className="hover:text-foreground">Security</Link>
+                    <Link to="/status" className="hover:text-foreground">Status</Link>
                 </nav>
                 <p className="text-sm text-muted-foreground">
                     © {new Date().getFullYear()} Bubblespace, Inc.

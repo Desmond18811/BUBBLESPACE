@@ -35,9 +35,9 @@ export const Route = createFileRoute("/")({
 
 function Index() {
     return (
-        <div className="relative min-h-screen bg-background">
+        <div className="relative min-h-screen flex flex-col bg-background">
             <Nav />
-            <main>
+            <main className="flex-1 w-full">
                 <Hero />
                 <Features />
                 <HowItWorks />
