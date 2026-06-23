@@ -1662,6 +1662,17 @@ export const setupProfile = async (data: any) => {
     return handleResponse(res);
 };
 
+// One-time, pre-onboarding account-type choice for social (Google) accounts.
+// Picking 'organization' promotes the user to an org founder (role=admin).
+export const setAccountType = async (accountType: 'individual' | 'organization') => {
+    const res = await fetch(`${BASE_URL}/auth/account-type`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ accountType }),
+    });
+    return handleResponse(res);
+};
+
 // ─── Workspace: Shared With Me ────────────────────────────────────────────────
 
 export const getSharedWithMeFiles = async () => {

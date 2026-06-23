@@ -6,7 +6,7 @@ import {
     ArrowRight, ArrowLeft, Upload, FileText, X, Check, 
     MapPin, Smile, Globe, Bookmark, Plus, Copy, Share
 } from 'lucide-react'
-import { setupProfile, uploadAvatar, onboardOrgBrain, ingestOrgDocument, ingestOrgDocumentFromUrl, ingestOrgDocumentFromFile, getOrgInviteCode } from '@/lib/api'
+import { setupProfile, uploadAvatar, onboardOrgBrain, ingestOrgDocument, ingestOrgDocumentFromUrl, ingestOrgDocumentFromFile, getOrgInviteCode, setAccountType } from '@/lib/api'
 import { toast } from 'sonner'
 import { BubblespaceLogo } from '../logo'
 import { countries } from '@/lib/countries'
@@ -61,11 +61,26 @@ export function SetupProfileView({
     onComplete: (updatedUser: any) => void
 }) {
     const navigate = useNavigate()
-    const isAdmin = user?.role === 'admin'
+    // Local copy of the user so a mid-wizard account-type promotion (Google users
+    // choosing "Organization") re-derives isAdmin without a full route refetch.
+    const [currentUser, setCurrentUser] = useState(user)
+    const isAdmin = currentUser?.role === 'admin'
+
+    // Step 0 ("Choose account type") is shown only to social (Google) accounts that
+    // haven't committed to a type yet. Email signups already chose on the signup page.
+    const needsAccountType =
+        !!currentUser?.isSocialAccount &&
+        !currentUser?.onboardingComplete &&
+        currentUser?.role !== 'admin' &&
+        !currentUser?.organization
+
     // Resume the wizard at the step the backend says the user is on.
     // 'awaiting_org' means profile (step 1) was already saved — jump to step 2.
-    const initialStep: 1 | 2 | 3 = user?.onboardingStep === 'awaiting_org' && isAdmin ? 2 : 1
-    const [step, setStep] = useState<1 | 2 | 3>(initialStep)
+    const initialStep: 0 | 1 | 2 | 3 = needsAccountType
+        ? 0
+        : (user?.onboardingStep === 'awaiting_org' && isAdmin ? 2 : 1)
+    const [step, setStep] = useState<0 | 1 | 2 | 3>(initialStep)
+    const [accountTypeLoading, setAccountTypeLoading] = useState<null | 'individual' | 'organization'>(null)
     const [loading, setLoading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState<string>('')
     const [successInvite, setSuccessInvite] = useState<{ inviteCode: string; orgName: string; userData: any } | null>(null)
@@ -251,6 +266,30 @@ export function SetupProfileView({
         localStorage.removeItem("user")
         localStorage.removeItem("bubblespace_private_key")
         navigate({ to: "/login" })
+    }
+
+    // Step 0: commit the account type, then drop into the regular wizard.
+    // Organization requires a backend promotion (role -> admin); individual is a
+    // no-op server-side, so we just advance locally.
+    const handleChooseAccountType = async (type: 'individual' | 'organization') => {
+        setAccountTypeLoading(type)
+        try {
+            const res = await setAccountType(type)
+            if (res?.data) {
+                setCurrentUser(res.data)
+                // Keep localStorage in sync so a refresh doesn't re-show the chooser.
+                try {
+                    const stored = localStorage.getItem('user')
+                    const merged = stored ? { ...JSON.parse(stored), ...res.data } : res.data
+                    localStorage.setItem('user', JSON.stringify(merged))
+                } catch {}
+            }
+            setStep(1)
+        } catch (err: any) {
+            toast.error(err.message || 'Could not set account type. Please try again.')
+        } finally {
+            setAccountTypeLoading(null)
+        }
     }
 
     const handleNextStep = (e: React.FormEvent) => {
@@ -712,6 +751,65 @@ export function SetupProfileView({
                 <div className="flex-1 p-8 sm:p-10 lg:p-12 overflow-y-auto bg-slate-50/35 flex flex-col justify-between">
                     <div className="flex-1">
                         <AnimatePresence mode="wait">
+                            {step === 0 && (
+                                <motion.div
+                                    key="step0"
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -20 }}
+                                    className="space-y-6"
+                                >
+                                    <div>
+                                        <h2 className="text-2xl font-bold font-display text-ink">Choose your account type</h2>
+                                        <p className="text-ink-soft text-sm mt-1">Are you joining as an individual, or setting up a workspace for your organization?</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <button
+                                            type="button"
+                                            disabled={!!accountTypeLoading}
+                                            onClick={() => handleChooseAccountType('individual')}
+                                            className="group text-left p-6 rounded-2xl border-2 border-border bg-white hover:border-purple hover:bg-purple-soft/5 transition-all active:scale-[0.98] disabled:opacity-50 flex flex-col gap-3"
+                                        >
+                                            <div className="size-12 rounded-xl bg-purple-soft/40 flex items-center justify-center text-purple transition-transform group-hover:scale-110 duration-200">
+                                                {accountTypeLoading === 'individual' ? <Loader2 className="h-6 w-6 animate-spin" /> : <User className="h-6 w-6" />}
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-ink text-sm">Individual</h3>
+                                                <p className="text-xs text-ink-soft mt-1">A personal account to chat, collaborate, and join existing workspaces.</p>
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            disabled={!!accountTypeLoading}
+                                            onClick={() => handleChooseAccountType('organization')}
+                                            className="group text-left p-6 rounded-2xl border-2 border-border bg-white hover:border-purple hover:bg-purple-soft/5 transition-all active:scale-[0.98] disabled:opacity-50 flex flex-col gap-3"
+                                        >
+                                            <div className="size-12 rounded-xl bg-purple-soft/40 flex items-center justify-center text-purple transition-transform group-hover:scale-110 duration-200">
+                                                {accountTypeLoading === 'organization' ? <Loader2 className="h-6 w-6 animate-spin" /> : <Briefcase className="h-6 w-6" />}
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-ink text-sm">Organization</h3>
+                                                <p className="text-xs text-ink-soft mt-1">Create a workspace for your team, train its AI brain, and invite members.</p>
+                                            </div>
+                                        </button>
+                                    </div>
+
+                                    <div className="pt-2">
+                                        <button
+                                            type="button"
+                                            disabled={!!accountTypeLoading}
+                                            onClick={handleBackToAuth}
+                                            className="h-12 px-6 border border-border hover:bg-slate-50 font-bold rounded-xl transition-all flex items-center gap-2 text-ink-soft text-sm disabled:opacity-50"
+                                        >
+                                            <ArrowLeft className="h-4 w-4" />
+                                            Back
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+
                             {step === 1 && (
                                 <motion.div
                                     key="step1"
