@@ -36,6 +36,7 @@ interface Msg {
     reactions?: { emoji: string; users: string[] }[]
     readBy?: string[]
     senderIsBot?: boolean
+    is_announcement?: boolean
 }
 
 // ── Liquid Glass Contact Card (floats outside the chat container) ──────────
