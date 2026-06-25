@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { BubblespaceLogo } from "@/components/logo";
 import { motion } from "motion/react";
 import { ArrowLeft } from "lucide-react";
+import { resumeFromUser } from "@/lib/onboarding";
 
 export const Route = createFileRoute("/verify-otp")({
     validateSearch: (search: Record<string, unknown>) => {
@@ -48,9 +49,8 @@ function VerifyOTPPage() {
             localStorage.setItem("user", JSON.stringify(user));
 
             toast.success("Email verified! Welcome to Bubblespace.");
-            // Resume at the step the backend says the user is on.
-            const goToDashboard = user?.onboardingComplete || user?.onboardingStep === "complete";
-            navigate({ to: goToDashboard ? "/dashboard" : "/setup-profile" });
+            // Resume at the step the backend says the user is on (mirrors stage).
+            navigate({ to: resumeFromUser(user) });
         } catch (error: any) {
             toast.error(error.message || "Verification failed");
         } finally {

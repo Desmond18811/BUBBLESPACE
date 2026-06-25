@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { register, checkUserStatus } from "@/lib/api";
 import { generateKeyPair } from "@/lib/crypto-utils";
 import { storePrivateKey } from "@/lib/key-storage";
+import { setStoredStage } from "@/lib/onboarding";
 import { toast } from "sonner";
 import { PasswordValidator, getPasswordRequirements } from "@/components/auth/password-validator";
 
@@ -75,6 +76,7 @@ function Signup() {
                 const status = await checkUserStatus(normalizedEmail);
                 if (status.exists) {
                     if (status.nextAction === "verify_otp") {
+                        setStoredStage('awaiting_otp');
                         toast.message("Picking up where you left off — let's finish OTP verification.");
                         navigate({ to: '/verify-otp', search: { email: normalizedEmail } as any });
                         return;
@@ -105,6 +107,7 @@ function Signup() {
                 inviteCode: inviteCode || undefined,
             });
 
+            setStoredStage('awaiting_otp');
             toast.success(response?.data?.resumed
                 ? 'Resuming signup — a fresh OTP has been sent.'
                 : 'Account created! Check your email for a verification code.');

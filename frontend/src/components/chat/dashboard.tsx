@@ -28,6 +28,7 @@ import { ChatAvatar } from '@/components/chat/chat-avatar'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
+import { clearStoredStage } from '@/lib/onboarding'
 
 export function Dashboard({
   bgType,
@@ -213,6 +214,7 @@ export function Dashboard({
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");
     localStorage.removeItem("bubblespace_private_key");
+    clearStoredStage();
     navigate({ to: "/login" });
   };
 

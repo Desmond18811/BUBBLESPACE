@@ -3,6 +3,7 @@ import { SetupProfileView } from '@/components/chat/setup-profile-view'
 import { getMyProfile } from '@/lib/api'
 import { useQuery } from '@tanstack/react-query'
 import React from 'react'
+import { setStoredStage, stageFromUser } from '@/lib/onboarding'
 
 export const Route = createFileRoute('/setup-profile')({
     component: SetupProfileRoutePage,
@@ -18,6 +19,20 @@ function SetupProfileRoutePage() {
         },
         staleTime: 1000 * 60 * 5,
     })
+
+    // Authoritative stage gate: the backend profile decides. If onboarding is already
+    // complete, skip setup entirely (→ dashboard) so a returning user never re-submits
+    // a finished stage (the source of duplicate/409 errors). Otherwise mirror the
+    // current stage into sessionStorage for instant resume.
+    React.useEffect(() => {
+        if (!userData) return
+        if (userData.onboardingComplete) {
+            setStoredStage('complete')
+            navigate({ to: '/dashboard/all' })
+        } else {
+            setStoredStage(stageFromUser(userData))
+        }
+    }, [userData, navigate])
 
     if (isLoading) {
         return (

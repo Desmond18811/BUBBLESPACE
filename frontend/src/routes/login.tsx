@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { login } from "@/lib/api";
 import { toast } from "sonner";
 import { PasswordValidator, getPasswordRequirements } from "@/components/auth/password-validator";
+import { resumeFromUser, setStoredStage } from "@/lib/onboarding";
 
 export const Route = createFileRoute("/login")({
     validateSearch: (search: Record<string, unknown>) => {
@@ -15,12 +16,6 @@ export const Route = createFileRoute("/login")({
     },
     component: Login,
 });
-
-// Map signup-state to the screen we should land on after login.
-const routeForStep = (step?: string, onboardingComplete?: boolean): '/dashboard' | '/setup-profile' => {
-    if (onboardingComplete || step === "complete") return "/dashboard";
-    return "/setup-profile";
-};
 
 function Login() {
     const search = useSearch({ from: '/login' });
@@ -54,6 +49,7 @@ function Login() {
             const { accessToken, refreshToken, user, requiresVerification } = data;
 
             if (requiresVerification || !user?.isVerified) {
+                setStoredStage('awaiting_otp');
                 toast.error('Please verify your account first. A new code has been sent.');
                 // @ts-ignore - state is supported but might have typing issues in some versions
                 navigate({ to: '/verify-otp', search: { email: user?.email || email }, state: { email: user?.email || email } });
@@ -62,8 +58,8 @@ function Login() {
                 localStorage.setItem('refresh_token', refreshToken);
                 localStorage.setItem('user', JSON.stringify(user));
                 toast.success('Welcome back to Bubblespace!');
-                // Resume at the exact step the user is on (resumable state machine).
-                navigate({ to: routeForStep(user?.onboardingStep, user?.onboardingComplete) });
+                // Resume at the exact step the backend says the user is on (mirrors stage).
+                navigate({ to: resumeFromUser(user) });
             }
         } catch (error: any) {
             toast.error(error.message || 'Invalid credentials');
