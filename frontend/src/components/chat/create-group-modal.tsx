@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { X, Users, Search, Check, Sparkles, Loader2, Briefcase, Copy } from 'lucide-react'
+import { X, Users, Search, Check, Sparkles, Loader2, Briefcase, Copy, Brain } from 'lucide-react'
 import { getMyContacts, createGroupChat } from '@/lib/api'
 import { ChatAvatar } from './chat-avatar'
+import { useDashboard } from '@/contexts/DashboardContext'
 import { toast } from 'sonner'
 
 interface CreateGroupModalProps {
@@ -10,6 +11,9 @@ interface CreateGroupModalProps {
 }
 
 export function CreateGroupModal({ onClose, onSuccess }: CreateGroupModalProps) {
+  const { user } = useDashboard()
+  const orgName: string = user?.organization || ''
+  const hasOrg = !!(user?.organizationId || orgName)
   const [groupName, setGroupName] = useState('')
   const [contacts, setContacts] = useState<any[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -17,6 +21,9 @@ export function CreateGroupModal({ onClose, onSuccess }: CreateGroupModalProps) 
   const [submitting, setSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [createdGroup, setCreatedGroup] = useState<any>(null)
+  // Org members default to creating the group under their org so the team's AI
+  // brain learns from it. Toggle off for a standalone group.
+  const [attachToOrg, setAttachToOrg] = useState(true)
 
   useEffect(() => {
     const loadContacts = async () => {
@@ -59,7 +66,7 @@ export function CreateGroupModal({ onClose, onSuccess }: CreateGroupModalProps) 
 
     setSubmitting(true)
     try {
-      const res = await createGroupChat(groupName.trim(), Array.from(selectedIds))
+      const res = await createGroupChat(groupName.trim(), Array.from(selectedIds), hasOrg && attachToOrg)
       toast.success('Group created successfully!')
       const chat = res?.conversation || res?.data?.conversation || res?.data || res
       setCreatedGroup(chat)
@@ -168,6 +175,31 @@ export function CreateGroupModal({ onClose, onSuccess }: CreateGroupModalProps) 
               className="w-full bg-slate-50/50 border border-black/10 rounded-xl py-3 px-4 text-ink focus:outline-none focus:ring-2 focus:ring-purple/30 text-sm font-semibold"
             />
           </div>
+
+          {hasOrg && (
+            <button
+              type="button"
+              onClick={() => setAttachToOrg(v => !v)}
+              className={`shrink-0 flex items-center gap-3 rounded-2xl border p-3 text-left transition-all ${
+                attachToOrg ? 'bg-purple/5 border-purple/30' : 'bg-slate-50/50 border-black/10'
+              }`}
+            >
+              <div className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${attachToOrg ? 'bg-purple/15 text-purple' : 'bg-black/5 text-black/40'}`}>
+                <Brain className="size-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-ink">Add to {orgName || 'your organization'}</p>
+                <p className="text-[10px] text-ink-soft leading-snug mt-0.5">
+                  Your team's AI learns from this group's messages.
+                </p>
+              </div>
+              <span
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${attachToOrg ? 'bg-purple' : 'bg-black/15'}`}
+              >
+                <span className={`inline-block size-4 transform rounded-full bg-white shadow transition-transform ${attachToOrg ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </span>
+            </button>
+          )}
 
           <div className="flex flex-col flex-1 min-h-[200px] overflow-hidden">
             <div className="flex items-center justify-between mb-2 shrink-0">

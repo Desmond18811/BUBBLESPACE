@@ -60,7 +60,7 @@ import {
   profile,
   type Friend,
 } from '@/lib/chat-data'
-import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite } from '@/lib/api'
+import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite, joinGroupChat } from '@/lib/api'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { useSocket } from '@/contexts/AppContext'
@@ -2458,6 +2458,29 @@ export function EditView({
     inviteCode: '',
   })
 
+  // Join-a-group-by-code (independent of the profile form).
+  const [groupCode, setGroupCode] = useState('')
+  const [joiningGroup, setJoiningGroup] = useState(false)
+  const handleJoinGroup = async () => {
+    const code = groupCode.trim()
+    if (!code) { toast.error('Enter a group code to join'); return }
+    setJoiningGroup(true)
+    try {
+      const res = await joinGroupChat(code)
+      const chat = res?.conversation || res?.data?.conversation || res?.data || res
+      toast.success(res?.message || 'Joined group!')
+      setGroupCode('')
+      // The backend also emits `new_chat` over the socket, which refreshes the
+      // chat list; navigate straight into the group if we got its id.
+      const id = chat?.id || chat?._id
+      if (id) window.location.assign(`/dashboard/chat/${id}`)
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not join group. Check the code and try again.')
+    } finally {
+      setJoiningGroup(false)
+    }
+  }
+
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -2787,6 +2810,30 @@ export function EditView({
                 </div>
               </label>
             )}
+
+            {/* ── Join a Group by Code ── */}
+            <label className="block">
+              <span className={labelCls}>Join a group (paste invite code)</span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={groupCode}
+                  onChange={e => setGroupCode(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleJoinGroup(); } }}
+                  className={cn(inputCls, "flex-1")}
+                  placeholder="e.g. grp-1a2b3c4d5e6f or an invite link"
+                />
+                <button
+                  type="button"
+                  onClick={handleJoinGroup}
+                  disabled={joiningGroup || !groupCode.trim()}
+                  className="px-7 rounded-2xl bg-purple text-white text-sm font-bold shadow-lg shadow-purple/10 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {joiningGroup ? 'Joining…' : 'Join'}
+                </button>
+              </div>
+              <span className="mt-1 block text-[11px] text-ink-soft">Ask a group member for the code, or paste the full invite link.</span>
+            </label>
 
 
             {/* App Background */}
