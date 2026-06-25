@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { 
     Sparkles, User, Briefcase, Phone, Camera, Loader2, 
@@ -61,6 +61,7 @@ export function SetupProfileView({
     onComplete: (updatedUser: any) => void
 }) {
     const navigate = useNavigate()
+    const router = useRouter()
     // Local copy of the user so a mid-wizard account-type promotion (Google users
     // choosing "Organization") re-derives isAdmin without a full route refetch.
     const [currentUser, setCurrentUser] = useState(user)
@@ -260,12 +261,23 @@ export function SetupProfileView({
         setPendingUrls(prev => prev.filter((_, i) => i !== index))
     }
 
-    const handleBackToAuth = () => {
-        localStorage.removeItem("access_token")
-        localStorage.removeItem("refresh_token")
-        localStorage.removeItem("user")
-        localStorage.removeItem("bubblespace_private_key")
-        navigate({ to: "/login" })
+    // Whether this session entered the wizard at the account-type chooser.
+    // Captured once so "Back" from step 1 can return there for undecided users.
+    const startedAtChooser = useRef(initialStep === 0).current
+
+    // Non-destructive Back. Within the wizard it walks to the previous step; at the
+    // first visible step it leaves to wherever the user came from WITHOUT clearing
+    // the session — so their onboarding stays resumable on the next visit.
+    const handleBack = () => {
+        if (step === 3) { setStep(2); return }
+        if (step === 2) { setStep(1); return }
+        if (step === 1 && startedAtChooser && currentUser?.role !== 'admin') { setStep(0); return }
+        // First visible step: return to the previous page, session intact.
+        if (typeof window !== 'undefined' && window.history.length > 1) {
+            router.history.back()
+        } else {
+            navigate({ to: '/login' })
+        }
     }
 
     // Step 0: commit the account type, then drop into the regular wizard.
@@ -528,11 +540,11 @@ export function SetupProfileView({
         const codeChars = successInvite.inviteCode.split('')
 
         return (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-canvas p-4 sm:p-6 lg:p-8">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-hero p-4 sm:p-6 lg:p-8">
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="w-full max-w-2xl overflow-hidden rounded-[2.5rem] bg-white shadow-2xl border border-border p-8 flex flex-col items-center justify-center text-center relative animate-in fade-in zoom-in duration-300"
+                    className="w-full max-w-2xl overflow-hidden rounded-[2.5rem] bg-white shadow-glow border border-border p-8 flex flex-col items-center justify-center text-center relative animate-in fade-in zoom-in duration-300"
                 >
                     <div className="absolute inset-0 opacity-5 bg-gradient-to-br from-purple to-purple-dark pointer-events-none" />
                     
@@ -694,11 +706,11 @@ export function SetupProfileView({
           ]
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-canvas p-4 sm:p-6 lg:p-8">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-hero p-4 sm:p-6 lg:p-8">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="w-full max-w-4xl overflow-hidden rounded-[2.5rem] bg-white shadow-2xl border border-border flex flex-col md:flex-row h-[85vh] max-h-[750px]"
+                className="w-full max-w-4xl overflow-hidden rounded-[2.5rem] bg-white shadow-glow border border-border flex flex-col md:flex-row h-[85vh] max-h-[750px]"
             >
                 {/* Left Progress Bar */}
                 <div className="w-full md:w-[280px] bg-gradient-to-br from-purple to-purple-dark text-white p-8 flex flex-col justify-between relative overflow-hidden flex-shrink-0">
@@ -757,51 +769,80 @@ export function SetupProfileView({
                                     initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: -20 }}
-                                    className="space-y-6"
+                                    className="flex flex-col h-full"
                                 >
                                     <div>
-                                        <h2 className="text-2xl font-bold font-display text-ink">Choose your account type</h2>
-                                        <p className="text-ink-soft text-sm mt-1">Are you joining as an individual, or setting up a workspace for your organization?</p>
+                                        <span className="text-[10px] uppercase tracking-widest text-purple font-bold">Get started</span>
+                                        <h2 className="text-2xl font-bold font-display text-ink mt-1">How will you use Bubblespace?</h2>
+                                        <p className="text-ink-soft text-sm mt-1">
+                                            Pick the account that fits you. You can always join a workspace later with an invite.
+                                            {currentUser?.email && (
+                                                <> Signed in as <span className="font-semibold text-ink">{currentUser.email}</span>.</>
+                                            )}
+                                        </p>
                                     </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <button
-                                            type="button"
-                                            disabled={!!accountTypeLoading}
-                                            onClick={() => handleChooseAccountType('individual')}
-                                            className="group text-left p-6 rounded-2xl border-2 border-border bg-white hover:border-purple hover:bg-purple-soft/5 transition-all active:scale-[0.98] disabled:opacity-50 flex flex-col gap-3"
-                                        >
-                                            <div className="size-12 rounded-xl bg-purple-soft/40 flex items-center justify-center text-purple transition-transform group-hover:scale-110 duration-200">
-                                                {accountTypeLoading === 'individual' ? <Loader2 className="h-6 w-6 animate-spin" /> : <User className="h-6 w-6" />}
-                                            </div>
-                                            <div>
-                                                <h3 className="font-bold text-ink text-sm">Individual</h3>
-                                                <p className="text-xs text-ink-soft mt-1">A personal account to chat, collaborate, and join existing workspaces.</p>
-                                            </div>
-                                        </button>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-7 flex-1">
+                                        {([
+                                            {
+                                                type: 'individual' as const,
+                                                icon: User,
+                                                title: 'Individual',
+                                                tagline: 'For personal use',
+                                                features: ['Chat and call one-to-one or in groups', 'Join any workspace with an invite code', 'Set up in a single step'],
+                                            },
+                                            {
+                                                type: 'organization' as const,
+                                                icon: Briefcase,
+                                                title: 'Organization',
+                                                tagline: 'For teams',
+                                                features: ['Create a shared team workspace', "Train Aida on your company's knowledge", 'Invite teammates and manage members'],
+                                            },
+                                        ]).map(({ type, icon: Icon, title, tagline, features }) => {
+                                            const isBusy = accountTypeLoading === type
+                                            return (
+                                                <button
+                                                    key={type}
+                                                    type="button"
+                                                    disabled={!!accountTypeLoading}
+                                                    onClick={() => handleChooseAccountType(type)}
+                                                    className="group relative text-left p-6 rounded-2xl border-2 border-border bg-white hover:border-purple hover:shadow-bubble focus-visible:border-purple focus-visible:ring-2 focus-visible:ring-purple/20 outline-none transition-all duration-200 active:scale-[0.99] disabled:opacity-60 disabled:pointer-events-none cursor-pointer flex flex-col"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="size-12 rounded-xl bg-purple-soft/50 flex items-center justify-center text-purple transition-transform group-hover:scale-110 duration-200">
+                                                            {isBusy ? <Loader2 className="h-6 w-6 animate-spin" /> : <Icon className="h-6 w-6" />}
+                                                        </div>
+                                                        <span className="text-[10px] uppercase tracking-wider font-bold text-ink-soft bg-purple-soft/30 px-2.5 py-1 rounded-full">{tagline}</span>
+                                                    </div>
 
-                                        <button
-                                            type="button"
-                                            disabled={!!accountTypeLoading}
-                                            onClick={() => handleChooseAccountType('organization')}
-                                            className="group text-left p-6 rounded-2xl border-2 border-border bg-white hover:border-purple hover:bg-purple-soft/5 transition-all active:scale-[0.98] disabled:opacity-50 flex flex-col gap-3"
-                                        >
-                                            <div className="size-12 rounded-xl bg-purple-soft/40 flex items-center justify-center text-purple transition-transform group-hover:scale-110 duration-200">
-                                                {accountTypeLoading === 'organization' ? <Loader2 className="h-6 w-6 animate-spin" /> : <Briefcase className="h-6 w-6" />}
-                                            </div>
-                                            <div>
-                                                <h3 className="font-bold text-ink text-sm">Organization</h3>
-                                                <p className="text-xs text-ink-soft mt-1">Create a workspace for your team, train its AI brain, and invite members.</p>
-                                            </div>
-                                        </button>
+                                                    <h3 className="font-bold text-ink text-lg font-display mt-4">{title}</h3>
+
+                                                    <ul className="mt-4 space-y-2.5 flex-1">
+                                                        {features.map((f) => (
+                                                            <li key={f} className="flex items-start gap-2.5 text-xs text-ink-soft">
+                                                                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-purple-soft/60 text-purple">
+                                                                    <Check className="h-3 w-3 stroke-[3px]" />
+                                                                </span>
+                                                                <span className="leading-relaxed">{f}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+
+                                                    <div className="mt-6 flex items-center gap-1.5 text-sm font-bold text-purple">
+                                                        {isBusy ? 'Setting up…' : `Continue as ${title.toLowerCase()}`}
+                                                        {!isBusy && <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />}
+                                                    </div>
+                                                </button>
+                                            )
+                                        })}
                                     </div>
 
-                                    <div className="pt-2">
+                                    <div className="pt-7">
                                         <button
                                             type="button"
                                             disabled={!!accountTypeLoading}
-                                            onClick={handleBackToAuth}
-                                            className="h-12 px-6 border border-border hover:bg-slate-50 font-bold rounded-xl transition-all flex items-center gap-2 text-ink-soft text-sm disabled:opacity-50"
+                                            onClick={handleBack}
+                                            className="h-11 px-5 border border-border hover:bg-slate-50 font-bold rounded-xl transition-all flex items-center gap-2 text-ink-soft text-sm disabled:opacity-50 cursor-pointer"
                                         >
                                             <ArrowLeft className="h-4 w-4" />
                                             Back
@@ -819,7 +860,8 @@ export function SetupProfileView({
                                     className="space-y-6"
                                 >
                                     <div>
-                                        <h2 className="text-2xl font-bold font-display text-ink">Personal Profile Details</h2>
+                                        <span className="text-[10px] uppercase tracking-widest text-purple font-bold">Your profile</span>
+                                        <h2 className="text-2xl font-bold font-display text-ink mt-1">Personal Profile Details</h2>
                                         <p className="text-ink-soft text-sm mt-1">Set up your avatar and profile identifier details.</p>
                                     </div>
 
@@ -1016,7 +1058,7 @@ export function SetupProfileView({
                                             <button
                                                 type="button"
                                                 disabled={loading}
-                                                onClick={handleBackToAuth}
+                                                onClick={handleBack}
                                                 className="h-12 px-6 border border-border hover:bg-slate-50 font-bold rounded-xl transition-all flex items-center gap-2 text-ink-soft text-sm disabled:opacity-50"
                                             >
                                                 <ArrowLeft className="h-4 w-4" />
@@ -1050,7 +1092,8 @@ export function SetupProfileView({
                                     className="space-y-6"
                                 >
                                     <div>
-                                        <h2 className="text-2xl font-bold font-display text-ink">Describe Your Business</h2>
+                                        <span className="text-[10px] uppercase tracking-widest text-purple font-bold">Your workspace</span>
+                                        <h2 className="text-2xl font-bold font-display text-ink mt-1">Describe Your Business</h2>
                                         <p className="text-ink-soft text-sm mt-1">Aida uses these details to train and initialize your company's brain.</p>
                                     </div>
 
@@ -1129,7 +1172,8 @@ export function SetupProfileView({
                                     className="space-y-5"
                                 >
                                     <div>
-                                        <h2 className="text-2xl font-bold font-display text-ink">Train Your Collective Brain</h2>
+                                        <span className="text-[10px] uppercase tracking-widest text-purple font-bold">Knowledge base</span>
+                                        <h2 className="text-2xl font-bold font-display text-ink mt-1">Train Your Collective Brain</h2>
                                         <p className="text-ink-soft text-sm mt-1">Upload PDFs/TXT/MD/CSV/JSON, paste YouTube or article URLs, or write content directly — everything goes into your workspace's vector store.</p>
                                     </div>
 

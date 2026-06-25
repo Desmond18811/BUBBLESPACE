@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
 import React from 'react'
 import { Dashboard } from '@/components/chat/dashboard'
 import { BubbleBackground } from '@/components/chat/bubble-background'
-import { cn } from '@/lib/utils'
+import { cn, getSecureMediaUrl } from '@/lib/utils'
 
 export const Route = createFileRoute("/dashboard")({
     component: DashboardPage,
@@ -30,7 +30,7 @@ function DashboardPage() {
                             bgType === 'light' ? "url('/themes/light.png')" :
                                 bgType === 'dark' ? "url('/themes/dark.png')" :
                                     bgType === 'glass' ? "radial-gradient(circle at top left, #c084fc 0%, #a78bfa 35%, #e879f9 75%, #f472b6 100%)" :
-                                        (bgType && (bgType.startsWith('/') || bgType.startsWith('http') || bgType.startsWith('data:'))) ? `url('${bgType}')` :
+                                        (bgType && (bgType.startsWith('/') || bgType.startsWith('http') || bgType.startsWith('data:'))) ? `url('${getSecureMediaUrl(bgType)}')` :
                                             "url('/topographic_bg_v2_1780147871964.png')",
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',

@@ -79,8 +79,30 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
   const hasEndedRef = useRef(false)
   const [showEndPrompt, setShowEndPrompt] = useState(false)
 
+  // Live transcript recognizer handle + a "stopping" guard. Web Speech auto-restarts
+  // itself via onend; without an explicit guard, stop() is instantly undone and the
+  // mic keeps transcribing into the next call. We null onend AND set this flag.
+  const recognitionRef = useRef<any>(null)
+  const stoppingRef = useRef(false)
+
   const serverUrl = import.meta.env.VITE_LIVEKIT_URL || 'wss://bubble-livekit.livekit.cloud'
   const { socket } = useSocket()
+
+  // Stable refs so the unmount-only effect can end the meeting without stale closures.
+  const socketRef = useRef(socket)
+  socketRef.current = socket
+  const roomIdRef = useRef(roomId)
+  roomIdRef.current = roomId
+
+  // Hard-stop the live transcript recognizer. Idempotent.
+  const stopRecognition = useCallback(() => {
+    stoppingRef.current = true
+    const rec = recognitionRef.current
+    if (rec) {
+      try { rec.onend = null; rec.onresult = null; rec.stop() } catch { /* already stopped */ }
+      recognitionRef.current = null
+    }
+  }, [])
 
   // Request browser microphone & camera permissions before joining LiveKit room
   useEffect(() => {
@@ -171,7 +193,7 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
         if (dbId) {
           setMeetingDbId(dbId)
           meetingDbIdRef.current = dbId
-          socket?.emit('meeting_started', { roomId, meetingId: dbId })
+          socketRef.current?.emit('meeting_started', { roomId, meetingId: dbId })
         }
       } catch (err) {
         console.warn('[LiveKit] Failed to create meeting record:', err)
@@ -182,6 +204,8 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
       if (SpeechRecognition) {
         recognition = new SpeechRecognition()
+        recognitionRef.current = recognition
+        stoppingRef.current = false
         recognition.continuous = true
         recognition.interimResults = false
         recognition.lang = 'en-US'
@@ -203,7 +227,7 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
               }
 
               // Real-time socket transcript relay (speakerId lets peers attribute + dedupe)
-              socket?.emit('meeting_transcript_chunk', { roomId, speaker: userName || 'You', speakerId: userId, text })
+              socketRef.current?.emit('meeting_transcript_chunk', { roomId, speaker: userName || 'You', speakerId: userId, text })
 
               if (meetingDbIdRef.current) {
                 addMeetingTranscriptChunk(meetingDbIdRef.current, {
@@ -218,7 +242,7 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
         }
 
         recognition.onend = () => {
-          if (active) {
+          if (active && !stoppingRef.current) {
             try { recognition.start() } catch (_) { }
           }
         }
@@ -233,25 +257,26 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
 
     initMeeting()
 
+    // Real unmount only: `socket` was dropped from the dep list below (we read it via
+    // socketRef instead) specifically so a socket reconnect can't re-run this effect
+    // and tear down a still-live call. That means this cleanup now only fires when the
+    // modal itself unmounts, so it's safe to close out the DB record here — but it must
+    // NOT emit 'meeting_ended' over the socket; that's reserved for the user-initiated
+    // path (handleConfirmEndMeeting) so peers aren't told the call ended just because
+    // this client navigated away mid-call (e.g. LiveKit-initiated disconnect).
     return () => {
       active = false
-      if (recognition) {
-        try { recognition.stop() } catch (_) { }
-      }
-      if (meetingDbIdRef.current) {
-        if (!hasEndedRef.current) {
-          endMeeting(meetingDbIdRef.current).catch(console.error)
-        }
-      }
-      if (socket && roomId) {
-        socket.emit('meeting_ended', { roomId })
+      stopRecognition()
+      if (meetingDbIdRef.current && !hasEndedRef.current) {
+        endMeeting(meetingDbIdRef.current).catch(console.error)
       }
     }
-  }, [roomId, type, userId, userName, socket, permissionsGranted])
+  }, [roomId, type, userId, userName, permissionsGranted, stopRecognition])
 
   const handleConfirmEndMeeting = async (saveToStorage: boolean, sendEmail: boolean) => {
     try {
       hasEndedRef.current = true
+      stopRecognition()
       if (meetingDbId) {
         const rawTranscript = transcript
           .map((c) => `${c.speaker ? c.speaker + ': ' : ''}${c.text}`)
@@ -261,8 +286,8 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
     } catch (err) {
       console.error('Failed to end meeting with options:', err)
     } finally {
-      if (socket && roomId) {
-        socket.emit('meeting_ended', { roomId })
+      if (socketRef.current && roomIdRef.current) {
+        socketRef.current.emit('meeting_ended', { roomId: roomIdRef.current })
       }
       onClose()
     }

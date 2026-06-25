@@ -36,7 +36,10 @@ function GoogleCallbackPage() {
                 localStorage.setItem("user", JSON.stringify(user));
 
                 toast.success("Signed in with Google!");
-                navigate({ to: "/dashboard", replace: true });
+                // Resume at the exact step this user is on. New Google users haven't
+                // finished onboarding, so send them into setup — not the dashboard.
+                const onboarded = user?.onboardingComplete || user?.onboardingStep === "complete";
+                navigate({ to: onboarded ? "/dashboard" : "/setup-profile", replace: true });
             } catch (err) {
                 console.error("Failed to parse user JSON:", err);
                 toast.error("Authentication error. Please try again.");

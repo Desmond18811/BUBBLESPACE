@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
 import { fetchAllUserChats, fetchTasks } from '@/lib/api'
+import { readCache, writeCache, CACHE_KEYS } from '@/lib/webCache'
 import { Phone } from 'lucide-react'
 import { LiveKitMeetingModal } from '@/components/chat/LiveKitMeetingModal'
 import { RingtonePlayer } from '@/lib/ringtone'
@@ -20,6 +21,10 @@ interface SocketContextValue {
     startCall: (toUserId: string, targetName: string, targetAvatar?: string, type?: 'voice' | 'video') => void
     callState: CallState
     endCall: () => void
+    /** Single source of truth for presence — set of userIds currently online. */
+    onlineUsers: Set<string>
+    /** Convenience: is this userId currently online? */
+    isUserOnline: (userId?: string | null) => boolean
 }
 
 const SocketContext = createContext<SocketContextValue>({
@@ -28,6 +33,8 @@ const SocketContext = createContext<SocketContextValue>({
     startCall: () => {},
     callState: { status: 'idle' },
     endCall: () => {},
+    onlineUsers: new Set(),
+    isUserOnline: () => false,
 })
 
 export const useSocket = () => useContext(SocketContext)
@@ -60,9 +67,15 @@ interface AppProviderProps {
 }
 
 export function AppProvider({ children, user }: AppProviderProps) {
+    const userId = user?.id || user?._id
     const [connected, setConnected] = useState(false)
-    const [chats, setChats] = useState<any[]>([])
+    // Seed from the persisted cache so a cold reload paints the chat list instantly,
+    // then refreshChats revalidates from the network.
+    const [chats, setChats] = useState<any[]>(() => readCache<any[]>(userId, CACHE_KEYS.chats) || [])
     const [loadingChats, setLoadingChats] = useState(false)
+    // Central presence map — the one place online status lives. Seeded by the
+    // server's presence_snapshot on connect, updated by user_status_change deltas.
+    const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
     const socketRef = useRef<ReturnType<typeof getSocket>>(null)
 
     // Call state & ringtone refs
@@ -265,7 +278,19 @@ export function AppProvider({ children, user }: AppProviderProps) {
             })
         })
 
+        // Seed the full online set when the socket connects.
+        sock?.on('presence_snapshot', ({ online }: { online: string[] }) => {
+            setOnlineUsers(new Set((online || []).map(String)))
+        })
+
         sock?.on('user_status_change', ({ userId, isOnline }: { userId: string, isOnline: boolean }) => {
+            // Update the central presence set (source of truth for every surface).
+            setOnlineUsers(prev => {
+                const next = new Set(prev)
+                if (isOnline) next.add(String(userId)); else next.delete(String(userId))
+                return next
+            })
+            // Keep the chat-list mirror in sync for components still reading c.isOnline.
             setChats(prev => prev.map(c => {
                 const isGroup = c.isGroupChat
                 if (isGroup) return c
@@ -416,6 +441,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('call_rejected')
             sock?.off('new_message')
             sock?.off('user_status_change')
+            sock?.off('presence_snapshot')
             sock?.off('new_chat')
             sock?.off('chat_deleted')
             sock?.off('messages_read')
@@ -429,13 +455,15 @@ export function AppProvider({ children, user }: AppProviderProps) {
         setLoadingChats(true)
         try {
             const res = await fetchAllUserChats()
-            setChats(res?.conversations || res?.data || [])
+            const next = res?.conversations || res?.data || []
+            setChats(next)
+            writeCache(userId, CACHE_KEYS.chats, next)
         } catch (err) {
             console.error('Failed to load chats:', err)
         } finally {
             setLoadingChats(false)
         }
-    }, [])
+    }, [userId])
 
     // Load chats on mount
     useEffect(() => {
@@ -450,8 +478,10 @@ export function AppProvider({ children, user }: AppProviderProps) {
         setChats(prev => prev.filter(c => c._id !== chatId && c.id !== chatId))
     }, [])
 
+    const isUserOnline = useCallback((id?: string | null) => !!id && onlineUsers.has(String(id)), [onlineUsers])
+
     return (
-        <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, callState, endCall }}>
+        <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, callState, endCall, onlineUsers, isUserOnline }}>
             <ChatContext.Provider value={{ chats, loadingChats, refreshChats, updateChatInList, removeChatFromList }}>
                 {children}
 
@@ -534,6 +564,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
                 {/* LiveKit Call Modal */}
                 {callState.status === 'in_call' && (
                   <LiveKitMeetingModal
+                    key={callState.roomId}
                     roomId={callState.roomId}
                     type={callState.type}
                     userId={user?._id || user?.id || 'guest'}

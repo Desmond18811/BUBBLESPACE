@@ -63,6 +63,35 @@ const normalizeMsg = (m: any): any => {
   return { ...m, _id: m._id || m.id }
 }
 
+// The server stores reactions as a flat list — one { user, emoji } entry per
+// person. Group them by emoji so the UI shows a single chip per emoji with a
+// correct count, and flags whether the current user is among the reactors.
+// Tolerates a pre-grouped { emoji, users[] } shape too, for safety.
+type ReactionGroup = { emoji: string; count: number; mine: boolean; userIds: string[] }
+function groupReactions(reactions: any[] | undefined, myId: string): ReactionGroup[] {
+  const map = new Map<string, ReactionGroup>()
+  for (const r of reactions || []) {
+    const emoji = r?.emoji
+    if (!emoji) continue
+    const group = map.get(emoji) || { emoji, count: 0, mine: false, userIds: [] }
+    if (Array.isArray(r.users)) {
+      for (const u of r.users) {
+        const uid = String(u?._id || u?.id || u)
+        group.userIds.push(uid)
+        if (uid === String(myId)) group.mine = true
+      }
+      group.count += r.users.length
+    } else {
+      const uid = String(r.user?._id || r.user?.id || r.user)
+      group.userIds.push(uid)
+      if (uid === String(myId)) group.mine = true
+      group.count += 1
+    }
+    map.set(emoji, group)
+  }
+  return Array.from(map.values())
+}
+
 function VoiceBubble({ msg, own }: { msg: any; own: boolean }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -150,7 +179,7 @@ export function ChatWindow({
   messages: any[]
   setMessages: React.Dispatch<React.SetStateAction<any[]>>
 }) {
-  const { socket, startCall } = useSocket()
+  const { socket, startCall, isUserOnline } = useSocket()
   const { chats, updateChatInList } = useChats()
   const { bgType, onOpenProfile } = useDashboard()
   const myId = currentUser?._id || currentUser?.id
@@ -314,10 +343,20 @@ export function ChatWindow({
 
       setMessages(prev => {
         const normalized = normalizeMsg(m)
-        // 1. Exact ID match check
+
+        // 0. Reconcile our own optimistic bubble by the clientId the server echoes
+        // back. This is content-independent, so identical messages and duplicate
+        // deliveries can't slip past it — the core double-render fix.
+        if (m.clientId) {
+          const byClient = prev.find(p => String(p._id) === String(m.clientId))
+          if (byClient) return prev.map(p => String(p._id) === String(m.clientId) ? normalized : p)
+        }
+
+        // 1. Exact ID match check — drops any duplicate delivery of the same message.
         if (prev.find(p => p._id === normalized._id)) return prev
 
-        // 2. Optimistic match check: find temp message with same content from same sender
+        // 2. Legacy fallback: optimistic match by content from the same sender
+        // (covers messages sent before clientId existed / from other clients).
         const senderId = m.sender?._id || m.sender?.id || m.sender
         const isOwn = String(senderId) === String(myId)
 
@@ -622,6 +661,7 @@ export function ChatWindow({
       const res = await sendMediaMessage(chatId, audioFile, {
         message_type: 'voice',
         media_duration: audioDuration,
+        clientId: tempId,
       })
       const data = res?.data || res
       setMessages(prev => prev.map(m => m._id === tempId ? { ...m, ...data, _id: data._id || tempId } : m))
@@ -720,9 +760,10 @@ export function ChatWindow({
         res = await sendMediaMessage(chatId, attachment.file, {
           content: sentText,
           message_type: attachment.type === 'audio' ? 'voice' : attachment.type,
+          clientId: tempId,
         })
       } else {
-        res = await sendTextMessage(chatId, sentText)
+        res = await sendTextMessage(chatId, sentText, { clientId: tempId })
       }
       const data = res?.data || res
       setMessages(prev => prev.map(m => m._id === tempId ? { ...m, ...data, _id: data._id || tempId } : m))
@@ -894,7 +935,7 @@ export function ChatWindow({
                 <div className="flex items-center gap-3 cursor-pointer min-w-0" onClick={() => onShowInfo?.()}>
                   <div className="relative shrink-0">
                     <ChatAvatar src={getChatAvatar()} name={getChatTitle()} className="size-10 rounded-xl" isGroup={chat?.isGroupChat} />
-                    {getOtherUser()?.isOnline && (
+                    {!chat?.isGroupChat && isUserOnline(getOtherUser()?._id || getOtherUser()?.id) && (
                       <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
                     )}
                   </div>
@@ -916,7 +957,7 @@ export function ChatWindow({
                               ? `${typingName} is typing…` 
                               : 'typing…'}
                         </span>
-                      ) : getOtherUser()?.isOnline ? 'Online' : chat?.isGroupChat ? `${chat.users?.length || 0} members` : 'Offline'}
+                      ) : (!chat?.isGroupChat && isUserOnline(getOtherUser()?._id || getOtherUser()?.id)) ? 'Online' : chat?.isGroupChat ? `${chat.users?.length || 0} members` : 'Offline'}
                     </p>
                   </div>
                 </div>
@@ -1228,16 +1269,25 @@ export function ChatWindow({
                                   </span>
                                 )}
 
-                                {/* Reactions */}
+                                {/* Reactions — grouped by emoji with live counts. Tap a
+                                    chip to toggle your own reaction; the one you added is
+                                    highlighted. Title shows the exact count on hover/long-press. */}
                                 {(msg.reactions?.length ?? 0) > 0 && (
                                   <div className="mt-1.5 flex flex-wrap gap-1">
-                                    {msg.reactions!.map((r: any, idx: number) => (
+                                    {groupReactions(msg.reactions, myId).map((g) => (
                                       <button
-                                        key={`${msg._id}-react-${r.emoji}-${idx}`}
-                                        onClick={() => handleReact(msg._id, r.emoji)}
-                                        className="flex items-center gap-0.5 rounded-full bg-white/15 px-2 py-0.5 text-xs hover:bg-white/25 transition-colors"
+                                        key={`${msg._id}-react-${g.emoji}`}
+                                        onClick={() => handleReact(msg._id, g.emoji)}
+                                        title={`${g.count} ${g.count === 1 ? 'reaction' : 'reactions'}`}
+                                        className={cn(
+                                          "flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs transition-colors cursor-pointer",
+                                          g.mine
+                                            ? "bg-purple/20 ring-1 ring-purple/40 text-ink"
+                                            : "bg-black/5 hover:bg-black/10 text-ink"
+                                        )}
                                       >
-                                        {r.emoji} {r.users?.length || 0}
+                                        <span>{g.emoji}</span>
+                                        <span className="font-semibold tabular-nums">{g.count}</span>
                                       </button>
                                     ))}
                                   </div>

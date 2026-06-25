@@ -99,12 +99,14 @@ export function NavSidebar({
     queryKey: ['unreadCount'],
     queryFn: getUnreadChatCount,
     refetchInterval: 10000, // Refresh every 10s
+    retry: 1,
   })
 
   const { data: meetingsData } = useQuery({
     queryKey: ['activeMeetings'],
     queryFn: () => fetchMeetings(1, 5),
     refetchInterval: 10000, // Refresh every 10s
+    retry: 1,
   })
 
   const totalUnread = unreadData?.count || 0

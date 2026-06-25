@@ -43,7 +43,7 @@ import {
   Copy,
   Upload,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDashboard } from '@/contexts/DashboardContext'
 import { useNavigate } from '@tanstack/react-router'
 import { useChats } from '@/contexts/AppContext'
@@ -54,6 +54,7 @@ import { cn, getSecureMediaUrl } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { updateProfile, uploadAvatar, uploadBackground, searchUsers, getMyContacts, addContact, getSuggestions, removeContact as removeContactApi, blockUser, fetchTasks, createTaskFull, updateTaskFull, deleteTaskFull, fetchAiDescription } from '@/lib/api'
+import { readCache, writeCache, CACHE_KEYS } from '@/lib/webCache'
 import { toast } from 'sonner'
 import {
   profile,
@@ -267,15 +268,35 @@ function CallOverlay({
 }
 
 export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user: any) => void, isNarrow?: boolean }) {
-  const { startCall } = useSocket()
+  const { startCall, isUserOnline } = useSocket()
   const { user: currentUser, setActiveChat, setActiveChatId, bgType } = useDashboard()
   const { refreshChats } = useChats()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const myId = currentUser?._id || currentUser?.id
-  const [contacts, setContacts] = useState<any[]>([])
-  const [suggestions, setSuggestions] = useState<any[]>([])
-  const [loadingContacts, setLoadingContacts] = useState(true)
+  const queryClient = useQueryClient()
+  const { data: contacts = [], isLoading: loadingContacts } = useQuery({
+    queryKey: ['contacts', myId],
+    queryFn: async () => {
+      const contactsRes = await getMyContacts()
+      return (contactsRes?.data || []).filter((c: any) => (c._id || c.id) !== myId)
+    },
+    enabled: !!myId,
+    staleTime: 1000 * 60 * 5, // 5 mins cache
+    retry: 1,
+  })
+
+  const { data: suggestions = [] } = useQuery({
+    queryKey: ['suggestions', myId],
+    queryFn: async () => {
+      const suggestRes = await getSuggestions().catch(() => ({ data: [], users: [] }))
+      return (suggestRes?.data || suggestRes?.users || []).filter((s: any) => (s._id || s.id) !== myId)
+    },
+    enabled: !!myId,
+    staleTime: 1000 * 60 * 5, // 5 mins cache
+    retry: 1,
+  })
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false)
   const [addIdentifier, setAddIdentifier] = useState('')
@@ -289,33 +310,15 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
 
   const effectiveNarrow = isNarrow || isMobile
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoadingContacts(true)
-        const [contactsRes, suggestRes] = await Promise.all([
-          getMyContacts().catch(() => ({ data: [] })),
-          getSuggestions().catch(() => ({ data: [], users: [] })),
-        ])
-        // Filter out self from contacts and suggestions
-        const allContacts = (contactsRes?.data || []).filter((c: any) => (c._id || c.id) !== myId)
-        const allSuggestions = (suggestRes?.data || suggestRes?.users || []).filter((s: any) => (s._id || s.id) !== myId)
-        setContacts(allContacts)
-        setSuggestions(allSuggestions)
-      } finally {
-        setLoadingContacts(false)
-      }
-    }
-    load()
-  }, [myId])
-
   const handleAddFriend = async () => {
     if (!addIdentifier.trim()) return
     setAddLoading(true)
     try {
       const res = await addContact(addIdentifier.trim())
       const newContact = res?.data || res
-      setContacts(prev => [...prev, newContact])
+      queryClient.setQueryData(['contacts', myId], (prev: any) => prev ? [...prev, newContact] : [newContact])
+      queryClient.invalidateQueries({ queryKey: ['contacts', myId] })
+      queryClient.invalidateQueries({ queryKey: ['suggestions', myId] })
       setAddIdentifier('')
       setShowAddModal(false)
       toast.success('Contact added!')
@@ -329,7 +332,9 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
   const handleRemove = async (userId: string) => {
     try {
       await removeContactApi(userId)
-      setContacts(prev => prev.filter(c => (c._id || c.id) !== userId))
+      queryClient.setQueryData(['contacts', myId], (prev: any) => prev ? prev.filter((c: any) => (c._id || c.id) !== userId) : [])
+      queryClient.invalidateQueries({ queryKey: ['contacts', myId] })
+      queryClient.invalidateQueries({ queryKey: ['suggestions', myId] })
       toast.success('Contact removed')
     } catch {
       toast.error('Could not remove contact')
@@ -339,7 +344,9 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
   const handleBlock = async (userId: string) => {
     try {
       await blockUser(userId)
-      setContacts(prev => prev.filter(c => (c._id || c.id) !== userId))
+      queryClient.setQueryData(['contacts', myId], (prev: any) => prev ? prev.filter((c: any) => (c._id || c.id) !== userId) : [])
+      queryClient.invalidateQueries({ queryKey: ['contacts', myId] })
+      queryClient.invalidateQueries({ queryKey: ['suggestions', myId] })
       toast.success('User blocked')
     } catch {
       toast.error('Could not block user')
@@ -513,26 +520,40 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
               <div className="size-16 rounded-[24px] bg-purple-soft/50 flex items-center justify-center mb-4 shadow-sm animate-in zoom-in duration-300">
                 <Users className="size-8 text-purple/60" />
               </div>
-              <h3 className="text-base font-bold text-ink">No Contacts Yet</h3>
+              <h3 className="text-base font-bold text-ink">
+                {!currentUser?.organization ? 'Join your organisation' : 'No Contacts Yet'}
+              </h3>
               <p className="text-xs text-ink-soft max-w-[280px] mt-1 mb-6 leading-relaxed">
-                Connect with colleagues by adding them to your contacts list to start messaging.
+                {!currentUser?.organization
+                  ? 'Get an invite code from your company admin and enter it in Settings → Edit Profile to connect with your colleagues.'
+                  : 'Connect with colleagues by adding them to your contacts list to start messaging.'}
               </p>
               <button
                 onClick={() => setShowAddModal(true)}
                 className="rounded-2xl bg-purple px-6 py-3 text-xs font-bold text-white hover:bg-purple/90 transition-all shadow-md shadow-purple/20"
               >
-                Add your first contact
+                {!currentUser?.organization ? 'Add a contact manually' : 'Add your first contact'}
               </button>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-48 text-center">
               <Users className="size-12 text-black/10 mb-3" />
-              <p className="text-sm text-black/40">No contacts yet</p>
-              <button onClick={() => setShowAddModal(true)} className="mt-3 text-sm font-semibold text-purple hover:underline">
-                Add your first contact →
-              </button>
+              {!currentUser?.organization ? (
+                <>
+                  <p className="text-sm font-semibold text-black/50">You haven't joined an organisation yet</p>
+                  <p className="text-xs text-black/30 mt-1 max-w-xs">Go to <strong>Settings → Edit Profile</strong> and enter your company invite code to see your colleagues here.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-black/40">No contacts yet</p>
+                  <button onClick={() => setShowAddModal(true)} className="mt-3 text-sm font-semibold text-purple hover:underline">
+                    Add your first contact →
+                  </button>
+                </>
+              )}
             </div>
           )
+
         ) : (
           <div className={cn("grid gap-3", effectiveNarrow ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5")}>
             {filtered.map(contact => {
@@ -549,7 +570,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                 >
                   <div className="relative">
                     <ChatAvatar src={contact.avatar} name={contact.full_name || contact.username} className="size-14 rounded-2xl shadow-md" />
-                    {contact.isOnline && (
+                    {isUserOnline(contact._id || contact.id) && (
                       <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
                     )}
                   </div>
@@ -559,7 +580,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                     </p>
                     <p className="truncate text-[10px] text-black/40">
                       {effectiveNarrow
-                        ? (contact.isOnline ? "Online" : "Away")
+                        ? (isUserOnline(contact._id || contact.id) ? "Online" : "Away")
                         : (contact.org_role || (contact.role === 'admin' ? contact.status_message : null) || '@' + (contact.username || ''))}
                     </p>
                   </div>
@@ -692,7 +713,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
 /* ---------------- Calls ---------------- */
 
 export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
-  const { startCall } = useSocket()
+  const { startCall, isUserOnline } = useSocket()
   const [selectionStep, setSelectionStep] = useState<'none' | 'source' | 'type'>('none')
   const [activeMeeting, setActiveMeeting] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(null)
   const { user: currentUser, bgType } = useDashboard()
@@ -720,28 +741,39 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
     handleStartCall(type)
   }
 
-  // Fetch real data
+  const myId = currentUser?._id || currentUser?.id
+
+  // Fetch real data. `initialData` seeds instantly from the last-known localStorage
+  // snapshot so revisiting this tab (or a slow/flaky backend) doesn't flash the
+  // skeleton grid again — the query still revalidates in the background.
   const { data: callLogsData, isLoading } = useQuery({
     queryKey: ['callLogs'],
     queryFn: async () => {
       const res = await fetchCallLogs()
-      return res.data || { rooms: [], coworkers: [] }
-    }
+      const data = res.data || { rooms: [], coworkers: [] }
+      writeCache(myId, CACHE_KEYS.callLogs, data)
+      return data
+    },
+    initialData: () => readCache<any>(myId, CACHE_KEYS.callLogs) || undefined,
+    staleTime: 1000 * 60,
   })
 
   const { data: coworkerData } = useQuery({
     queryKey: ['coworkers-calls'],
     queryFn: async () => {
       const res = await searchUsers('')
-      return res.users || []
-    }
+      const users = res.users || []
+      writeCache(myId, CACHE_KEYS.coworkers, users)
+      return users
+    },
+    initialData: () => readCache<any>(myId, CACHE_KEYS.coworkers) || undefined,
+    staleTime: 1000 * 60,
   })
 
   const activeRooms = callLogsData?.rooms || []
   // Filter out self and bots from coworkers so you can't call yourself or the AI bot
   const coworkers = (coworkerData || []).filter((w: any) => {
     const wId = w._id || w.id
-    const myId = currentUser?._id || currentUser?.id
     const isBot = w.is_bot || w.username === 'aida' || w.username?.toLowerCase() === 'aida'
     return wId !== myId && !isBot
   })
@@ -855,7 +887,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
                           name={worker.full_name || worker.username}
                           className="size-20 rounded-[24px] shadow-lg ring-4 ring-white"
                         />
-                        {worker.isOnline && (
+                        {isUserOnline(worker._id || worker.id) && (
                           <span className="absolute -bottom-1 -right-1 size-5 rounded-full border-[3px] border-white bg-green-500 shadow-sm" />
                         )}
                       </div>
@@ -1816,6 +1848,7 @@ function OrgSettingsModal({
   onClose: () => void
   currentUser: any
 }) {
+  const { isUserOnline } = useSocket()
   const [activeTab, setActiveTab] = useState<'profile' | 'people' | 'transcripts'>('profile')
   const [isAdmin, setIsAdmin] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
@@ -2147,7 +2180,7 @@ function OrgSettingsModal({
                     <div key={member._id || member.username} className="bg-white/60 border border-black/5 rounded-2xl p-4 flex items-center gap-3">
                       <div className="relative">
                         <ChatAvatar src={member.avatar} name={member.full_name || member.username} className="size-10 rounded-xl" />
-                        {member.isOnline && (
+                        {isUserOnline(member._id || member.id) && (
                           <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
                         )}
                       </div>
@@ -2475,7 +2508,8 @@ export function EditView({
       }
       toast.success('Custom background set!')
     } catch (err: any) {
-      toast.error('Background upload failed')
+      console.error('[BackgroundUpload] failed:', err)
+      toast.error(err.message || 'Background upload failed')
     }
   }
 
@@ -2680,33 +2714,79 @@ export function EditView({
               </label>
             </div>
 
-            <label className="block">
-              <span className={labelCls}>Organization Invite Code</span>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={formData.inviteCode || ''}
-                  onChange={e => setFormData({ ...formData, inviteCode: e.target.value })}
-                  className={cn(inputCls, "flex-1")}
-                  placeholder="Enter 8-digit code"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await joinOrganizationByInvite(formData.inviteCode);
-                      toast.success('Successfully joined organization!');
-                      window.location.reload();
-                    } catch (err: any) {
-                      toast.error(err.message || 'Failed to join');
-                    }
-                  }}
-                  className="px-7 rounded-2xl bg-purple text-white text-sm font-bold shadow-lg shadow-purple/10 hover:opacity-90 active:scale-95 transition-all"
-                >
-                  Join
-                </button>
+            {/* ── Organisation Join Card ── */}
+            {!user?.organization ? (
+              /* Highlighted CTA for users who have no org yet */
+              <div className="rounded-2xl border-2 border-purple/30 bg-purple/5 p-5 flex flex-col gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="size-10 rounded-xl bg-purple flex items-center justify-center shrink-0">
+                    <Users className="size-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-bold text-ink">Join your organisation</p>
+                    <p className="text-[12px] text-ink-soft mt-0.5 leading-relaxed">
+                      Enter an invite code from your company admin to connect with your colleagues.
+                      You'll be able to see and message people in your organisation.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formData.inviteCode || ''}
+                    onChange={e => setFormData({ ...formData, inviteCode: e.target.value })}
+                    className={cn(inputCls, "flex-1")}
+                    placeholder="Enter 8-digit invite code e.g. ABC12345"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!formData.inviteCode?.trim()) { toast.error('Please enter an invite code'); return; }
+                      try {
+                        await joinOrganizationByInvite(formData.inviteCode);
+                        toast.success('Successfully joined organisation!');
+                        window.location.reload();
+                      } catch (err: any) {
+                        toast.error(err.message || 'Invalid invite code');
+                      }
+                    }}
+                    className="px-6 rounded-2xl bg-purple text-white text-sm font-bold shadow-lg shadow-purple/20 hover:opacity-90 active:scale-95 transition-all"
+                  >
+                    Join
+                  </button>
+                </div>
               </div>
-            </label>
+            ) : (
+              /* Subtle join section for users already in an org (e.g. switching) */
+              <label className="block">
+                <span className={labelCls}>Switch Organisation (Invite Code)</span>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formData.inviteCode || ''}
+                    onChange={e => setFormData({ ...formData, inviteCode: e.target.value })}
+                    className={cn(inputCls, "flex-1")}
+                    placeholder="Enter new invite code"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!formData.inviteCode?.trim()) return;
+                      try {
+                        await joinOrganizationByInvite(formData.inviteCode);
+                        toast.success('Successfully joined organisation!');
+                        window.location.reload();
+                      } catch (err: any) {
+                        toast.error(err.message || 'Failed to join');
+                      }
+                    }}
+                    className="px-7 rounded-2xl bg-purple text-white text-sm font-bold shadow-lg shadow-purple/10 hover:opacity-90 active:scale-95 transition-all"
+                  >
+                    Join
+                  </button>
+                </div>
+              </label>
+            )}
 
 
             {/* App Background */}
@@ -2757,21 +2837,20 @@ export function EditView({
 
 
                 <div className="relative text-left">
-                  <button
-                    type="button"
+                  <label
                     className={cn(
-                      'w-full flex flex-col items-center gap-3 rounded-2xl border-2 p-5 transition-all',
-                      bgType === 'custom' ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10' : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
+                      'cursor-pointer w-full flex flex-col items-center gap-3 rounded-2xl border-2 p-5 transition-all',
+                      (bgType === 'custom' || bgType.startsWith('/') || bgType.startsWith('http') || bgType.startsWith('data:'))
+                        ? 'border-purple bg-purple-soft/50 ring-4 ring-purple/10'
+                        : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/50',
                     )}
                   >
-                    <label className="cursor-pointer flex flex-col items-center gap-3 w-full">
-                      <div className="size-12 rounded-full bg-purple flex items-center justify-center text-white">
-                        <Camera className="size-6" />
-                      </div>
-                      <span className="text-[13px] font-bold text-ink">Custom</span>
-                      <input type="file" className="hidden" accept="image/*" onChange={handleBackgroundUpload} />
-                    </label>
-                  </button>
+                    <div className="size-12 rounded-full bg-purple flex items-center justify-center text-white">
+                      <Camera className="size-6" />
+                    </div>
+                    <span className="text-[13px] font-bold text-ink">Custom</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={handleBackgroundUpload} />
+                  </label>
                 </div>
               </div>
             </div>
@@ -3632,39 +3711,31 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
     bgType,
   } = useDashboard()
   const { refreshChats } = useChats()
+  const { isUserOnline } = useSocket()
   const isNarrow = narrowProp ?? contextNarrow
-  const [coworkers, setCoworkers] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const myId = currentUser?._id || currentUser?.id
+  const { data: coworkers = [], isLoading: loading } = useQuery({
+    queryKey: ['coworkers', search, myId],
+    queryFn: async () => {
+      const res = await searchUsers(search)
+      return (res.users || []).filter((w: any) => {
+        const wId = w._id || w.id
+        const isMe = wId === myId
+        const isBot = w.is_bot || w.username === 'aida' || w.username?.toLowerCase() === 'aida'
+        return !isMe && !isBot
+      })
+    },
+    enabled: !!myId,
+    staleTime: 1000 * 60 * 5, // 5 mins cache
+    retry: 1,
+  })
   const [chatLoading, setChatLoading] = useState(false)
   const [collapsingFor, setCollapsingFor] = useState<string | null>(null)
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false)
   const isMobile = useIsMobile()
   const [searchActive, setSearchActive] = useState(false)
   const navigate = useNavigate()
-
-  useEffect(() => {
-    const fetchCoworkers = async () => {
-      try {
-        setLoading(true)
-        const res = await searchUsers(search)
-        // Filter out self and bots so you can't message yourself or the AI bot
-        const myId = currentUser?._id || currentUser?.id
-        setCoworkers((res.users || []).filter((w: any) => {
-          const wId = w._id || w.id
-          const isMe = wId === myId
-          const isBot = w.is_bot || w.username === 'aida' || w.username?.toLowerCase() === 'aida'
-          return !isMe && !isBot
-        }))
-      } catch (err) {
-        console.error('Failed to fetch coworkers:', err)
-        toast.error('Failed to load coworkers')
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchCoworkers()
-  }, [search])
 
   const handleOpenChat = async (worker: any) => {
     const workerId = worker._id || worker.id
@@ -3797,7 +3868,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
                       name={worker.full_name || worker.username}
                       className="size-12 rounded-xl shadow-sm"
                     />
-                    {worker.isOnline && (
+                    {isUserOnline(worker._id || worker.id) && (
                       <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-white bg-emerald-400" />
                     )}
                   </div>

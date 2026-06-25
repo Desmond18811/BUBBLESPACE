@@ -367,6 +367,7 @@ export const sendTextMessage = async (
         parent_message?: string;
         mentions?: string[];
         is_forwarded?: boolean;
+        clientId?: string;
     }
 ) => {
     const res = await fetch(`${BASE_URL}/message`, {
@@ -385,6 +386,7 @@ export const sendMediaMessage = async (
         parent_message?: string;
         message_type?: string;
         media_duration?: number;
+        clientId?: string;
     }
 ) => {
     const token = localStorage.getItem('access_token');
@@ -395,6 +397,7 @@ export const sendMediaMessage = async (
         formData.append('parent_message', opts.parent_message);
     if (opts?.media_duration !== undefined)
         formData.append('media_duration', opts.media_duration.toString());
+    if (opts?.clientId) formData.append('clientId', opts.clientId);
 
     const resolvedType =
         opts?.message_type ||

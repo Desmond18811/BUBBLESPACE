@@ -5,7 +5,7 @@ import { NavSidebar, navItems, bottomItems } from '@/components/chat/nav-sidebar
 import { ChatList } from '@/components/chat/chat-list'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
-import { cn } from '@/lib/utils'
+import { cn, getSecureMediaUrl } from '@/lib/utils'
 import { Loader2, X, LogOut } from 'lucide-react'
 import {
   FriendsView,
@@ -18,6 +18,7 @@ import {
 } from '@/components/chat/tab-views'
 import { SetupProfileView } from '@/components/chat/setup-profile-view'
 import { getMyProfile, accessOrCreateChat, getUnreadChatCount } from '@/lib/api'
+import { readCache, writeCache, CACHE_KEYS } from '@/lib/webCache'
 import { AppProvider } from '@/contexts/AppContext'
 import { MessageOverlay } from '@/components/chat/message-overlay'
 import { MeetingStatsModal } from '@/components/chat/MeetingStatsModal'
@@ -67,13 +68,22 @@ export function Dashboard({
   })
   const totalUnread = unreadData?.count || 0
 
-  // Use React Query for profile fetching with caching
+  // Last-known userId (from the login-stored user) so we can seed the profile
+  // query from the persisted cache before the network responds.
+  const storedUserId = React.useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}')?.id } catch { return undefined }
+  }, [])
+
+  // Use React Query for profile fetching with caching. initialData paints instantly
+  // from the localStorage cache on a cold reload; the query still revalidates.
   const { data: userData, isLoading: loadingProfile, refetch: refetchProfile } = useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
       const res = await getMyProfile()
+      writeCache(res.data?.id, CACHE_KEYS.profile, res.data)
       return res.data
     },
+    initialData: () => readCache<any>(storedUserId, CACHE_KEYS.profile) || undefined,
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   })
 
@@ -287,7 +297,7 @@ export function Dashboard({
             )}
             style={{
               backgroundImage: (!isMobile && (bgType === 'custom' || bgType.startsWith('/') || bgType.startsWith('http') || bgType.startsWith('data:')) && (user?.custom_background || bgType))
-                ? `url(${user?.custom_background || bgType})`
+                ? `url(${getSecureMediaUrl(user?.custom_background || bgType)})`
                 : 'none',
               backgroundSize: 'cover',
               backgroundPosition: 'center',

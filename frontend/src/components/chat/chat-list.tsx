@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, Pin, Check, CheckCheck, MoreVertical, BellOff, Trash2, Archive, Shield, X, MessageSquarePlus, Menu, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useQuery } from '@tanstack/react-query'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { useChats, useSocket } from '@/contexts/AppContext'
 import { muteChat, clearChat, toggleChatPin, deleteChat, blockUser } from '@/lib/api'
 import { toast } from 'sonner'
 import { useDashboard } from '@/contexts/DashboardContext'
 import { CreateGroupModal } from './create-group-modal'
+import { readCache, writeCache, CACHE_KEYS } from '@/lib/webCache'
 
 interface ContextMenuState {
   chatId: string
@@ -93,7 +95,7 @@ export function ChatList({
 }) {
   const { setIsMobileMenuOpen, setActiveChat, setActiveChatId, activeChatId, bgType } = useDashboard()
   const { chats, loadingChats, refreshChats, updateChatInList, removeChatFromList } = useChats()
-  const { socket } = useSocket()
+  const { socket, isUserOnline } = useSocket()
   const [typingChats, setTypingChats] = useState<Record<string, { fromUserId: string; fromUsername?: string; fromName?: string }>>({})
   const [search, setSearch] = useState('')
 
@@ -129,25 +131,22 @@ export function ChatList({
   }, [socket])
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set())
-  const [contacts, setContacts] = useState<any[]>([])
-  const [loadingContacts, setLoadingContacts] = useState(false)
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false)
   const navigate = useNavigate()
 
-  useEffect(() => {
-    const loadContacts = async () => {
-      try {
-        setLoadingContacts(true)
-        const res = await getMyContacts()
-        setContacts(res.data || [])
-      } catch (err) {
-        console.error('Failed to load contacts for chat list:', err)
-      } finally {
-        setLoadingContacts(false)
-      }
-    }
-    loadContacts()
-  }, [])
+  const { data: contacts = [], isLoading: loadingContacts } = useQuery({
+    queryKey: ['contacts', currentUserId],
+    queryFn: async () => {
+      const res = await getMyContacts()
+      const data = res.data || []
+      writeCache(currentUserId, CACHE_KEYS.contacts, data)
+      return data
+    },
+    initialData: () => readCache<any>(currentUserId, CACHE_KEYS.contacts) || undefined,
+    enabled: !!currentUserId,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    retry: 1,
+  })
   useEffect(() => {
     if (activeId && chats && chats.length > 0) {
       const currentActive = chats.find((c: any) => (c._id || c.id) === activeId)
@@ -493,7 +492,7 @@ export function ChatList({
                     >
                       <div className="relative shrink-0">
                         <ChatAvatar src={contact.avatar} name={name} className="size-[52px] rounded-2xl opacity-80" />
-                        {contact.isOnline && (
+                        {isUserOnline(contact._id || contact.id) && (
                           <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500 shadow-sm" />
                         )}
                       </div>
