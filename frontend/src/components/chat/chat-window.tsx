@@ -461,9 +461,17 @@ export function ChatWindow({
   }, [socket, chatId, myId])
 
   const emitTyping = useCallback((isTyping: boolean) => {
+    // For GROUP chats, only emit to the room (chatId) — never to an individual's
+    // personal room, otherwise a member with an open DM would see "typing" leak in.
+    // For DMs, target the single other participant's personal room as a fallback.
+    if (chat?.isGroupChat) {
+      if (!chatId) return
+      socket?.emit(isTyping ? 'typing_start' : 'typing_stop', { chatId })
+      return
+    }
     const otherUser = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
     const toUserId = otherUser?._id || otherUser?.id
-    if (!toUserId && !chat?.isGroupChat) return
+    if (!toUserId) return
     socket?.emit(isTyping ? 'typing_start' : 'typing_stop', { toUserId, chatId })
   }, [socket, chatId, chat, myId])
 

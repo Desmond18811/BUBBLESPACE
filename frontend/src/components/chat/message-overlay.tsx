@@ -233,11 +233,14 @@ export function MessageOverlay({ user, targetUser, onClose, workCardInfo = false
         const onMsgDeleted = ({ messageId }: any) => {
             setMessages(prev => prev.map(p => p._id === messageId ? { ...p, isDeleted: true, content: 'This message was deleted' } : p))
         }
-        const onTypingStart = ({ fromUserId }: any) => {
-            if (fromUserId !== myId) setTyping(true)
+        // Only react to typing in THIS conversation. Without the chatId guard, a
+        // group typing event (relayed to the user's personal room) would light up
+        // an unrelated DM overlay as if the person were typing to you.
+        const onTypingStart = ({ fromUserId, chatId: cid }: any) => {
+            if (cid === chatId && fromUserId !== myId) setTyping(true)
         }
-        const onTypingStop = ({ fromUserId }: any) => {
-            if (fromUserId !== myId) setTyping(false)
+        const onTypingStop = ({ fromUserId, chatId: cid }: any) => {
+            if (cid === chatId && fromUserId !== myId) setTyping(false)
         }
 
         socket.on('new_message', onNewMsg)

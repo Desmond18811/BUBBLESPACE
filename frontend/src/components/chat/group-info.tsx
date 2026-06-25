@@ -758,12 +758,15 @@ function GroupProfileCard({
     try {
       const { uploadGroupOrOrgImage } = await import('@/lib/api')
       const url = await uploadGroupOrOrgImage(file)
-      setAvatar(url)
-      
+
       const { updateGroupChat } = await import('@/lib/api')
       const res = await updateGroupChat(conv.id || conv._id, { groupIcon: url })
+      // Use the SIGNED groupIcon the server returns (the raw Filebase URL won't
+      // load); fall back to the upload url only if the response lacks it.
+      const updatedConv = res.conversation || res.data || res
+      setAvatar(updatedConv?.groupIcon || url)
       toast.success('Group avatar updated!')
-      if (onUpdate) onUpdate(res.conversation || res.data || res)
+      if (onUpdate) onUpdate(updatedConv)
     } catch (err: any) {
       toast.error(err.message || 'Failed to upload image')
     } finally {

@@ -167,14 +167,26 @@ export function ChatList({
     }
   })
 
-  const contactsWithoutChats = contacts.filter(con => {
+  // De-dup by id so a person (or chat) can never render twice even if upstream
+  // data carries duplicates.
+  const dedupeById = (arr: any[]): any[] => {
+    const seen = new Set<string>()
+    return arr.filter((x: any) => {
+      const id = String(x?._id || x?.id || '')
+      if (!id || seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+  }
+
+  const contactsWithoutChats = dedupeById(contacts.filter((con: any) => {
     const conId = con._id || con.id
     // Don't show yourself in contacts
     if (conId === currentUserId) return false
     return !chatUserIds.has(conId)
-  })
+  }))
 
-  const filteredChats = chats.filter(c => {
+  const filteredChats = dedupeById(chats.filter((c: any) => {
     const isArchived = (c.archivedBy && currentUserId && c.archivedBy.includes(currentUserId)) || archivedIds.has(c._id || c.id)
     if (isArchived) return false
     // Filter out self-chats (1:1 chats where both participants are you)
@@ -184,9 +196,9 @@ export function ChatList({
     }
     const name = getChatName(c, currentUserId)
     return name.toLowerCase().includes(search.toLowerCase())
-  })
+  }))
 
-  const filteredContacts = contactsWithoutChats.filter(con => {
+  const filteredContacts = contactsWithoutChats.filter((con: any) => {
     const name = con.full_name || con.username || ''
     return name.toLowerCase().includes(search.toLowerCase())
   })

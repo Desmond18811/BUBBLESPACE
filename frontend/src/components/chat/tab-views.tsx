@@ -279,7 +279,15 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
     queryKey: ['contacts', myId],
     queryFn: async () => {
       const contactsRes = await getMyContacts()
-      return (contactsRes?.data || []).filter((c: any) => (c._id || c.id) !== myId)
+      const list = (contactsRes?.data || []).filter((c: any) => (c._id || c.id) !== myId)
+      // De-dup by id (guards against any legacy duplicate contact entries).
+      const seen = new Set<string>()
+      return list.filter((c: any) => {
+        const id = String(c._id || c.id || '')
+        if (!id || seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
     },
     enabled: !!myId,
     staleTime: 1000 * 60 * 5, // 5 mins cache
