@@ -108,7 +108,11 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
   useEffect(() => {
     const requestPermissions = async () => {
       try {
-        await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' })
+        // This is only a permission probe — immediately release the tracks so the
+        // mic/camera aren't held open. LiveKitRoom acquires its own media. Leaking
+        // this stream kept devices "busy" and could break subsequent calls.
+        const probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' })
+        probe.getTracks().forEach(t => t.stop())
         setPermissionsGranted(true)
       } catch (err: any) {
         console.error('[Permissions] Media access denied:', err)
@@ -156,6 +160,12 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
     socket.on('meeting_ended', handleMeetingEnded)
 
     return () => {
+      // Tell the peer the call is over on EVERY teardown path (hangup button,
+      // LiveKit disconnect, navigate-away, tab close). The backend fans `call_end`
+      // out to the room as `call_ended`, which resets the peer's call state to idle
+      // so they can be called again. Without this, a peer who didn't press the
+      // explicit "End" button stayed stuck and could never call/answer again.
+      socket.emit('call_end', { roomId })
       socket.emit('leave_room', roomId)
       socket.off('meeting_ended', handleMeetingEnded)
       console.log(`[Meeting Room] Left room: ${roomId}`)

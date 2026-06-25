@@ -73,7 +73,7 @@ function groupReactions(reactions: any[] | undefined, myId: string): ReactionGro
   for (const r of reactions || []) {
     const emoji = r?.emoji
     if (!emoji) continue
-    const group = map.get(emoji) || { emoji, count: 0, mine: false, userIds: [] }
+    const group = map.get(emoji) || { emoji, count: 0, mine: false, userIds: [] as string[] }
     if (Array.isArray(r.users)) {
       for (const u of r.users) {
         const uid = String(u?._id || u?.id || u)

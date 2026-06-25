@@ -361,7 +361,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
     }
   }
 
-  const filtered = contacts.filter(c =>
+  const filtered = contacts.filter((c: any) =>
     (c.full_name || c.username || '').toLowerCase().includes(search.toLowerCase())
   )
 
@@ -488,7 +488,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
               <div className="mt-5">
                 <p className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-3">People you may know</p>
                 <div className="space-y-2">
-                  {suggestions.slice(0, 4).map(s => (
+                  {suggestions.slice(0, 4).map((s: any) => (
                     <div key={s._id || s.id} className="flex items-center gap-3 rounded-xl p-2 hover:bg-black/3 transition-colors">
                       <ChatAvatar src={s.avatar} name={s.full_name || s.username} className="size-9 rounded-xl" />
                       <div className="flex-1 min-w-0">
@@ -564,7 +564,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
 
         ) : (
           <div className={cn("grid gap-3", effectiveNarrow ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5")}>
-            {filtered.map(contact => {
+            {filtered.map((contact: any) => {
               const cid = contact._id || contact.id
               return (
                 <div
@@ -674,7 +674,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
           <div className="mt-8">
             <h3 className="text-sm font-semibold text-black/40 uppercase tracking-wider mb-4">People You May Know</h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {suggestions.slice(0, 6).map(s => (
+              {suggestions.slice(0, 6).map((s: any) => (
                 <div key={s._id || s.id} className="flex items-center gap-3 rounded-2xl border border-black/5 p-3 hover:border-purple/20 hover:shadow-sm transition-all">
                   <ChatAvatar src={s.avatar} name={s.full_name || s.username} className="size-11 rounded-xl shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -3900,7 +3900,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
               </p>
             </div>
           ) : (
-            coworkers.map((worker) => {
+            coworkers.map((worker: any) => {
               const workerId = worker._id || worker.id
               const isCollapsing = collapsingFor === workerId
               const isActive = activeChatId === workerId || (activeChat?.users?.some((u: any) => (u._id || u.id) === workerId))

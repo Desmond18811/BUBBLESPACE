@@ -433,6 +433,21 @@ export function AppProvider({ children, user }: AppProviderProps) {
             })
         })
 
+        // The backend fans out `call_ended` on ANY hangup/reject (including the peer
+        // disconnecting, navigating away, or closing the tab). Without handling it,
+        // the surviving party stays stuck in 'in_call'/'calling_*' forever and can
+        // never start or receive another call. Reset to idle on any matching end.
+        sock?.on('call_ended', (data: { roomId?: string; byUserId?: string }) => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+            ringtoneRef.current?.stop()
+            setCallState(prev => {
+                if (prev.status === 'idle') return prev
+                // Only ignore if it's an unrelated room we can identify; otherwise reset.
+                if (data.roomId && 'roomId' in prev && prev.roomId && prev.roomId !== data.roomId) return prev
+                return { status: 'idle' }
+            })
+        })
+
         return () => {
             disconnectSocket()
             setConnected(false)
@@ -448,6 +463,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('message_reaction')
             sock?.off('message_deleted')
             sock?.off('meeting_ended')
+            sock?.off('call_ended')
         }
     }, [user?.id, user?._id])
 
