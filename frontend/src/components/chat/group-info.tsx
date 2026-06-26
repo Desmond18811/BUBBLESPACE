@@ -27,6 +27,7 @@ import { useDashboard } from '@/contexts/DashboardContext'
 import type { Conversation, FileCategory } from '@/lib/chat-data'
 import { getOrgInviteCode } from '@/lib/api'
 import { toast } from 'sonner'
+import { useNicknames } from '@/contexts/AppContext'
 
 /* ── Glassmorphic styling constants ───────────────────────────────────────── */
 
@@ -468,6 +469,7 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
   const conv = conversation as any
   const members = conv.members || (conv.isGroupChat ? conv.users : []) || []
   const { setViewStatsUser, onOpenProfile } = useDashboard()
+  const { getDisplayName } = useNicknames()
 
   const currentUser = (() => {
     try {
@@ -506,19 +508,18 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
             <div key={m._id || m.id || m.name}
               onClick={() => onOpenProfile?.(m, true)}
               className="flex items-start gap-3 rounded-xl px-1.5 py-1.5 hover:bg-purple/5 cursor-pointer">
-              <ChatAvatar src={m.avatar || m.profile_image} name={m.full_name || m.username || '?'}
+              <ChatAvatar src={m.avatar || m.profile_image} name={getDisplayName(m)}
                 className="size-9 rounded-xl shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <p className="text-[13px] font-bold text-ink truncate flex items-center gap-1">
-                    {m.full_name || m.name || m.username}
+                    {getDisplayName(m)}
                     {isMemberAdmin && (
                       <span className="px-1 py-0.5 text-[8px] font-bold uppercase bg-purple/10 text-purple rounded leading-none shrink-0">
                         {isMe ? 'You (Admin)' : 'Admin'}
                       </span>
                     )}
                   </p>
-                  {m.username && <span className="text-[10px] font-semibold text-purple shrink-0">@{m.username}</span>}
                 </div>
                 <p className="text-[10px] text-ink-soft truncate flex items-center gap-1 mt-0.5 leading-tight">
                   <span className="font-medium">{m.org_role || m.role || 'Member'}</span>
@@ -575,9 +576,17 @@ function ContactCard({ conversation, onClose }: { conversation: any; onClose?: (
   const myId = (() => { try { const u = JSON.parse(localStorage.getItem('user') || '{}'); return u.id || u._id || '' } catch { return '' } })()
   const apiOther = users.find(u => (u.id || u._id) !== myId)
   const resolved = apiOther || other
+  const contactId = resolved.id || resolved._id || null
 
-  const displayName = conversation.chatName || conversation.name || conversation.title
+  const { nicknames, saveNickname } = useNicknames()
+  const [editingNickname, setEditingNickname] = useState(false)
+  const [nicknameInput, setNicknameInput] = useState('')
+  const [savingNickname, setSavingNickname] = useState(false)
+
+  const realName = conversation.chatName || conversation.name || conversation.title
     || resolved.full_name || resolved.name || resolved.username || 'User'
+  const savedNickname = contactId ? nicknames[contactId] : null
+  const displayName = savedNickname || realName
   const avatarSrc = conversation.avatar || conversation.groupIcon || resolved.avatar || resolved.profile_image || null
   const status = resolved.status || (resolved.isOnline ? 'Online' : 'Offline')
   const organization = resolved.organization || resolved.company || other.organization || null
@@ -585,6 +594,24 @@ function ContactCard({ conversation, onClose }: { conversation: any; onClose?: (
   const bio = resolved.bio || resolved.about || other.bio || null
   const role = resolved.org_role || resolved.role || resolved.position || other.role || other.org_role || null
   const email = resolved.email || null
+
+  const startEditingNickname = () => {
+    setNicknameInput(savedNickname || '')
+    setEditingNickname(true)
+  }
+
+  const submitNickname = async () => {
+    if (!contactId) return
+    setSavingNickname(true)
+    try {
+      await saveNickname(contactId, nicknameInput)
+      setEditingNickname(false)
+    } catch {
+      toast.error('Could not save nickname.')
+    } finally {
+      setSavingNickname(false)
+    }
+  }
 
   const infoRows = [
     { icon: Briefcase, label: 'Organization', value: organization || 'No organization' },
@@ -613,7 +640,43 @@ function ContactCard({ conversation, onClose }: { conversation: any; onClose?: (
         )} />
       </div>
 
-      <h2 className="text-[17px] font-bold text-ink">{displayName}</h2>
+      {editingNickname ? (
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <input
+            autoFocus
+            value={nicknameInput}
+            onChange={(e) => setNicknameInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && submitNickname()}
+            placeholder={realName}
+            className="text-[14px] font-bold text-ink text-center bg-purple/5 border border-purple/20 rounded-lg px-2 py-1 outline-none focus:border-purple/40 w-44"
+          />
+          <button
+            type="button"
+            disabled={savingNickname}
+            onClick={submitNickname}
+            className="text-[11px] font-bold text-purple px-2 py-1 rounded-lg hover:bg-purple/10 disabled:opacity-50"
+          >
+            Save
+          </button>
+        </div>
+      ) : (
+        <h2 className="text-[17px] font-bold text-ink flex items-center gap-1.5">
+          {displayName}
+          {!!contactId && (
+            <button
+              type="button"
+              onClick={startEditingNickname}
+              title={savedNickname ? `Real name: ${realName}` : 'Save as...'}
+              className="text-black/30 hover:text-purple transition-colors"
+            >
+              <Edit className="size-3.5" />
+            </button>
+          )}
+        </h2>
+      )}
+      {savedNickname && !editingNickname && (
+        <p className="text-[10px] text-ink-soft mt-0.5">aka {realName}</p>
+      )}
       <p className="text-[12px] text-purple font-semibold mt-0.5">{status}</p>
       {email && <p className="text-[11px] text-ink-soft mt-0.5">{email}</p>}
       {resolved.uniqueTag && (

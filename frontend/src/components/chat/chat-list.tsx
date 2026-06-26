@@ -3,7 +3,7 @@ import { Search, Pin, Check, CheckCheck, MoreVertical, BellOff, Trash2, Archive,
 import { cn } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
-import { useChats, useSocket } from '@/contexts/AppContext'
+import { useChats, useSocket, useNicknames } from '@/contexts/AppContext'
 import { muteChat, clearChat, toggleChatPin, deleteChat, blockUser } from '@/lib/api'
 import { toast } from 'sonner'
 import { useDashboard } from '@/contexts/DashboardContext'
@@ -96,6 +96,7 @@ export function ChatList({
   const { setIsMobileMenuOpen, setActiveChat, setActiveChatId, activeChatId, bgType } = useDashboard()
   const { chats, loadingChats, refreshChats, updateChatInList, removeChatFromList } = useChats()
   const { socket, isUserOnline } = useSocket()
+  const { getDisplayName } = useNicknames()
   const [typingChats, setTypingChats] = useState<Record<string, { fromUserId: string; fromUsername?: string; fromName?: string }>>({})
   const [search, setSearch] = useState('')
 
@@ -199,8 +200,7 @@ export function ChatList({
   }))
 
   const filteredContacts = contactsWithoutChats.filter((con: any) => {
-    const name = con.full_name || con.username || ''
-    return name.toLowerCase().includes(search.toLowerCase())
+    return getDisplayName(con).toLowerCase().includes(search.toLowerCase())
   })
 
   const handleContactClick = async (contact: any) => {
@@ -217,7 +217,7 @@ export function ChatList({
   function getChatName(chat: any, myId?: string): string {
     if (chat.isGroupChat) return chat.chatName || 'Group Chat'
     const other = chat.users?.find((u: any) => (u._id || u.id) !== myId)
-    if (other) return other.full_name || other.username || 'User'
+    if (other) return getDisplayName(other)
     return (chat.chatName && chat.chatName !== 'direct') ? chat.chatName : 'Chat'
   }
 
@@ -493,7 +493,7 @@ export function ChatList({
                   <span className="h-px flex-1 ml-3 bg-black/5" />
                 </div>
                 {filteredContacts.map((contact: any) => {
-                  const name = contact.full_name || contact.username || 'User'
+                  const name = getDisplayName(contact)
                   return (
                     <div
                       key={contact._id || contact.id}

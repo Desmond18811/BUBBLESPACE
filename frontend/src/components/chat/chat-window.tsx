@@ -8,7 +8,7 @@ import {
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
-import { useSocket, useChats } from '@/contexts/AppContext'
+import { useSocket, useChats, useNicknames } from '@/contexts/AppContext'
 import { useDashboard } from '@/contexts/DashboardContext'
 import {
   fetchMessages,
@@ -182,6 +182,7 @@ export function ChatWindow({
   const { socket, startCall, isUserOnline } = useSocket()
   const { chats, updateChatInList } = useChats()
   const { bgType, onOpenProfile } = useDashboard()
+  const { getDisplayName } = useNicknames()
   const myId = currentUser?._id || currentUser?.id
 
   const handleVoiceCall = () => {
@@ -211,7 +212,6 @@ export function ChatWindow({
   const [sending, setSending] = useState(false)
   const [typing, setTyping] = useState(false)
   const [typingUserId, setTypingUserId] = useState<string | null>(null)
-  const [typingUsername, setTypingUsername] = useState<string | null>(null)
   const [typingName, setTypingName] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuPos | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -430,11 +430,10 @@ export function ChatWindow({
       }
     }
 
-    const onTypingStart = ({ fromUserId, chatId: cid, fromUsername, fromName }: any) => {
+    const onTypingStart = ({ fromUserId, chatId: cid, fromName }: any) => {
       if (cid === chatId && fromUserId !== myId) {
         setTyping(true)
         setTypingUserId(fromUserId)
-        setTypingUsername(fromUsername || null)
         setTypingName(fromName || null)
       }
     }
@@ -443,7 +442,6 @@ export function ChatWindow({
       if (cid === chatId) {
         setTyping(false)
         setTypingUserId(null)
-        setTypingUsername(null)
         setTypingName(null)
       }
     }
@@ -865,7 +863,7 @@ export function ChatWindow({
   const getChatTitle = () => {
     if (chat?.isGroupChat) return chat.chatName || 'Group Chat'
     const other = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
-    if (other) return other.full_name || other.username || 'User'
+    if (other) return getDisplayName(other)
     return (chat.chatName && chat.chatName !== 'direct') ? chat.chatName : 'Chat'
   }
 
@@ -972,11 +970,11 @@ export function ChatWindow({
                     <p className="text-[12px] text-ink-soft">
                       {typing ? (
                         <span className="text-purple animate-pulse">
-                          {typingUsername 
-                            ? `@${typingUsername} is typing…` 
-                            : typingName 
-                              ? `${typingName} is typing…` 
-                              : 'typing…'}
+                          {(() => {
+                            const headerTypingUser = chat?.users?.find((u: any) => String(u._id || u.id) === String(typingUserId))
+                            const name = headerTypingUser ? getDisplayName(headerTypingUser) : typingName
+                            return name ? `${name} is typing…` : 'typing…'
+                          })()}
                         </span>
                       ) : (!chat?.isGroupChat && isUserOnline(getOtherUser()?._id || getOtherUser()?.id)) ? 'Online' : chat?.isGroupChat ? `${chat.users?.length || 0} members` : 'Offline'}
                     </p>
@@ -1117,7 +1115,7 @@ export function ChatWindow({
                   <div className="space-y-2">
                     {group.messages.map(msg => {
                       const own = isOwn(msg)
-                      const senderName = msg.sender?.full_name || msg.sender?.username || 'User'
+                      const senderName = msg.sender ? getDisplayName(msg.sender) : 'User'
                       const highlighted = searchQuery && msg.content?.toLowerCase().includes(searchQuery.toLowerCase())
 
                       return (
@@ -1184,11 +1182,6 @@ export function ChatWindow({
                                     onClick={() => onOpenProfile?.(msg.sender, true)}
                                   >
                                     {senderName}
-                                    {msg.sender?.username && (
-                                      <span className="text-[10px] text-purple/80 ml-1.5 font-bold">
-                                        @{msg.sender.username}
-                                      </span>
-                                    )}
                                   </p>
                                 )}
                                  {msg.message_type === 'voice' ? (
@@ -1349,7 +1342,7 @@ export function ChatWindow({
           {typing && (() => {
             const typingUser = chat?.users?.find((u: any) => String(u._id || u.id) === String(typingUserId));
             const avatarSrc = typingUser?.avatar || undefined;
-            const displayName = typingUser?.full_name || typingName || 'Someone';
+            const displayName = typingUser ? getDisplayName(typingUser) : (typingName || 'Someone');
             return (
               <div className="flex items-end gap-2.5">
                 <ChatAvatar src={avatarSrc} name={displayName} className="size-8 rounded-xl shrink-0" />
@@ -1519,10 +1512,9 @@ export function ChatWindow({
                         idx === mentionIndex && 'bg-purple/5'
                       )}
                     >
-                      <ChatAvatar src={member.avatar} name={member.full_name || member.username} className="size-8 rounded-xl shrink-0" />
+                      <ChatAvatar src={member.avatar} name={getDisplayName(member)} className="size-8 rounded-xl shrink-0" />
                       <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-ink truncate">{member.full_name || member.username}</p>
-                        {member.username && <p className="text-[11px] text-purple font-semibold">@{member.username}</p>}
+                        <p className="text-[13px] font-semibold text-ink truncate">{getDisplayName(member)}</p>
                       </div>
                     </button>
                   ))}

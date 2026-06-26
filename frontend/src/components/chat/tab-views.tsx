@@ -46,7 +46,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDashboard } from '@/contexts/DashboardContext'
 import { useNavigate } from '@tanstack/react-router'
-import { useChats } from '@/contexts/AppContext'
+import { useChats, useNicknames } from '@/contexts/AppContext'
 import { useTheme } from 'next-themes'
 import { CreateGroupModal } from './create-group-modal'
 import { useState, useEffect, useRef } from 'react'
@@ -271,6 +271,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
   const { startCall, isUserOnline } = useSocket()
   const { user: currentUser, setActiveChat, setActiveChatId, bgType } = useDashboard()
   const { refreshChats } = useChats()
+  const { getDisplayName } = useNicknames()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const myId = currentUser?._id || currentUser?.id
@@ -362,7 +363,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
   }
 
   const filtered = contacts.filter((c: any) =>
-    (c.full_name || c.username || '').toLowerCase().includes(search.toLowerCase())
+    getDisplayName(c).toLowerCase().includes(search.toLowerCase())
   )
 
   return (
@@ -490,7 +491,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                 <div className="space-y-2">
                   {suggestions.slice(0, 4).map((s: any) => (
                     <div key={s._id || s.id} className="flex items-center gap-3 rounded-xl p-2 hover:bg-black/3 transition-colors">
-                      <ChatAvatar src={s.avatar} name={s.full_name || s.username} className="size-9 rounded-xl" />
+                      <ChatAvatar src={s.avatar} name={getDisplayName(s)} className="size-9 rounded-xl" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-black truncate">{s.full_name}</p>
                         <p className="text-xs text-black/40 truncate">@{s.username}</p>
@@ -577,14 +578,14 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                   )}
                 >
                   <div className="relative">
-                    <ChatAvatar src={contact.avatar} name={contact.full_name || contact.username} className="size-14 rounded-2xl shadow-md" />
+                    <ChatAvatar src={contact.avatar} name={getDisplayName(contact)} className="size-14 rounded-2xl shadow-md" />
                     {isUserOnline(contact._id || contact.id) && (
                       <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
                     )}
                   </div>
                   <div className={cn("min-w-0 flex-1", effectiveNarrow ? "text-left" : "text-center")}>
                     <p className={cn("truncate font-bold text-ink", effectiveNarrow ? "text-sm" : "text-[13px]")}>
-                      {contact.full_name || contact.username}
+                      {getDisplayName(contact)}
                     </p>
                     <p className="truncate text-[10px] text-black/40">
                       {effectiveNarrow
@@ -603,7 +604,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                       </button>
                       <button
                         className="flex size-7 items-center justify-center rounded-lg border border-black/5 text-black/30 hover:text-purple hover:border-purple/20 transition-all"
-                        onClick={() => startCall && startCall(contact._id || contact.id, contact.full_name || contact.username, contact.avatar, 'voice')}
+                        onClick={() => startCall && startCall(contact._id || contact.id, getDisplayName(contact), contact.avatar, 'voice')}
                       >
                         <Phone className="size-3" />
                       </button>
@@ -676,7 +677,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {suggestions.slice(0, 6).map((s: any) => (
                 <div key={s._id || s.id} className="flex items-center gap-3 rounded-2xl border border-black/5 p-3 hover:border-purple/20 hover:shadow-sm transition-all">
-                  <ChatAvatar src={s.avatar} name={s.full_name || s.username} className="size-11 rounded-xl shrink-0" />
+                  <ChatAvatar src={s.avatar} name={getDisplayName(s)} className="size-11 rounded-xl shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-black truncate">{s.full_name}</p>
                     <p className="text-xs text-black/40">@{s.username}</p>
@@ -722,6 +723,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
 
 export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   const { startCall, isUserOnline } = useSocket()
+  const { getDisplayName } = useNicknames()
   const [selectionStep, setSelectionStep] = useState<'none' | 'source' | 'type'>('none')
   const [activeMeeting, setActiveMeeting] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(null)
   const { user: currentUser, bgType } = useDashboard()
@@ -732,7 +734,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   const handleStartCall = (type: 'voice' | 'video', coworker?: any) => {
     if (coworker) {
       if (startCall) {
-        startCall(coworker._id || coworker.id, coworker.full_name || coworker.username, coworker.avatar, type)
+        startCall(coworker._id || coworker.id, getDisplayName(coworker), coworker.avatar, type)
       }
       return
     }
@@ -900,7 +902,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
                       <div className="relative mx-auto inline-block">
                         <ChatAvatar
                           src={worker.avatar}
-                          name={worker.full_name || worker.username}
+                          name={getDisplayName(worker)}
                           className="size-20 rounded-[24px] shadow-lg ring-4 ring-white"
                         />
                         {isUserOnline(worker._id || worker.id) && (
@@ -1053,6 +1055,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
     bgType,
   } = useDashboard()
   const { updateChatInList } = useChats()
+  const { getDisplayName } = useNicknames()
   const myId = user?._id || user?.id
   const [chatLoading, setChatLoading] = useState(false)
   const isMobile = useIsMobile()
@@ -1070,7 +1073,7 @@ export function ArchiveView({ onMessage: propOnMessage }: { onMessage?: (user: a
   const getChatName = (chat: any) => {
     if (chat.isGroupChat) return chat.chatName || 'Group Chat'
     const other = chat.users?.find((u: any) => (u._id || u.id) !== myId)
-    return other?.full_name || other?.username || chat.chatName || 'Unknown'
+    return other ? getDisplayName(other) : (chat.chatName || 'Unknown')
   }
 
   const getChatAvatar = (chat: any) => {
@@ -1254,6 +1257,7 @@ const BRAIN_SOURCE_TYPES = [
 ]
 
 function BrainDigestPanel() {
+  const { getDisplayName } = useNicknames()
   const [digest, setDigest] = useState<any>(null)
   const [radar, setRadar] = useState<Record<string, any[]>>({})
   const [loading, setLoading] = useState(true)
@@ -1359,7 +1363,7 @@ function BrainDigestPanel() {
                   {experts.slice(0, 4).map((expert: any, idx: number) => (
                     <div key={idx} className="flex flex-col items-center gap-1">
                       <div className="flex size-10 items-center justify-center rounded-2xl bg-purple/10 text-base font-bold text-purple">
-                        {(expert.user?.full_name || expert.user?.username || '?')[0].toUpperCase()}
+                        {(getDisplayName(expert.user) || '?')[0].toUpperCase()}
                       </div>
                       <p className="text-[10px] text-ink-soft text-center max-w-[52px] truncate">
                         {expert.user?.full_name?.split(' ')[0] || expert.user?.username || 'Member'}
@@ -1865,6 +1869,7 @@ function OrgSettingsModal({
   currentUser: any
 }) {
   const { isUserOnline } = useSocket()
+  const { getDisplayName } = useNicknames()
   const [activeTab, setActiveTab] = useState<'profile' | 'people' | 'transcripts'>('profile')
   const [isAdmin, setIsAdmin] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
@@ -2195,13 +2200,13 @@ function OrgSettingsModal({
                   {members.map(member => (
                     <div key={member._id || member.username} className="bg-white/60 border border-black/5 rounded-2xl p-4 flex items-center gap-3">
                       <div className="relative">
-                        <ChatAvatar src={member.avatar} name={member.full_name || member.username} className="size-10 rounded-xl" />
+                        <ChatAvatar src={member.avatar} name={getDisplayName(member)} className="size-10 rounded-xl" />
                         {isUserOnline(member._id || member.id) && (
                           <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-green-500" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h5 className="font-bold text-sm text-ink truncate">{member.full_name || member.username}</h5>
+                        <h5 className="font-bold text-sm text-ink truncate">{getDisplayName(member)}</h5>
                         <p className="text-[10px] text-purple font-bold tracking-wide mt-0.5">{member.org_role || member.role || 'Member'}</p>
                         <p className="text-[10px] text-ink-soft truncate mt-0.5">{member.email}</p>
                       </div>
@@ -2242,7 +2247,7 @@ function OrgSettingsModal({
                             <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px] text-ink-soft font-semibold">
                               <span>📅 {dateStr}</span>
                               <span>⏱️ {durationStr}</span>
-                              <span>👤 Host: {meeting.host?.full_name || meeting.host?.username || 'Unknown'}</span>
+                              <span>👤 Host: {meeting.host ? getDisplayName(meeting.host) : 'Unknown'}</span>
                             </div>
                           </div>
                           <ChevronRight className={cn("size-4 text-ink-soft transition-transform", isExpanded ? "rotate-90 text-purple" : "")} />
@@ -3775,6 +3780,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
   } = useDashboard()
   const { refreshChats, chats } = useChats()
   const { isUserOnline, startCall } = useSocket()
+  const { getDisplayName } = useNicknames()
   const isNarrow = narrowProp ?? contextNarrow
   const [search, setSearch] = useState('')
   const myId = currentUser?._id || currentUser?.id
@@ -3798,7 +3804,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
   })
   const q = search.trim().toLowerCase()
   const coworkers = q
-    ? orgMembers.filter((w: any) => `${w.full_name || ''} ${w.username || ''} ${w.email || ''}`.toLowerCase().includes(q))
+    ? orgMembers.filter((w: any) => `${getDisplayName(w)} ${w.email || ''}`.toLowerCase().includes(q))
     : orgMembers
   // Group workspaces also belong in Work, alongside org members.
   const groupWorkspaces = (chats || []).filter((c: any) => {
@@ -3964,7 +3970,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
                   <div className="relative shrink-0">
                     <ChatAvatar
                       src={worker.avatar}
-                      name={worker.full_name || worker.username}
+                      name={getDisplayName(worker)}
                       className="size-12 rounded-xl shadow-sm"
                     />
                     {isUserOnline(worker._id || worker.id) && (
@@ -3974,7 +3980,7 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate font-bold text-ink text-[13px]">{worker.full_name || worker.username}</p>
+                      <p className="truncate font-bold text-ink text-[13px]">{getDisplayName(worker)}</p>
                       {(worker.org_role || worker.organization) && (
                         <span className="shrink-0 text-[9px] font-bold text-purple bg-purple/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                           {worker.org_role || worker.organization}
@@ -3988,14 +3994,14 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
 
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
-                      onClick={(e) => { e.stopPropagation(); startCall && startCall(workerId, worker.full_name || worker.username, worker.avatar, 'voice') }}
+                      onClick={(e) => { e.stopPropagation(); startCall && startCall(workerId, getDisplayName(worker), worker.avatar, 'voice') }}
                       aria-label="Voice Call"
                       className="flex size-8 items-center justify-center rounded-xl border border-black/10 text-black/50 transition-all hover:border-purple/30 hover:text-purple active:scale-95"
                     >
                       <Phone className="size-3.5" />
                     </button>
                     <button
-                      onClick={(e) => { e.stopPropagation(); startCall && startCall(workerId, worker.full_name || worker.username, worker.avatar, 'video') }}
+                      onClick={(e) => { e.stopPropagation(); startCall && startCall(workerId, getDisplayName(worker), worker.avatar, 'video') }}
                       aria-label="Video Call"
                       className="flex size-8 items-center justify-center rounded-xl border border-black/10 text-black/50 transition-all hover:border-purple/30 hover:text-purple active:scale-95"
                     >
@@ -4107,6 +4113,7 @@ interface CalendarSectionProps {
 }
 
 function CalendarSection({ coworkers }: CalendarSectionProps) {
+  const { getDisplayName } = useNicknames()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -4307,7 +4314,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
 
   // Filter coworkers by search query
   const filteredCoworkers = coworkers.filter((c: any) => {
-    const name = (c.full_name || c.username || '').toLowerCase()
+    const name = getDisplayName(c).toLowerCase()
     return name.includes(searchQuery.toLowerCase())
   })
 
@@ -4638,7 +4645,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                       <div className="flex -space-x-2 overflow-hidden">
                         {task.recipients.slice(0, 4).map((r: any, rIdx: number) => {
                           const avatar = typeof r === 'object' ? r.avatar : undefined
-                          const name = typeof r === 'object' ? (r.full_name || r.username) : 'User'
+                          const name = typeof r === 'object' ? getDisplayName(r) : 'User'
                           return (
                             <ChatAvatar
                               key={rIdx}
@@ -4859,7 +4866,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                               <div className="flex items-center gap-2">
                                 <ChatAvatar
                                   src={worker.avatar}
-                                  name={worker.full_name || worker.username}
+                                  name={getDisplayName(worker)}
                                   className="size-6 rounded-lg text-[9px]"
                                 />
                                 <div className="text-left">

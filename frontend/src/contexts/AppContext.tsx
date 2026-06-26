@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
-import { fetchAllUserChats, fetchTasks } from '@/lib/api'
+import { fetchAllUserChats, fetchTasks, getContactNicknames, setContactNickname } from '@/lib/api'
 import { readCache, writeCache, CACHE_KEYS } from '@/lib/webCache'
 import { Phone } from 'lucide-react'
 import { LiveKitMeetingModal } from '@/components/chat/LiveKitMeetingModal'
@@ -58,6 +58,25 @@ const ChatContext = createContext<ChatContextValue>({
 })
 
 export const useChats = () => useContext(ChatContext)
+
+// ─── Nickname Context ─────────────────────────────────────────────────────────
+// Private per-viewer aliases for other users (e.g. "saved as" names in groups).
+// Resolution order is always: my saved nickname for them > their full_name.
+
+interface NicknameContextValue {
+    nicknames: Record<string, string>
+    /** Resolve the name I should see for a user: my nickname for them, else their full_name/username. */
+    getDisplayName: (u: any) => string
+    saveNickname: (contactId: string, nickname: string) => Promise<void>
+}
+
+const NicknameContext = createContext<NicknameContextValue>({
+    nicknames: {},
+    getDisplayName: (u: any) => u?.full_name || u?.name || u?.username || 'Unknown',
+    saveNickname: async () => {},
+})
+
+export const useNicknames = () => useContext(NicknameContext)
 
 // ─── App Context Provider ─────────────────────────────────────────────────────
 
@@ -496,9 +515,30 @@ export function AppProvider({ children, user }: AppProviderProps) {
 
     const isUserOnline = useCallback((id?: string | null) => !!id && onlineUsers.has(String(id)), [onlineUsers])
 
+    // ─── Nicknames ──────────────────────────────────────────────────────────
+    const [nicknames, setNicknames] = useState<Record<string, string>>({})
+
+    useEffect(() => {
+        if (!user) return
+        getContactNicknames()
+            .then((res: any) => setNicknames(res?.data || {}))
+            .catch(() => {})
+    }, [userId])
+
+    const getDisplayName = useCallback((u: any) => {
+        const id = u?._id || u?.id
+        return (id && nicknames[id]) || u?.full_name || u?.name || u?.username || 'Unknown'
+    }, [nicknames])
+
+    const saveNickname = useCallback(async (contactId: string, nickname: string) => {
+        const res: any = await setContactNickname(contactId, nickname)
+        setNicknames(res?.data || {})
+    }, [])
+
     return (
         <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, callState, endCall, onlineUsers, isUserOnline }}>
             <ChatContext.Provider value={{ chats, loadingChats, refreshChats, updateChatInList, removeChatFromList }}>
+            <NicknameContext.Provider value={{ nicknames, getDisplayName, saveNickname }}>
                 {children}
 
                 {/* Outgoing Call Overlay */}
@@ -589,6 +629,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
                     onClose={() => setCallState({ status: 'idle' })}
                   />
                 )}
+            </NicknameContext.Provider>
             </ChatContext.Provider>
         </SocketContext.Provider>
     )
