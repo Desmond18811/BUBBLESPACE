@@ -191,7 +191,7 @@ export function ChatWindow({
     } else {
       const other = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
       if (other && startCall) {
-        startCall(other._id || other.id, other.full_name || other.username, other.avatar, 'voice')
+        startCall(other._id || other.id, getDisplayName(other), other.avatar, 'voice')
       }
     }
   }
@@ -202,7 +202,7 @@ export function ChatWindow({
     } else {
       const other = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
       if (other && startCall) {
-        startCall(other._id || other.id, other.full_name || other.username, other.avatar, 'video')
+        startCall(other._id || other.id, getDisplayName(other), other.avatar, 'video')
       }
     }
   }
