@@ -53,14 +53,14 @@ import { useState, useEffect, useRef } from 'react'
 import { cn, getSecureMediaUrl } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
-import { updateProfile, uploadAvatar, uploadBackground, searchUsers, getMyContacts, addContact, getSuggestions, removeContact as removeContactApi, blockUser, fetchTasks, createTaskFull, updateTaskFull, deleteTaskFull, fetchAiDescription } from '@/lib/api'
+import { updateProfile, uploadAvatar, uploadBackground, getMyContacts, addContact, getSuggestions, removeContact as removeContactApi, blockUser, fetchTasks, createTaskFull, updateTaskFull, deleteTaskFull, fetchAiDescription } from '@/lib/api'
 import { readCache, writeCache, CACHE_KEYS } from '@/lib/webCache'
 import { toast } from 'sonner'
 import {
   profile,
   type Friend,
 } from '@/lib/chat-data'
-import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite, joinGroupChat } from '@/lib/api'
+import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite, joinGroupChat, getOrgMembers } from '@/lib/api'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { useSocket } from '@/contexts/AppContext'
@@ -766,11 +766,14 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
     staleTime: 1000 * 60,
   })
 
+  // Full org roster (same endpoint as Work), not the capped search — "People in
+  // the office" is meant to be everyone currently online, so it needs the whole
+  // org to filter against, not a 30-row search slice.
   const { data: coworkerData } = useQuery({
     queryKey: ['coworkers-calls'],
     queryFn: async () => {
-      const res = await searchUsers('')
-      const users = res.users || []
+      const res = await getOrgMembers()
+      const users = res.members || res.data || []
       writeCache(myId, CACHE_KEYS.coworkers, users)
       return users
     },
@@ -779,11 +782,12 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   })
 
   const activeRooms = callLogsData?.rooms || []
-  // Filter out self and bots from coworkers so you can't call yourself or the AI bot
+  // Filter out self and bots, then to only those currently online — this section
+  // is "people in the office right now," not the full roster (that's Work).
   const coworkers = (coworkerData || []).filter((w: any) => {
     const wId = w._id || w.id
     const isBot = w.is_bot || w.username === 'aida' || w.username?.toLowerCase() === 'aida'
-    return wId !== myId && !isBot
+    return wId !== myId && !isBot && isUserOnline(wId)
   })
 
   return (
@@ -884,6 +888,10 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
                   [1, 2, 3, 4, 5, 6].map(i => (
                     <div key={i} className="h-48 rounded-[32px] bg-black/3 animate-pulse" />
                   ))
+                ) : coworkers.length === 0 ? (
+                  <div className="col-span-full py-8 text-center rounded-[28px] border-2 border-dashed border-black/5 bg-black/2">
+                    <p className="text-sm text-black/30 font-medium">No one from your organization is online right now.</p>
+                  </div>
                 ) : coworkers.map((worker: any) => (
                   <div key={worker._id || worker.id} className="group relative flex flex-col items-center gap-3 overflow-hidden rounded-[32px] border border-black/5 bg-white p-5 text-center transition-all hover:border-purple/30 hover:shadow-2xl">
                     <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-purple/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -3765,16 +3773,19 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
     setShowInfo,
     bgType,
   } = useDashboard()
-  const { refreshChats } = useChats()
-  const { isUserOnline } = useSocket()
+  const { refreshChats, chats } = useChats()
+  const { isUserOnline, startCall } = useSocket()
   const isNarrow = narrowProp ?? contextNarrow
   const [search, setSearch] = useState('')
   const myId = currentUser?._id || currentUser?.id
-  const { data: coworkers = [], isLoading: loading } = useQuery({
-    queryKey: ['coworkers', search, myId],
+  // Work roster = the full organization, from the same endpoint mobile uses.
+  // (The previous searchUsers('') path was scoped + capped at 30, which is why
+  // Work looked empty.) Search is applied client-side below.
+  const { data: orgMembers = [], isLoading: loading } = useQuery({
+    queryKey: ['orgMembers', myId],
     queryFn: async () => {
-      const res = await searchUsers(search)
-      return (res.users || []).filter((w: any) => {
+      const res = await getOrgMembers()
+      return (res.members || res.data || []).filter((w: any) => {
         const wId = w._id || w.id
         const isMe = wId === myId
         const isBot = w.is_bot || w.username === 'aida' || w.username?.toLowerCase() === 'aida'
@@ -3784,6 +3795,16 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
     enabled: !!myId,
     staleTime: 1000 * 60 * 5, // 5 mins cache
     retry: 1,
+  })
+  const q = search.trim().toLowerCase()
+  const coworkers = q
+    ? orgMembers.filter((w: any) => `${w.full_name || ''} ${w.username || ''} ${w.email || ''}`.toLowerCase().includes(q))
+    : orgMembers
+  // Group workspaces also belong in Work, alongside org members.
+  const groupWorkspaces = (chats || []).filter((c: any) => {
+    if (!c.isGroupChat) return false
+    if (!q) return true
+    return (c.chatName || '').toLowerCase().includes(q)
   })
   const [chatLoading, setChatLoading] = useState(false)
   const [collapsingFor, setCollapsingFor] = useState<string | null>(null)
@@ -3887,6 +3908,29 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
         )}
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {groupWorkspaces.length > 0 && (
+            <>
+              <p className="px-1 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wider text-black/30">Group Workspaces · {groupWorkspaces.length}</p>
+              {groupWorkspaces.map((g: any) => {
+                const gid = g._id || g.id
+                const memberCount = (g.users?.length ?? g.members?.length ?? 0)
+                return (
+                  <div
+                    key={gid}
+                    onClick={() => { setActiveChat(g); setActiveChatId(gid); setShowInfo(false); navigate({ to: `/dashboard/chat/${gid}` }) }}
+                    className="group flex items-center gap-3 rounded-[22px] border border-black/5 bg-white p-3 transition-all duration-200 cursor-pointer hover:border-purple/20 hover:shadow-md"
+                  >
+                    <ChatAvatar src={g.groupIcon} name={g.chatName || 'Group'} className="size-12 rounded-xl shadow-sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-bold text-ink text-[13px]">{g.chatName || 'Group Chat'}</p>
+                      <p className="text-[11px] text-ink-soft mt-0.5 truncate">{memberCount} member{memberCount === 1 ? '' : 's'}</p>
+                    </div>
+                  </div>
+                )
+              })}
+              <p className="px-1 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-black/30">Org Members · {coworkers.length}</p>
+            </>
+          )}
           {loading ? (
             [1, 2, 3, 4].map(i => (
               <div key={i} className="h-20 rounded-2xl bg-black/3 animate-pulse" />
@@ -3943,6 +3987,20 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
                   </div>
 
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startCall && startCall(workerId, worker.full_name || worker.username, worker.avatar, 'voice') }}
+                      aria-label="Voice Call"
+                      className="flex size-8 items-center justify-center rounded-xl border border-black/10 text-black/50 transition-all hover:border-purple/30 hover:text-purple active:scale-95"
+                    >
+                      <Phone className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startCall && startCall(workerId, worker.full_name || worker.username, worker.avatar, 'video') }}
+                      aria-label="Video Call"
+                      className="flex size-8 items-center justify-center rounded-xl border border-black/10 text-black/50 transition-all hover:border-purple/30 hover:text-purple active:scale-95"
+                    >
+                      <Video className="size-3.5" />
+                    </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); if (!chatLoading) handleOpenChat(worker) }}
                       disabled={chatLoading}
@@ -4219,6 +4277,34 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
     )
   })
 
+  // Org calendar events (holidays, company events, video/audio meetings) for the
+  // selected day, normalized to the task shape so the agenda can render both in one
+  // merged list. These aren't Task records, so they never get Edit/Delete.
+  const selectedDayCalEvents = calendarEvents
+    .filter((ev: any) => {
+      const d = new Date(ev.startTime)
+      return (
+        d.getDate() === selectedDate.getDate() &&
+        d.getMonth() === selectedDate.getMonth() &&
+        d.getFullYear() === selectedDate.getFullYear()
+      )
+    })
+    .map((ev: any) => ({
+      _id: ev._id,
+      title: ev.title,
+      description: ev.summary || ev.description || '',
+      start_time: ev.startTime,
+      end_time: ev.endTime,
+      eventType: ev.eventType,
+      status: ev.status,
+      recipients: ev.attendees,
+      isOrgEvent: true,
+    }))
+
+  const selectedDayItems = [...selectedDayTasks, ...selectedDayCalEvents].sort(
+    (a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  )
+
   // Filter coworkers by search query
   const filteredCoworkers = coworkers.filter((c: any) => {
     const name = (c.full_name || c.username || '').toLowerCase()
@@ -4415,9 +4501,14 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                   {hasTask && (
                     <span className={cn("size-1.5 rounded-full", selected ? "bg-white" : "bg-[#6366f1]")} title="Task" />
                   )}
-                  {hasOrgEvent && (
-                    <span className={cn("size-1.5 rounded-full ring-1 ring-purple/30", selected ? "bg-white" : "bg-purple")} title="Org Event" />
-                  )}
+                  {hasOrgEvent && dayCalEvents.slice(0, 3).map((ev: any, i: number) => (
+                    <span
+                      key={`org-${i}`}
+                      className="size-1.5 rounded-full ring-1 ring-purple/30"
+                      style={{ backgroundColor: selected ? '#fff' : (WEB_EVENT_COLORS[ev.eventType] || '#6c5ce7') }}
+                      title={ev.eventType === 'holiday' ? `Holiday: ${ev.title}` : ev.title}
+                    />
+                  ))}
                 </div>
               </button>
             )
@@ -4435,13 +4526,13 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
         </div>
 
         <div className="flex-1 space-y-4 mb-6">
-          {selectedDayTasks.length === 0 ? (
+          {selectedDayItems.length === 0 ? (
             <div className="py-12 text-center border-2 border-dashed border-black/5 rounded-3xl bg-white/50">
               <Calendar className="size-8 text-black/20 mx-auto mb-2" />
               <p className="text-sm text-ink-soft font-medium">No events scheduled.</p>
             </div>
           ) : (
-            selectedDayTasks.map((task: any) => {
+            selectedDayItems.map((task: any) => {
               const start = new Date(task.start_time)
               const end = new Date(task.end_time)
               const formatTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -4451,7 +4542,21 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                   {/* Event Type & Actions Header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      {task.isUpdated ? (
+                      {task.isOrgEvent ? (
+                        <span
+                          className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-tight flex items-center gap-1"
+                          style={{ backgroundColor: `${WEB_EVENT_COLORS[task.eventType] || '#6c5ce7'}1a`, color: WEB_EVENT_COLORS[task.eventType] || '#6c5ce7' }}
+                        >
+                          {(task.eventType === 'meeting_video' || task.eventType === 'meeting_audio') && (
+                            task.eventType === 'meeting_audio' ? <Phone className="size-2.5" /> : <Video className="size-2.5" />
+                          )}
+                          {task.eventType === 'holiday' ? 'Holiday'
+                            : task.eventType === 'company' ? 'Company'
+                            : task.eventType === 'meeting_video' ? 'Meeting (Video)'
+                            : task.eventType === 'meeting_audio' ? 'Meeting (Voice)'
+                            : 'All Day'}
+                        </span>
+                      ) : task.isUpdated ? (
                         <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-600 uppercase tracking-tight">
                           Updated
                         </span>
@@ -4466,33 +4571,46 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                         </span>
                       )}
 
-                      <span className={cn(
-                        "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase",
-                        task.priority === 'urgent' && "bg-red-50 text-red-500",
-                        task.priority === 'high' && "bg-orange-50 text-orange-500",
-                        task.priority === 'medium' && "bg-yellow-50 text-yellow-600",
-                        task.priority === 'low' && "bg-slate-100 text-slate-500"
-                      )}>
-                        {task.priority}
-                      </span>
+                      {!task.isOrgEvent && (
+                        <span className={cn(
+                          "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase",
+                          task.priority === 'urgent' && "bg-red-50 text-red-500",
+                          task.priority === 'high' && "bg-orange-50 text-orange-500",
+                          task.priority === 'medium' && "bg-yellow-50 text-yellow-600",
+                          task.priority === 'low' && "bg-slate-100 text-slate-500"
+                        )}>
+                          {task.priority}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => openEditModal(task)}
-                        className="p-1 rounded hover:bg-slate-100 text-ink-soft hover:text-purple"
-                        title="Edit event"
-                      >
-                        <Pencil className="size-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(task._id)}
-                        className="p-1 rounded hover:bg-slate-100 text-ink-soft hover:text-red-500"
-                        title="Delete event"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </div>
+                    {task.isOrgEvent ? (
+                      (task.eventType === 'meeting_video' || task.eventType === 'meeting_audio') && task.status === 'scheduled' && (
+                        <button
+                          onClick={() => apiStartMeeting(task._id).then((d: any) => window.alert(`Room: ${d.roomId}`)).catch((e: any) => window.alert(e.message))}
+                          className="px-2 py-1 rounded-lg bg-purple/10 text-purple text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          Start Meeting
+                        </button>
+                      )
+                    ) : (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => openEditModal(task)}
+                          className="p-1 rounded hover:bg-slate-100 text-ink-soft hover:text-purple"
+                          title="Edit event"
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(task._id)}
+                          className="p-1 rounded hover:bg-slate-100 text-ink-soft hover:text-red-500"
+                          title="Delete event"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Title & Description */}

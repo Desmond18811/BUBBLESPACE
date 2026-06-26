@@ -303,7 +303,16 @@ export function ChatWindow({
     socket.emit('join_room', chatId)
     prevChatId.current = chatId
 
+    // The socket.io client reuses the same Socket object across reconnects, so this
+    // effect doesn't re-run on a drop/reconnect — but server-side room membership for
+    // chatId IS lost on a fresh transport connection. Re-join on every 'connect' (the
+    // initial connect included) so a flaky connection doesn't silently stop delivering
+    // room-scoped events like group typing indicators.
+    const onReconnect = () => socket.emit('join_room', chatId)
+    socket.on('connect', onReconnect)
+
     return () => {
+      socket.off('connect', onReconnect)
       socket.emit('leave_room', chatId)
     }
   }, [chatId, socket])
@@ -760,6 +769,10 @@ export function ChatWindow({
       fileInputRef.current.value = ''
     }
     
+    // Fire typing_stop immediately and kill the pending debounce timer — otherwise
+    // if the user resumes typing a new message within the 2s window, the stale
+    // timer fires later and incorrectly clears the "typing" indicator mid-type.
+    if (typingTimer.current) clearTimeout(typingTimer.current)
     emitTyping(false)
 
     try {
