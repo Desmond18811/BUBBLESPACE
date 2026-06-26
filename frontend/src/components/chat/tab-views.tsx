@@ -3919,7 +3919,9 @@ export function WorkView({ onMessage: propOnMessage, isNarrow: narrowProp }: { o
               <p className="px-1 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wider text-black/30">Group Workspaces · {groupWorkspaces.length}</p>
               {groupWorkspaces.map((g: any) => {
                 const gid = g._id || g.id
-                const memberCount = (g.users?.length ?? g.members?.length ?? 0)
+                const rawGroupMembers = g.users || g.members || []
+                const uniqueGroupMemberIds = new Set(rawGroupMembers.map((m: any) => String(m._id || m.id || m.username || m.email || '')).filter(Boolean))
+                const memberCount = uniqueGroupMemberIds.size
                 return (
                   <div
                     key={gid}

@@ -976,7 +976,7 @@ export function ChatWindow({
                             return name ? `${name} is typing…` : 'typing…'
                           })()}
                         </span>
-                      ) : (!chat?.isGroupChat && isUserOnline(getOtherUser()?._id || getOtherUser()?.id)) ? 'Online' : chat?.isGroupChat ? `${chat.users?.length || 0} members` : 'Offline'}
+                      ) : (!chat?.isGroupChat && isUserOnline(getOtherUser()?._id || getOtherUser()?.id)) ? 'Online' : chat?.isGroupChat ? `${new Set([...(chat.users || []), ...(chat.members || [])].map((m: any) => String(m._id || m.id || '')).filter(Boolean)).size} members` : 'Offline'}
                     </p>
                   </div>
                 </div>
@@ -1294,10 +1294,10 @@ export function ChatWindow({
                                         onClick={() => handleReact(msg._id, g.emoji)}
                                         title={`${g.count} ${g.count === 1 ? 'reaction' : 'reactions'}`}
                                         className={cn(
-                                          "flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs transition-colors cursor-pointer",
+                                          "flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs transition-all cursor-pointer active:scale-95",
                                           g.mine
-                                            ? "bg-purple/20 ring-1 ring-purple/40 text-ink"
-                                            : "bg-black/5 hover:bg-black/10 text-ink"
+                                            ? "bg-purple text-white shadow-sm shadow-purple/30"
+                                            : "bg-black/8 hover:bg-black/12 text-ink"
                                         )}
                                       >
                                         <span>{g.emoji}</span>

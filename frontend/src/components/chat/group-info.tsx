@@ -467,7 +467,16 @@ function FilesCard({
 
 function MembersCard({ conversation, onClose }: { conversation: Conversation; onClose?: () => void }) {
   const conv = conversation as any
-  const members = conv.members || (conv.isGroupChat ? conv.users : []) || []
+  // Deduplicate members by ID to prevent double-counting when the backend
+  // returns overlapping entries in both `members` and `users`.
+  const rawMembers = conv.members || (conv.isGroupChat ? conv.users : []) || []
+  const seen = new Set<string>()
+  const members = rawMembers.filter((m: any) => {
+    const id = String(m._id || m.id || m.username || m.email || '')
+    if (!id || seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
   const { setViewStatsUser, onOpenProfile } = useDashboard()
   const { getDisplayName } = useNicknames()
 
@@ -756,7 +765,8 @@ function GroupProfileCard({
   const [newResLabel, setNewResLabel] = useState('')
   const [newResUrl, setNewResUrl] = useState('')
 
-  const memberCount = (conv.members || conv.users || []).length
+  const rawCountMembers = conv.members || conv.users || []
+  const memberCount = new Set(rawCountMembers.map((m: any) => String(m._id || m.id || m.username || m.email || '')).filter(Boolean)).size
 
   const handleSave = async () => {
     if (!name.trim()) {
