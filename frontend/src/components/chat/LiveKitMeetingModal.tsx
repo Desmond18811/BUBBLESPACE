@@ -28,8 +28,10 @@ import {
   Sparkles,
   ClipboardList,
   Zap,
+  UserPlus,
+  Copy,
 } from 'lucide-react'
-import { createMeeting, addMeetingTranscriptChunk, endMeeting, getLiveKitToken, uploadWorkspaceFile } from '@/lib/api'
+import { createMeeting, addMeetingTranscriptChunk, endMeeting, getLiveKitToken, uploadWorkspaceFile, createCallInviteLink, getMyContacts } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
   LiveKitRoom,
@@ -487,6 +489,43 @@ function MeetingRoomLayout({
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [activeReactions, setActiveReactions] = useState<{ id: string; emoji: string; x: number; y: number }[]>([])
+
+  // ── Add-people / invite picker ──────────────────────────────────────────────
+  const [showInvitePicker, setShowInvitePicker] = useState(false)
+  const [inviteContacts, setInviteContacts] = useState<any[]>([])
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set())
+
+  // Lazily load contacts the first time the invite picker opens.
+  useEffect(() => {
+    if (!showInvitePicker || inviteContacts.length) return
+    getMyContacts()
+      .then((res: any) => setInviteContacts(res?.contacts || res?.data || res || []))
+      .catch(() => {/* non-fatal: picker still offers the copy-link path */})
+  }, [showInvitePicker, inviteContacts.length])
+
+  const handleCopyInviteLink = useCallback(async () => {
+    try {
+      const { url } = await createCallInviteLink(roomId)
+      await navigator.clipboard.writeText(url)
+      toast.success('Invite link copied')
+    } catch {
+      toast.error('Could not create invite link')
+    }
+  }, [roomId])
+
+  const handleInviteContact = useCallback((c: any) => {
+    const toUserId = c._id || c.id || c.userId
+    if (!toUserId) return
+    socketRef.current?.emit('call_invite', {
+      toUserId,
+      roomId: roomIdRef.current,
+      callerName: userName,
+      callerAvatar: userAvatar,
+      type,
+    })
+    setInvitedIds(prev => new Set(prev).add(toUserId))
+    toast.success(`Invited ${c.full_name || c.username || 'contact'}`)
+  }, [userName, userAvatar, type])
 
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessageEntry[]>([])
@@ -1224,6 +1263,63 @@ function MeetingRoomLayout({
                     {emoji}
                   </button>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add people / Invite */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowInvitePicker(!showInvitePicker)
+                setShowVolumeSlider(false)
+                setShowEmojiPicker(false)
+              }}
+              className={cn(
+                "size-12 rounded-full flex items-center justify-center transition-all cursor-pointer",
+                showInvitePicker ? "bg-purple text-white shadow-sm" : "bg-purple/10 text-purple hover:bg-purple/20"
+              )}
+              title="Add people"
+            >
+              <UserPlus className="size-5" />
+            </button>
+            {showInvitePicker && (
+              <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-72 max-h-80 bg-white border border-black/5 shadow-xl rounded-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-150 flex flex-col overflow-hidden font-sans">
+                <div className="p-3 border-b border-black/5 shrink-0">
+                  <button
+                    onClick={handleCopyInviteLink}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-purple/10 hover:bg-purple/20 text-purple font-bold rounded-xl text-xs transition-all cursor-pointer"
+                  >
+                    <Copy className="size-4" /> Copy invite link
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 scrollbar-hide">
+                  <p className="text-[10px] font-bold text-ink-soft px-2 py-1 uppercase tracking-wider">Ring a contact</p>
+                  {inviteContacts.length === 0 ? (
+                    <p className="text-xs text-ink-soft/60 text-center py-6">No contacts to ring</p>
+                  ) : (
+                    inviteContacts.map((c: any) => {
+                      const cid = c._id || c.id || c.userId
+                      const invited = invitedIds.has(cid)
+                      const name = c.full_name || c.username || 'Contact'
+                      return (
+                        <button
+                          key={cid}
+                          disabled={invited}
+                          onClick={() => handleInviteContact(c)}
+                          className={cn(
+                            "w-full flex items-center gap-2.5 p-2 rounded-xl transition-colors text-left",
+                            invited ? "opacity-50" : "hover:bg-purple-soft/40 cursor-pointer"
+                          )}
+                        >
+                          <ChatAvatar src={c.avatar} name={name} className="size-8 rounded-full object-cover shrink-0" />
+                          <span className="text-xs font-semibold text-ink truncate flex-1">{name}</span>
+                          <span className="text-[10px] font-bold text-purple shrink-0">{invited ? 'Ringing…' : 'Invite'}</span>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
               </div>
             )}
           </div>
