@@ -20,6 +20,8 @@ interface SocketContextValue {
     socket: ReturnType<typeof getSocket>
     connected: boolean
     startCall: (toUserId: string, targetName: string, targetAvatar?: string, type?: 'voice' | 'video') => void
+    /** Start a group call: rings every other member into one room and opens the call UI. */
+    startGroupCall: (members: any[], type?: 'voice' | 'video') => void
     callState: CallState
     endCall: () => void
     /** Single source of truth for presence — set of userIds currently online. */
@@ -32,6 +34,7 @@ const SocketContext = createContext<SocketContextValue>({
     socket: null,
     connected: false,
     startCall: () => {},
+    startGroupCall: () => {},
     callState: { status: 'idle' },
     endCall: () => {},
     onlineUsers: new Set(),
@@ -101,6 +104,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
 
     // Call state & ringtone refs
     const [callState, setCallState] = useState<CallState>({ status: 'idle' })
+    const [groupMeeting, setGroupMeeting] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(null)
     const ringtoneRef = useRef<RingtonePlayer | null>(null)
     const timeoutRef = useRef<any>(null)
 
@@ -238,6 +242,30 @@ export function AppProvider({ children, user }: AppProviderProps) {
             ringtoneRef.current?.stop()
             setCallState({ status: 'idle' })
         }, 30000)
+    }, [user])
+
+    // Group call: ring every other member into a single room and open the call UI
+    // for the host. Members receive a normal incoming call (call_invite → the room),
+    // so LiveKit hosts the N-way media. No ringback timeout — a group call stays open
+    // for whoever joins.
+    const startGroupCall = useCallback((members: any[], type: 'voice' | 'video' = 'voice') => {
+        const roomId = `bubble-group-${Math.random().toString(36).slice(2, 11)}`
+        const myId = String(user?._id || user?.id || '')
+        const targets = (members || [])
+            .map((m: any) => String(m._id || m.id || m))
+            .filter((id: string) => id && id !== myId)
+
+        for (const toUserId of targets) {
+            socketRef.current?.emit('call_invite', {
+                toUserId,
+                roomId,
+                callerName: user?.full_name || user?.username || 'Colleague',
+                callerAvatar: user?.avatar,
+                type,
+            })
+        }
+
+        setGroupMeeting({ roomId, type })
     }, [user])
 
     // Initialize socket when user is available
@@ -580,7 +608,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
     }, [])
 
     return (
-        <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, callState, endCall, onlineUsers, isUserOnline }}>
+        <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, startGroupCall, callState, endCall, onlineUsers, isUserOnline }}>
             <ChatContext.Provider value={{ chats, loadingChats, refreshChats, updateChatInList, removeChatFromList }}>
             <NicknameContext.Provider value={{ nicknames, getDisplayName, saveNickname }}>
                 {children}
@@ -659,6 +687,19 @@ export function AppProvider({ children, user }: AppProviderProps) {
                       </div>
                     </div>
                   </div>
+                )}
+
+                {/* Group call modal (host view) — opened by startGroupCall */}
+                {groupMeeting && (
+                  <LiveKitMeetingModal
+                    key={groupMeeting.roomId}
+                    roomId={groupMeeting.roomId}
+                    type={groupMeeting.type}
+                    userId={user?._id || user?.id || 'guest'}
+                    userName={user?.full_name || user?.username || 'Colleague'}
+                    userAvatar={user?.avatar}
+                    onClose={() => setGroupMeeting(null)}
+                  />
                 )}
 
                 {/* LiveKit Call Modal */}

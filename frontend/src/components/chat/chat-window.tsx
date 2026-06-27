@@ -180,7 +180,7 @@ export function ChatWindow({
   messages: any[]
   setMessages: React.Dispatch<React.SetStateAction<any[]>>
 }) {
-  const { socket, startCall, isUserOnline } = useSocket()
+  const { socket, startCall, startGroupCall, isUserOnline } = useSocket()
   const { chats, updateChatInList } = useChats()
   const { bgType, onOpenProfile } = useDashboard()
   const { getDisplayName } = useNicknames()
@@ -189,6 +189,7 @@ export function ChatWindow({
   const handleVoiceCall = () => {
     if (chat?.isGroupChat) {
       onStartMeeting?.()
+      startGroupCall?.(chat?.users || [], 'voice')
     } else {
       const other = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
       if (other && startCall) {
@@ -200,6 +201,7 @@ export function ChatWindow({
   const handleVideoCall = () => {
     if (chat?.isGroupChat) {
       onStartMeeting?.()
+      startGroupCall?.(chat?.users || [], 'video')
     } else {
       const other = chat?.users?.find((u: any) => (u._id || u.id) !== myId)
       if (other && startCall) {
