@@ -2,7 +2,9 @@
  * Centralized API utility for interacting with the Bubble Chat Backend.
  */
 
-const BASE_URL = (import.meta.env.VITE_API_URL?.replace(/ i$/, '')?.trim()) || 'https://bubble-backend-production-96a0.up.railway.app/api/v1';
+// Set VITE_API_URL to the Bubble Space backend in every non-local environment.
+// Falls back to localhost for dev only (no hardcoded production host).
+const BASE_URL = (import.meta.env.VITE_API_URL?.replace(/ i$/, '')?.trim()) || 'http://localhost:3000/api/v1';
 
 const originalFetch = globalThis.fetch;
 let isRefreshing = false;
