@@ -60,7 +60,7 @@ import {
   profile,
   type Friend,
 } from '@/lib/chat-data'
-import { fetchAllUserChats, fetchCallLogs, accessOrCreateChat, joinOrganizationByInvite, joinGroupChat, getOrgMembers } from '@/lib/api'
+import { fetchAllUserChats, fetchCallLogs, fetchMeetings, accessOrCreateChat, joinOrganizationByInvite, joinGroupChat, getOrgMembers } from '@/lib/api'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { useSocket } from '@/contexts/AppContext'
@@ -727,7 +727,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   const [selectionStep, setSelectionStep] = useState<'none' | 'source' | 'type'>('none')
   const [activeMeeting, setActiveMeeting] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(null)
   const { user: currentUser, bgType } = useDashboard()
-  const [callsTab, setCallsTab] = useState<'meet' | 'calendar'>('meet')
+  const [callsTab, setCallsTab] = useState<'meet' | 'calendar' | 'logs'>('meet')
 
   const generateRoomId = () => `bubble-${Math.random().toString(36).slice(2, 11)}`
 
@@ -796,8 +796,8 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
     <div className={cn("flex h-full w-full overflow-hidden rounded-[26px]", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
       <div className={cn("flex flex-1 flex-col overflow-hidden border-r border-black/5", bgType === 'glass' ? "bg-transparent" : "bg-white")}>
         <ViewHeader
-          title={callsTab === 'meet' ? "Events & Meets" : "Business Calendar"}
-          subtitle={callsTab === 'meet' ? "Experience seamless communication" : "Organize organization events and team meetings"}
+          title={callsTab === 'meet' ? "Events & Meets" : callsTab === 'calendar' ? "Business Calendar" : "Call Logs"}
+          subtitle={callsTab === 'meet' ? "Experience seamless communication" : callsTab === 'calendar' ? "Organize organization events and team meetings" : "History of meetings, summaries, and transcripts"}
           action={
             callsTab === 'meet' ? (
               <button
@@ -829,6 +829,15 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
             )}
           >
             Business Calendar
+          </button>
+          <button
+            onClick={() => setCallsTab('logs')}
+            className={cn(
+              "pb-3 pt-2 text-sm font-bold border-b-2 transition-all relative",
+              callsTab === 'logs' ? "border-purple text-purple font-extrabold" : "border-transparent text-ink-soft hover:text-ink"
+            )}
+          >
+            Call Logs
           </button>
         </div>
 
@@ -944,8 +953,10 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
               </div>
             </section>
           </div>
-        ) : (
+        ) : callsTab === 'calendar' ? (
           <CalendarSection coworkers={coworkers} />
+        ) : (
+          <CallLogsSection />
         )}
 
         {/* Meeting Modal - ZegoCloud */}
@@ -4106,6 +4117,292 @@ function getCalendarCells(date: Date) {
   }
 
   return cells
+}
+
+
+/* ---------------- MeetingDetailModal Component ---------------- */
+
+function MeetingDetailModal({ log, onClose }: { log: any; onClose: () => void }) {
+  const durationStr = log.duration ? `${Math.round(log.duration / 60)} min${Math.round(log.duration / 60) !== 1 ? 's' : ''}` : 'N/A'
+  const dateStr = log.timestamp.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+  const { getDisplayName } = useNicknames()
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-2xl bg-white rounded-[2rem] p-6 shadow-2xl border border-slate-200/60 overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-purple/10 flex items-center justify-center">
+              <Sparkles className="size-5 text-purple" />
+            </div>
+            <div>
+              <h3 className="font-bold text-ink text-base">Meeting Details</h3>
+              <p className="text-xs text-ink-soft">Review AI summary, transcripts, and action items</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="size-8 rounded-xl flex items-center justify-center hover:bg-slate-100 text-ink-soft transition-colors cursor-pointer"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto py-5 space-y-6 pr-1">
+          {/* Metadata Grid */}
+          <div className="grid grid-cols-2 gap-4 p-5 rounded-2xl bg-purple-soft/5 border border-purple/10">
+            <div>
+              <p className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Date & Time</p>
+              <p className="text-sm font-semibold text-ink mt-1">📅 {dateStr}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Duration</p>
+              <p className="text-sm font-semibold text-ink mt-1">⏱️ {durationStr}</p>
+            </div>
+          </div>
+
+          {/* Attendees */}
+          {((log.host) || (log.attendees && log.attendees.length > 0)) && (
+            <div>
+              <h5 className="text-[10px] font-bold text-ink-soft uppercase tracking-wider mb-2.5">Participants</h5>
+              <div className="flex flex-wrap gap-3">
+                {log.host && (
+                  <div className="flex items-center gap-2 bg-purple/5 border border-purple/10 rounded-xl px-3 py-1.5 text-xs text-ink">
+                    <ChatAvatar src={log.host.avatar} name={getDisplayName(log.host)} className="size-6 rounded-lg" />
+                    <span>{getDisplayName(log.host)} (Host)</span>
+                  </div>
+                )}
+                {log.attendees?.map((att: any, idx: number) => (
+                  <div key={idx} className="flex items-center gap-2 bg-slate-100 border border-slate-200/50 rounded-xl px-3 py-1.5 text-xs text-ink">
+                    <ChatAvatar src={att.avatar} name={getDisplayName(att)} className="size-6 rounded-lg" />
+                    <span>{getDisplayName(att)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AI Summary */}
+          <div>
+            <h5 className="text-[10px] font-bold text-purple uppercase tracking-wider mb-2">Aida Brain Meeting Summary</h5>
+            <div className="bg-purple-soft/5 border border-purple/10 rounded-2xl p-4 text-xs text-ink leading-relaxed whitespace-pre-line shadow-inner">
+              {log.summary || 'AI Summary is generating or unavailable for this meeting.'}
+            </div>
+          </div>
+
+          {/* Action Items */}
+          {log.actionItems && log.actionItems.length > 0 && (
+            <div>
+              <h5 className="text-[10px] font-bold text-purple uppercase tracking-wider mb-2">Action Items Sourced</h5>
+              <div className="space-y-2">
+                {log.actionItems.map((item: any, idx: number) => (
+                  <div key={idx} className="flex items-start gap-2 bg-white border border-slate-100 rounded-xl p-3 text-xs text-ink leading-tight shadow-sm">
+                    <span className="text-purple">📌</span>
+                    <div className="flex-1">
+                      <p className="font-semibold text-ink">{item.text || item.task}</p>
+                      {(item.assignedToName || item.assignedTo?.full_name) && (
+                        <p className="text-[9px] text-purple font-bold tracking-wide mt-0.5 uppercase">
+                          Assigned to: {item.assignedToName || item.assignedTo?.full_name}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Raw Transcript */}
+          {log.transcriptRaw && (
+            <div>
+              <h5 className="text-[10px] font-bold text-ink-soft uppercase tracking-wider mb-2">Full Conversation Transcript</h5>
+              <div className="bg-slate-50 border border-slate-250/50 rounded-2xl p-4 font-mono text-[10px] leading-relaxed max-h-56 overflow-y-auto text-ink">
+                {log.transcriptRaw}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------- CallLogsSection Component ---------------- */
+
+function CallLogsSection() {
+  const { getDisplayName } = useNicknames()
+  const { user: currentUser } = useDashboard()
+  const myId = currentUser?._id || currentUser?.id
+  const [selectedLog, setSelectedLog] = useState<any | null>(null)
+
+  const { data: logs = [], isLoading, refetch } = useQuery({
+    queryKey: ['unifiedCallLogs'],
+    queryFn: async () => {
+      const [logsRes, meetingsRes] = await Promise.all([
+        fetchCallLogs().catch(() => ({ logs: [] })),
+        fetchMeetings(1, 50).catch(() => ({ meetings: [] }))
+      ])
+
+      const rawLogs = (logsRes?.logs || []).map((l: any) => ({
+        id: l._id || l.id,
+        roomId: l.roomId,
+        title: l.label || `${l.type === 'video' ? 'Video' : 'Voice'} Call`,
+        type: l.type,
+        timestamp: new Date(l.timestamp),
+        duration: l.duration || 0,
+        missed: l.missed || false,
+        isMeeting: false
+      }))
+
+      const rawMeetings = (meetingsRes?.meetings || []).map((m: any) => ({
+        id: m._id || m.id,
+        roomId: m.roomId,
+        title: m.title || 'Untitled Meeting',
+        type: m.type || 'video',
+        timestamp: new Date(m.startedAt || m.createdAt),
+        duration: m.duration || 0,
+        missed: false,
+        isMeeting: true,
+        host: m.host,
+        attendees: m.attendees,
+        summary: m.summary,
+        transcriptRaw: m.transcriptRaw,
+        actionItems: m.actionItems
+      }))
+
+      return [...rawLogs, ...rawMeetings].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    },
+    staleTime: 1000 * 5
+  })
+
+  const handleClearLogs = async () => {
+    if (!confirm('Are you sure you want to clear all call logs? This will delete all past call records and meeting transcript summaries.')) return
+    try {
+      const { clearCallLogs } = await import('@/lib/api')
+      await clearCallLogs()
+      toast.success('Call logs cleared successfully.')
+      refetch()
+    } catch {
+      toast.error('Failed to clear call logs.')
+    }
+  }
+
+  const formatDuration = (sec: number) => {
+    if (!sec) return '0s'
+    const h = Math.floor(sec / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    const s = sec % 60
+    const parts = []
+    if (h > 0) parts.push(`${h}h`)
+    if (m > 0) parts.push(`${m}m`)
+    if (s > 0 || parts.length === 0) parts.push(`${s}s`)
+    return parts.join(' ')
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 animate-in fade-in duration-200">
+      <div className="flex items-center justify-between px-2">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-black/30 italic">Past Collaboration Sessions</h3>
+        {logs.length > 0 && (
+          <button
+            onClick={handleClearLogs}
+            className="flex items-center gap-1 text-[11px] font-bold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-xl border border-red-200/50 transition-all cursor-pointer"
+          >
+            <Trash2 className="size-3.5" />
+            Clear Logs
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-28 rounded-3xl bg-black/3 animate-pulse" />
+          ))}
+        </div>
+      ) : logs.length === 0 ? (
+        <div className="py-16 text-center border-2 border-dashed border-black/5 rounded-[28px] bg-black/2 max-w-lg mx-auto">
+          <Phone className="size-10 text-black/20 mx-auto mb-3" />
+          <h4 className="font-bold text-ink text-sm">No Call Logs Found</h4>
+          <p className="text-xs text-ink-soft max-w-xs mx-auto mt-1 leading-relaxed">
+            Your call history, meeting minutes, and voice transcripts will appear here once you participate in calls.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {logs.map((log: any) => {
+            const dateStr = log.timestamp.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+            const timeStr = log.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            
+            return (
+              <div 
+                key={log.id} 
+                className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] border border-black/5 bg-white p-5 transition-all hover:shadow-lg hover:border-purple/35"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-ink text-[15px] truncate max-w-[200px]" title={log.title}>
+                      {log.title}
+                    </h4>
+                    <div className="flex items-center gap-2 mt-1 text-[11px] text-ink-soft font-medium">
+                      <span>📅 {dateStr} at {timeStr}</span>
+                      <span>•</span>
+                      <span>⏱️ {log.missed ? 'Missed' : formatDuration(log.duration)}</span>
+                    </div>
+                  </div>
+
+                  <span className={cn(
+                    "px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider",
+                    log.missed 
+                      ? "bg-red-50 text-red-500" 
+                      : log.isMeeting 
+                        ? "bg-purple/10 text-purple" 
+                        : "bg-green-50 text-green-600"
+                  )}>
+                    {log.missed ? 'Missed' : log.isMeeting ? 'Meeting' : 'Call'}
+                  </span>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between border-t border-slate-50 pt-3">
+                  <div className="flex items-center gap-1">
+                    {log.type === 'video' ? (
+                      <span className="text-[10px] text-ink-soft font-semibold flex items-center gap-1">
+                        📹 Video Session
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-ink-soft font-semibold flex items-center gap-1">
+                        📞 Voice Session
+                      </span>
+                    )}
+                  </div>
+
+                  {log.isMeeting ? (
+                    <button
+                      onClick={() => setSelectedLog(log)}
+                      className="text-[11px] font-extrabold text-purple bg-purple-soft/60 px-3 py-1.5 rounded-xl hover:bg-purple hover:text-white transition-all cursor-pointer shadow-sm"
+                    >
+                      ✦ AI Brief & Transcript
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-ink-soft italic font-medium">Direct Chat Call</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {selectedLog && (
+        <MeetingDetailModal 
+          log={selectedLog} 
+          onClose={() => setSelectedLog(null)} 
+        />
+      )}
+    </div>
+  )
 }
 
 /* ---------------- CalendarSection Component ---------------- */
