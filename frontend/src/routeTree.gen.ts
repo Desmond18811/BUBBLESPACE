@@ -7,6 +7,7 @@ import { Route as ForgotPasswordImport } from './routes/forgot-password'
 import { Route as ResetPasswordImport } from './routes/reset-password'
 import { Route as VerifyOtpImport } from './routes/verify-otp'
 import { Route as GoogleCallbackImport } from './routes/google-callback'
+import { Route as CallJoinImport } from './routes/call-join'
 import { Route as NotFoundImport } from './routes/404'
 
 // Dashboard sub-routes
@@ -59,6 +60,11 @@ const VerifyOtpRoute = VerifyOtpImport.update({
 
 const GoogleCallbackRoute = GoogleCallbackImport.update({
     path: '/auth/google/callback',
+    getParentRoute: () => rootRoute,
+} as any)
+
+const CallJoinRoute = CallJoinImport.update({
+    path: '/call/join',
     getParentRoute: () => rootRoute,
 } as any)
 
@@ -174,6 +180,7 @@ export const routeTree = (rootRoute as any).addChildren([
     ResetPasswordRoute,
     VerifyOtpRoute,
     GoogleCallbackRoute,
+    CallJoinRoute,
     NotFoundRoute,
     SetupProfileRoute,
     PrivacyRoute,
@@ -192,6 +199,7 @@ declare module '@tanstack/react-router' {
     '/reset-password': any
     '/verify-otp': any
     '/auth/google/callback': any
+    '/call/join': any
     '/404': any
     '/setup-profile': any
     '/privacy': any

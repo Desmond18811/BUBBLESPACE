@@ -61,13 +61,15 @@ interface ChatMessageEntry {
   imageUrl?: string
 }
 
-export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar, onClose }: {
+export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar, onClose, joinToken }: {
   roomId: string
   type: 'voice' | 'video'
   userId: string
   userName: string
   userAvatar?: string
   onClose: () => void
+  // Signed token from a /call/join invite link; verified server-side when present.
+  joinToken?: string
 }) {
   const [token, setToken] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -205,7 +207,7 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
 
       // 1. Fetch LiveKit Token from Backend
       try {
-        const res = await getLiveKitToken(roomId)
+        const res = await getLiveKitToken(roomId, joinToken)
         if (res.token) {
           setToken(res.token)
         } else {
