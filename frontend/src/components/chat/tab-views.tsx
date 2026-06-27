@@ -2071,7 +2071,10 @@ function OrgSettingsModal({
                 <div className="flex items-center gap-6">
                   <div className="relative size-20 rounded-2xl bg-black/5 border border-black/5 flex items-center justify-center overflow-hidden shrink-0 group">
                     {logo ? (
-                      <img src={logo} alt="Logo" className="size-full object-cover" />
+                      // The org logo is stored as a raw Filebase URL, which 404s unless
+                      // presigned/proxied — route it through getSecureMediaUrl (same as
+                      // avatars) so the uploaded image actually displays on save + reload.
+                      <img src={getSecureMediaUrl(logo) || ''} alt="Logo" className="size-full object-cover" />
                     ) : (
                       <Briefcase className="size-8 text-black/20" />
                     )}
