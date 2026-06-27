@@ -93,6 +93,13 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
   socketRef.current = socket
   const roomIdRef = useRef(roomId)
   roomIdRef.current = roomId
+  // onClose comes from AppContext; keep a ref so the join effect never lists it as a
+  // dependency (an inline parent onClose used to re-run the effect on every render).
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  // Becomes true once we've actually joined the room. Guards against emitting
+  // 'call_end' to the peer if the modal mounts/unmounts during setup.
+  const joinedRef = useRef(false)
 
   // Hard-stop the live transcript recognizer. Idempotent.
   const stopRecognition = useCallback(() => {
@@ -142,35 +149,50 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
     }
   }, [socket, roomId, userId])
 
-  // Join meeting room and listen for meeting_ended
+  // Join meeting room and listen for meeting_ended.
+  //
+  // Deps are intentionally ONLY [roomId]. `socket` and `onClose` are read through refs
+  // so a socket reconnect (which churns AppContext renders) can NOT re-run this effect.
+  // Re-running used to fire the cleanup's `call_end`, which the backend fans out as
+  // `call_ended` — killing the call on every reconnect blip. Now the cleanup runs only
+  // on a genuine unmount, and only emits `call_end` if we actually joined.
   useEffect(() => {
-    if (!socket || !roomId) return
+    if (!roomId) return
+    const sock = socketRef.current
+    if (!sock) return
 
-    socket.emit('join_room', roomId)
-    console.log(`[Meeting Room] Joined room: ${roomId}`)
+    const joinRoom = () => {
+      sock.emit('join_room', roomId)
+      joinedRef.current = true
+      console.log(`[Meeting Room] Joined room: ${roomId}`)
+    }
+    joinRoom()
+    // Re-join automatically after a socket reconnect — server-side room membership is
+    // lost on disconnect. This must NOT emit call_end; it just restores the live call.
+    sock.on('connect', joinRoom)
 
     const handleMeetingEnded = (data: { roomId: string }) => {
       if (data.roomId === roomId) {
         console.log('[Meeting Room] Call ended by other participant')
         toast.info('Meeting has been ended')
-        onClose()
+        onCloseRef.current()
       }
     }
-
-    socket.on('meeting_ended', handleMeetingEnded)
+    sock.on('meeting_ended', handleMeetingEnded)
 
     return () => {
-      // Tell the peer the call is over on EVERY teardown path (hangup button,
-      // LiveKit disconnect, navigate-away, tab close). The backend fans `call_end`
-      // out to the room as `call_ended`, which resets the peer's call state to idle
-      // so they can be called again. Without this, a peer who didn't press the
-      // explicit "End" button stayed stuck and could never call/answer again.
-      socket.emit('call_end', { roomId })
-      socket.emit('leave_room', roomId)
-      socket.off('meeting_ended', handleMeetingEnded)
+      sock.off('connect', joinRoom)
+      sock.off('meeting_ended', handleMeetingEnded)
+      // Only tell the peer the call is over if we actually joined. The backend fans
+      // `call_end` out to the room as `call_ended`, resetting the peer's call state to
+      // idle so they can be called again.
+      if (joinedRef.current) {
+        sock.emit('call_end', { roomId })
+        sock.emit('leave_room', roomId)
+      }
       console.log(`[Meeting Room] Left room: ${roomId}`)
     }
-  }, [socket, roomId, onClose])
+  }, [roomId])
 
   useEffect(() => {
     let active = true

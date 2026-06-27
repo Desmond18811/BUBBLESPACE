@@ -574,6 +574,17 @@ export const getAidaWritingSuggestions = async (message: string, conversationId:
     return handleResponse(res);
 };
 
+// Context-Aware Draft on Behalf (Deep Aida): one full reply built from the whole
+// conversation + related meeting transcripts + open action items (F5).
+export const aidaDraft = async (conversationId: string, currentMessage?: string) => {
+    const res = await fetch(`${BASE_URL}/aida/draft`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ conversationId, currentMessage }),
+    });
+    return handleResponse(res);
+};
+
 // ─── Stories ──────────────────────────────────────────────────────────────────
 
 export const fetchStories = async () => {

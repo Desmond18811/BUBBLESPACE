@@ -4206,6 +4206,18 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
     setIsModalOpen(true)
   }
 
+  // Toggle a meeting-sourced action item between done / open. The backend mirrors the
+  // change onto Meeting.actionItems and notifies other participants (F3).
+  const handleToggleActionItem = async (task: any) => {
+    try {
+      const next = task.status === 'done' ? 'todo' : 'done'
+      await updateTaskFull(task._id, { status: next })
+      refetchTasksList()
+    } catch {
+      toast.error('Could not update action item')
+    }
+  }
+
   // Format Date helpers
   const formatDateForInput = (d: Date) => {
     const pad = (n: number) => String(n).padStart(2, '0')
@@ -4527,6 +4539,58 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
 
       {/* Right: Selected Day Agenda */}
       <div className="w-full md:w-80 p-6 flex flex-col overflow-y-auto bg-slate-50/30">
+        {/* Action Items captured from meeting transcripts (F3) */}
+        {(() => {
+          const actionItems = (tasks as any[]).filter((t: any) => t.source === 'meeting')
+          if (actionItems.length === 0) return null
+          const now = Date.now()
+          return (
+            <div className="mb-6">
+              <div className="flex items-center gap-1.5 mb-3">
+                <ClipboardList className="size-3.5 text-purple" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-purple">Action Items</h4>
+                <span className="text-[10px] text-ink-soft normal-case">from meetings</span>
+              </div>
+              <div className="space-y-2">
+                {actionItems.map((item: any) => {
+                  const done = item.status === 'done'
+                  const overdue = !done && item.end_time && new Date(item.end_time).getTime() < now
+                  const meetingName = item.meetingRef?.title || (item.description || '').replace(/^From meeting:\s*/, '')
+                  return (
+                    <div key={item._id} className="p-3 rounded-2xl bg-white border border-black/5 shadow-sm flex items-start gap-2.5">
+                      <button
+                        onClick={() => handleToggleActionItem(item)}
+                        className={cn(
+                          'mt-0.5 size-4 rounded-md border flex items-center justify-center shrink-0 transition-colors',
+                          done ? 'bg-emerald-500 border-emerald-500' : 'border-black/20 hover:border-purple'
+                        )}
+                        title={done ? 'Reopen' : 'Mark done'}
+                      >
+                        {done && <Check className="size-3 text-white" />}
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className={cn('text-[13px] font-semibold leading-snug', done ? 'line-through text-ink-soft' : 'text-ink')}>
+                          {item.title}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className={cn(
+                            'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
+                            done ? 'bg-emerald-50 text-emerald-600' : overdue ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'
+                          )}>
+                            {done ? 'Done' : overdue ? 'Overdue' : 'Pending'}
+                          </span>
+                          {item.assignedToName && <span className="text-[10px] text-ink-soft">· {item.assignedToName}</span>}
+                          {meetingName && <span className="text-[10px] text-ink-soft truncate max-w-[120px]">· {meetingName}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
         <div className="mb-6">
           <h4 className="text-xs font-bold uppercase tracking-wider text-black/30 italic">Agenda for</h4>
           <h3 className="text-lg font-bold text-ink mt-0.5">

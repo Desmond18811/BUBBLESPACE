@@ -24,6 +24,7 @@ import {
   clearChat,
   deleteChat,
   getAidaWritingSuggestions,
+  aidaDraft,
 } from '@/lib/api'
 import EmojiPicker, { Theme as EmojiTheme } from 'emoji-picker-react'
 import {
@@ -224,6 +225,9 @@ export function ChatWindow({
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
   const [isAiSuggesting, setIsAiSuggesting] = useState(false)
   const [aidaUnavailable, setAidaUnavailable] = useState(false)
+  // Deep Aida "Draft for me" (F5): full context-aware draft fills the input.
+  const [isDrafting, setIsDrafting] = useState(false)
+  const [aiDrafted, setAiDrafted] = useState(false)
   const suggestDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Audio Recording State
@@ -484,6 +488,7 @@ export function ChatWindow({
 
   const handleInputChange = (val: string) => {
     setInput(val)
+    if (aiDrafted) setAiDrafted(false) // user is editing — drop the "AI drafted" styling
     if (!socket || !chatId) return
 
     // Detect @mention trigger
@@ -568,6 +573,32 @@ export function ChatWindow({
       setInput(prev => prev.trim() + ' ' + s)
     }
     setAiSuggestions([])
+  }
+
+  // Deep Aida draft: one full, context-aware reply (conversation + meeting notes +
+  // open action items) drops into the input, editable before sending (F5).
+  const handleDraftForMe = async () => {
+    if (!chatId || isDrafting) return
+    setIsDrafting(true)
+    try {
+      const res = await aidaDraft(chatId, input.trim() || undefined)
+      if (res?.draft) {
+        setInput(res.draft)
+        setAiDrafted(true)
+        setAiSuggestions([])
+        inputRef.current?.focus()
+      } else {
+        toast.error('Aida could not draft a reply right now')
+      }
+    } catch (err: any) {
+      if (err?.status === 503 || err?.code === 'AIDA_UNCONFIGURED') {
+        setAidaUnavailable(true)
+      } else {
+        toast.error('Could not generate draft')
+      }
+    } finally {
+      setIsDrafting(false)
+    }
   }
 
   // --- Audio Recording Handlers ---
@@ -1408,7 +1439,7 @@ export function ChatWindow({
 
         {/* Suggestions Bar */}
         {!aidaUnavailable && aiSuggestions.length > 0 && (
-          <div className="absolute inset-x-6 bottom-24 z-20 flex gap-2 overflow-x-auto pb-2 scrollbar-hide animate-in slide-in-from-bottom-2 duration-300">
+          <div className="absolute inset-x-6 bottom-24 z-20 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide animate-in slide-in-from-bottom-2 duration-300">
             {aiSuggestions.map((s, i) => (
               <button
                 key={i}
@@ -1418,6 +1449,15 @@ export function ChatWindow({
                 {s}
               </button>
             ))}
+            {/* Dismiss the whole suggestions row */}
+            <button
+              onClick={() => setAiSuggestions([])}
+              aria-label="Dismiss suggestions"
+              title="Dismiss suggestions"
+              className="shrink-0 flex size-7 items-center justify-center rounded-full bg-white/90 text-ink-soft shadow-lg border border-black/5 hover:bg-white hover:text-red-500 transition-all backdrop-blur-xl"
+            >
+              <X className="size-3.5" />
+            </button>
           </div>
         )}
 
@@ -1557,28 +1597,48 @@ export function ChatWindow({
                     </button>
                   </div>
                 ) : (
-                  <input
-                    type="text"
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => handleInputChange(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (mentionResults.length > 0 && e.key === 'Tab') {
-                        e.preventDefault()
-                        handleMentionSelect(mentionResults[mentionIndex])
-                      } else if (mentionResults.length > 0 && e.key === 'Escape') {
-                        setMentionQuery(null)
-                        setMentionResults([])
-                      } else if (e.key === 'Enter') {
-                        handleSend()
-                      }
-                    }}
-                    placeholder={selectedAttachment ? "Add a caption..." : chat?.isGroupChat ? "Type a message or @ to mention..." : "Type a message..."}
-                    className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-[15px] placeholder:text-black/30 text-ink placeholder:text-ink/40"
-                  />
+                  <>
+                    <input
+                      type="text"
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => handleInputChange(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (mentionResults.length > 0 && e.key === 'Tab') {
+                          e.preventDefault()
+                          handleMentionSelect(mentionResults[mentionIndex])
+                        } else if (mentionResults.length > 0 && e.key === 'Escape') {
+                          setMentionQuery(null)
+                          setMentionResults([])
+                        } else if (e.key === 'Enter') {
+                          handleSend()
+                        }
+                      }}
+                      placeholder={selectedAttachment ? "Add a caption..." : chat?.isGroupChat ? "Type a message or @ to mention..." : "Type a message..."}
+                      className={cn(
+                        "w-full border-none focus:outline-none focus:ring-0 text-[15px] placeholder:text-black/30 text-ink placeholder:text-ink/40",
+                        aiDrafted ? "bg-purple/5 rounded-lg px-2 py-1" : "bg-transparent"
+                      )}
+                    />
+                    {aiDrafted && (
+                      <span className="block px-2 mt-0.5 text-[10px] font-semibold text-purple/70">✦ AI drafted · tap to edit</span>
+                    )}
+                  </>
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {/* Deep Aida: draft a full, context-aware reply (F5) */}
+                {!aidaUnavailable && !isRecording && (
+                  <button
+                    onClick={handleDraftForMe}
+                    disabled={isDrafting}
+                    title="Draft a reply for me"
+                    className="flex items-center gap-1 text-purple/80 hover:text-purple transition-colors disabled:opacity-50"
+                  >
+                    <Sparkles className={cn('size-5', isDrafting && 'animate-pulse')} />
+                    <span className="hidden sm:inline text-xs font-bold">{isDrafting ? 'Drafting…' : 'Draft'}</span>
+                  </button>
+                )}
                 <Popover>
                   <PopoverTrigger asChild>
                     <button className="text-black/40 hover:text-purple transition-colors">

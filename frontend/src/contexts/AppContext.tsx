@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
 import { fetchAllUserChats, fetchTasks, getContactNicknames, setContactNickname } from '@/lib/api'
 import { readCache, writeCache, CACHE_KEYS } from '@/lib/webCache'
@@ -87,6 +88,7 @@ interface AppProviderProps {
 
 export function AppProvider({ children, user }: AppProviderProps) {
     const userId = user?.id || user?._id
+    const queryClient = useQueryClient()
     const [connected, setConnected] = useState(false)
     // Seed from the persisted cache so a cold reload paints the chat list instantly,
     // then refreshChats revalidates from the network.
@@ -165,7 +167,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
     const endCall = useCallback(() => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current)
         ringtoneRef.current?.stop()
-        
+
         setCallState(prev => {
             if (prev.status === 'calling_out') {
                 socketRef.current?.emit('call_reject', { toUserId: prev.toUserId })
@@ -175,6 +177,12 @@ export function AppProvider({ children, user }: AppProviderProps) {
             return { status: 'idle' }
         })
     }, [])
+
+    // Stable identity is CRITICAL: this is passed to <LiveKitMeetingModal onClose>.
+    // An inline arrow here changes every AppContext render (e.g. on socket connect/
+    // disconnect → setConnected), which re-ran the modal's join_room effect, whose
+    // cleanup emits 'call_end' — tearing the call down on every reconnect blip.
+    const handleCallClose = useCallback(() => setCallState({ status: 'idle' }), [])
 
     const declineCall = useCallback(() => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current)
@@ -443,6 +451,9 @@ export function AppProvider({ children, user }: AppProviderProps) {
         })
 
         sock?.on('meeting_ended', (data: { roomId: string }) => {
+            // Clear the sidebar "active call" pulse immediately instead of waiting for
+            // the next 10s poll to notice the meeting flipped to 'ended'.
+            queryClient.invalidateQueries({ queryKey: ['activeMeetings'] })
             setCallState(prev => {
                 if (prev.status === 'in_call' && prev.roomId === data.roomId) {
                     toast.info('Meeting has been ended')
@@ -452,6 +463,20 @@ export function AppProvider({ children, user }: AppProviderProps) {
             })
         })
 
+        // Action item is still pending past its follow-up window — nudge the assignee
+        // in realtime so the loop visibly closes (F3).
+        sock?.on('task_followup', (data: { taskId: string; title: string; meetingTitle?: string; overdue?: boolean }) => {
+            toast(data.overdue ? '⏰ Overdue action item' : '📌 Action item reminder', {
+                description: `${data.meetingTitle ? `From "${data.meetingTitle}": ` : ''}${data.title}`,
+            })
+            queryClient.invalidateQueries({ queryKey: ['tasks'] })
+        })
+
+        // A meeting action item's status/assignee changed elsewhere — refresh views.
+        sock?.on('action_item_updated', () => {
+            queryClient.invalidateQueries({ queryKey: ['tasks'] })
+        })
+
         // The backend fans out `call_ended` on ANY hangup/reject (including the peer
         // disconnecting, navigating away, or closing the tab). Without handling it,
         // the surviving party stays stuck in 'in_call'/'calling_*' forever and can
@@ -459,6 +484,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
         sock?.on('call_ended', (data: { roomId?: string; byUserId?: string }) => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current)
             ringtoneRef.current?.stop()
+            queryClient.invalidateQueries({ queryKey: ['activeMeetings'] })
             setCallState(prev => {
                 if (prev.status === 'idle') return prev
                 // Only ignore if it's an unrelated room we can identify; otherwise reset.
@@ -483,6 +509,8 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('message_deleted')
             sock?.off('meeting_ended')
             sock?.off('call_ended')
+            sock?.off('task_followup')
+            sock?.off('action_item_updated')
         }
     }, [user?.id, user?._id])
 
@@ -626,7 +654,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
                     userId={user?._id || user?.id || 'guest'}
                     userName={user?.full_name || user?.username || 'Colleague'}
                     userAvatar={user?.avatar}
-                    onClose={() => setCallState({ status: 'idle' })}
+                    onClose={handleCallClose}
                   />
                 )}
             </NicknameContext.Provider>
