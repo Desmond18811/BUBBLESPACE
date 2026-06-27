@@ -340,6 +340,21 @@ export function AppProvider({ children, user }: AppProviderProps) {
             setChats(prev => prev.filter(c => (c._id !== chatId && c.id !== chatId)))
         })
 
+        // A group's membership/metadata changed (e.g. addToGroup/removeFromGroup).
+        // Merge the fresh conversation into the list and notify the dashboard so the
+        // open chat's member list + count update live instead of going stale.
+        sock?.on('chat_updated', (chat: any) => {
+            const c = chat?.data || chat
+            const cid = c?._id || c?.id
+            if (!cid) return
+            setChats(prev => prev.map(existing =>
+                ((existing._id || existing.id) === cid ? { ...existing, ...c } : existing)
+            ))
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('bubble:chat_updated', { detail: c }))
+            }
+        })
+
         sock?.on('messages_read', ({ chatId, userId }: { chatId: string, userId: string }) => {
             setChats(prev => prev.map(c => {
                 const cid = c._id || c.id
@@ -504,6 +519,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('presence_snapshot')
             sock?.off('new_chat')
             sock?.off('chat_deleted')
+            sock?.off('chat_updated')
             sock?.off('messages_read')
             sock?.off('message_reaction')
             sock?.off('message_deleted')

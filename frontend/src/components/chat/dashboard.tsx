@@ -123,6 +123,21 @@ export function Dashboard({
     setIsMobileMenuOpen(false)
   }, [activeTab])
 
+  // Keep the open conversation fresh when its membership/metadata changes live
+  // (AppContext relays the backend 'chat_updated' as a window event). Without this
+  // the GroupInfo member list/count stays stale after someone is added/removed.
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const c = (e as CustomEvent).detail
+      const cid = c?._id || c?.id
+      if (cid && String(cid) === String(activeChatId)) {
+        setActiveChat((prev: any) => ({ ...prev, ...c }))
+      }
+    }
+    window.addEventListener('bubble:chat_updated', handler)
+    return () => window.removeEventListener('bubble:chat_updated', handler)
+  }, [activeChatId])
+
   const SIDE_PANEL_TABS = ['all']
   const showSidePanel = SIDE_PANEL_TABS.includes(activeTab) || isChatRoute
 
