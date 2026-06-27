@@ -693,7 +693,7 @@ function MeetingRoomLayout({
       `}</style>
 
       {/* Header */}
-      <div className="flex h-16 items-center justify-between px-6 border-b border-black/5 shrink-0 select-none bg-white">
+      <div className="flex h-16 items-center justify-between px-3 md:px-6 border-b border-black/5 shrink-0 select-none bg-white">
         <div className="flex items-center gap-4">
           <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-xl transition-colors cursor-pointer">
             <ChevronLeft className="size-5 text-ink" />
@@ -730,7 +730,7 @@ function MeetingRoomLayout({
           </div>
 
           {type === 'video' && (
-            <div className="flex items-center gap-1 bg-purple-soft/50 rounded-xl p-0.5 border border-purple/10">
+            <div className="hidden md:flex items-center gap-1 bg-purple-soft/50 rounded-xl p-0.5 border border-purple/10">
               <button
                 onClick={() => setVideoResolution({ width: 1280, height: 720 })}
                 className={cn(
@@ -755,9 +755,9 @@ function MeetingRoomLayout({
       </div>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Main Video/Call Area */}
-        <div className="flex flex-1 flex-col p-6 min-w-0 bg-slate-50/30">
+        <div className="flex flex-1 flex-col p-2 sm:p-4 md:p-6 min-w-0 bg-slate-50/30">
           <div 
             className={cn(
               "flex-1 relative rounded-[32px] overflow-hidden bg-purple-soft/50 border-4 transition-all duration-300 shadow-xl shadow-purple/10 flex items-center justify-center",
@@ -896,7 +896,7 @@ function MeetingRoomLayout({
 
         {/* Right Sidebar (Meeting Panel) */}
         {isChatOpen && (
-          <div className="w-80 border-l border-black/5 flex flex-col bg-white animate-in slide-in-from-right duration-300 shrink-0">
+          <div className="absolute md:static inset-y-0 right-0 z-30 w-full max-w-[20rem] md:w-80 border-l border-black/5 flex flex-col bg-white animate-in slide-in-from-right duration-300 shrink-0 shadow-2xl md:shadow-none">
             <div className="p-4 border-b border-purple/20 flex items-center justify-between select-none">
               <h3 className="font-bold text-sm text-ink">Meeting Panel</h3>
               <button onClick={() => setIsChatOpen(false)} className="p-1.5 hover:bg-black/5 rounded-lg text-ink-soft cursor-pointer transition-colors">
@@ -1115,8 +1115,8 @@ function MeetingRoomLayout({
       </div>
 
       {/* Control Bar Dock */}
-      <div className="h-24 flex items-center justify-center shrink-0 border-t border-black/5 bg-white select-none relative z-20 pb-4 px-6">
-        <div className="flex items-center gap-3 bg-white/80 backdrop-blur-3xl border border-black/5 p-3 rounded-[2.5rem] shadow-glow">
+      <div className="min-h-24 md:h-24 flex items-center justify-center shrink-0 border-t border-black/5 bg-white select-none relative z-20 py-3 md:pb-4 px-2 md:px-6">
+        <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 max-w-full bg-white/80 backdrop-blur-3xl border border-black/5 p-2 md:p-3 rounded-[2rem] md:rounded-[2.5rem] shadow-glow">
           
           {/* Mute/Unmute microphone */}
           <button
