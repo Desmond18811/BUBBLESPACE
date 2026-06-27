@@ -29,6 +29,7 @@ import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
 import { clearStoredStage } from '@/lib/onboarding'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 export function Dashboard({
   bgType,
@@ -60,7 +61,9 @@ export function Dashboard({
   const queryClient = useQueryClient()
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
+  // Derived from the viewport on first render (see hooks/use-mobile.ts) so the
+  // dashboard isn't stuck in the desktop layout after a Google-login redirect.
+  const isMobile = useIsMobile()
 
   const { data: unreadData } = useQuery({
     queryKey: ['unreadCount'],
@@ -115,14 +118,6 @@ export function Dashboard({
       handleJoin();
     }
   }, [navigate]);
-
-  React.useEffect(() => {
-    const media = window.matchMedia('(max-width: 767px)')
-    setIsMobile(media.matches)
-    const listener = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    media.addEventListener('change', listener)
-    return () => media.removeEventListener('change', listener)
-  }, [])
 
   React.useEffect(() => {
     setIsMobileMenuOpen(false)
