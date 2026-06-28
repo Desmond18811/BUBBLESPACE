@@ -251,3 +251,11 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+/* Brief highlight when jumping to a replied-to message via the quoted chip. */
+@keyframes bubble-flash {
+  0%, 100% { background-color: transparent; }
+  30% { background-color: rgba(108, 92, 231, 0.14); }
+}
+.bubble-flash {
+  animation: bubble-flash 1.2s ease-in-out;
+}

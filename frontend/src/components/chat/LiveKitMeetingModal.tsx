@@ -482,7 +482,9 @@ function MeetingRoomLayout({
 }) {
   const { localParticipant } = useLocalParticipant()
   const remoteParticipants = useRemoteParticipants()
-  const [isChatOpen, setIsChatOpen] = useState(true)
+  // Open the People/Chat/Transcript panel on demand (popup), matching mobile —
+  // it opens when the chat button is clicked and closes consistently.
+  const [isChatOpen, setIsChatOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'chat' | 'participants' | 'transcript'>('chat')
   const [isFullscreen, setIsFullscreen] = useState(false)
   const { socket } = useSocket()

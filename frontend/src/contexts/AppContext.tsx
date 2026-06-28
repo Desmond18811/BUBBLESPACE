@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
 import { fetchAllUserChats, fetchTasks, getContactNicknames, setContactNickname } from '@/lib/api'
 import { readCache, writeCache, CACHE_KEYS } from '@/lib/webCache'
+import { isFullMemberList } from '@/lib/utils'
 import { Phone } from 'lucide-react'
 import { LiveKitMeetingModal } from '@/components/chat/LiveKitMeetingModal'
 import { RingtonePlayer } from '@/lib/ringtone'
@@ -375,9 +376,15 @@ export function AppProvider({ children, user }: AppProviderProps) {
             const c = chat?.data || chat
             const cid = c?._id || c?.id
             if (!cid) return
-            setChats(prev => prev.map(existing =>
-                ((existing._id || existing.id) === cid ? { ...existing, ...c } : existing)
-            ))
+            setChats(prev => prev.map(existing => {
+                if ((existing._id || existing.id) !== cid) return existing
+                const merged = { ...existing, ...c }
+                // Don't let a partial payload shrink a known-good member list.
+                if (!isFullMemberList(c?.users, existing?.users)) {
+                    merged.users = existing?.users ?? c?.users
+                }
+                return merged
+            }))
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('bubble:chat_updated', { detail: c }))
             }

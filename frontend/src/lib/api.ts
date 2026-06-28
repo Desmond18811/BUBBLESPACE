@@ -537,6 +537,18 @@ export const deleteChat = async (chatId: string) => {
     return handleResponse(res);
 };
 
+/**
+ * Fetch one conversation with its full, authoritative member list. Used by
+ * GroupInfo so the member list + count never depend on a possibly-partial
+ * chat-list object.
+ */
+export const getChatById = async (chatId: string) => {
+    const res = await fetch(`${BASE_URL}/chat/${chatId}`, {
+        headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+};
+
 export const removeContact = async (userId: string) => {
     const res = await fetch(`${BASE_URL}/user/contacts/${userId}`, {
         method: 'DELETE',

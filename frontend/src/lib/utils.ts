@@ -27,3 +27,19 @@ export function getSecureMediaUrl(url?: string | null): string | null {
   return url
 }
 
+
+/**
+ * Guards live conversation merges against a partial member list. A `chat_updated`
+ * payload, a `new_chat` insert, or a stale cache entry can carry a trimmed or
+ * id-only `users` array; accepting it would shrink a known-good list and make
+ * GroupInfo show the wrong count / only your contacts. Returns true only when
+ * `incoming` is a populated array of member objects at least as large as the
+ * list we already trust.
+ */
+export function isFullMemberList(incoming: any, existing: any): boolean {
+  if (!Array.isArray(incoming) || incoming.length === 0) return false
+  const hasObjects = incoming.every((u: any) => u && typeof u === 'object' && (u._id || u.id))
+  if (!hasObjects) return false
+  const existingLen = Array.isArray(existing) ? existing.length : 0
+  return incoming.length >= existingLen
+}

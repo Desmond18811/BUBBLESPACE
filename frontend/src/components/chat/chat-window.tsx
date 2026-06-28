@@ -3,7 +3,7 @@ import {
   Search, Phone, MoreVertical, Paperclip, Mic, Send, Video, Info,
   Sparkles, Archive, ArrowLeft, X, Check, CheckCheck, Edit2, Trash2,
   Copy, Pin, Play, Smile, BellOff, EyeOff, Forward, MoreHorizontal,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Reply
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
@@ -217,6 +217,7 @@ export function ChatWindow({
   const [typingUserId, setTypingUserId] = useState<string | null>(null)
   const [typingName, setTypingName] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuPos | null>(null)
+  const [replyingTo, setReplyingTo] = useState<any | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
@@ -279,6 +280,7 @@ export function ChatWindow({
     setMessages([])
     setInput('')
     setEditingId(null)
+    setReplyingTo(null)
     setContextMenu(null)
     discardRecordedAudio()
     setSelectedAttachment(null)
@@ -420,6 +422,11 @@ export function ChatWindow({
       setMessages(prev => prev.map(p => p._id === data?.messageId ? { ...p, reactions: data.reactions } : p))
     }
 
+    const onMsgTranscribed = (data: any) => {
+      if (!data?.messageId) return
+      setMessages(prev => prev.map(p => p._id === data.messageId ? { ...p, transcript: data.transcript } : p))
+    }
+
     const onMessagesRead = ({ chatId: cid, userId }: any) => {
       if (cid === chatId && userId !== myId) {
         setMessages(prev => prev.map(msg => {
@@ -457,6 +464,7 @@ export function ChatWindow({
     socket.on('message_edited', onMsgEdited)
     socket.on('message_deleted', onMsgDeleted)
     socket.on('message_reaction', onMsgReaction)
+    socket.on('message_transcribed', onMsgTranscribed)
     socket.on('messages_read', onMessagesRead)
     socket.on('typing_start', onTypingStart)
     socket.on('typing_stop', onTypingStop)
@@ -467,6 +475,7 @@ export function ChatWindow({
       socket.off('message_edited', onMsgEdited)
       socket.off('message_deleted', onMsgDeleted)
       socket.off('message_reaction', onMsgReaction)
+      socket.off('message_transcribed', onMsgTranscribed)
       socket.off('messages_read', onMessagesRead)
       socket.off('typing_start', onTypingStart)
       socket.off('typing_stop', onTypingStop)
@@ -691,7 +700,16 @@ export function ChatWindow({
       duration: formatDuration(recordedAudioDuration),
     }
 
+    const replyTarget = replyingTo
+    if (replyTarget) {
+      (optimistic as any).parent_message = {
+        id: replyTarget._id || replyTarget.id,
+        content: replyTarget.content || '[Media]',
+        sender: replyTarget.sender ? { full_name: replyTarget.sender.full_name, uniqueTag: replyTarget.sender.uniqueTag } : null,
+      }
+    }
     setMessages(prev => [...prev, optimistic])
+    setReplyingTo(null)
     const audioFile = recordedAudioFile
     const audioDuration = recordedAudioDuration
 
@@ -706,10 +724,12 @@ export function ChatWindow({
     setIsAudioPreviewPlaying(false)
 
     try {
+      const parentId = replyTarget ? (replyTarget._id || replyTarget.id) : undefined
       const res = await sendMediaMessage(chatId, audioFile, {
         message_type: 'voice',
         media_duration: audioDuration,
         clientId: tempId,
+        ...(parentId && { parent_message: parentId }),
       })
       const data = res?.data || res
       setMessages(prev => prev.map(m => m._id === tempId ? { ...m, ...data, _id: data._id || tempId } : m))
@@ -779,6 +799,7 @@ export function ChatWindow({
 
     const tempId = `temp-${Date.now()}`
     const localUrl = selectedAttachment ? selectedAttachment.url : undefined
+    const replyTarget = replyingTo
     const optimistic = {
       _id: tempId,
       content: input,
@@ -787,12 +808,18 @@ export function ChatWindow({
       message_type: selectedAttachment ? selectedAttachment.type : 'text',
       mediaUrl: localUrl,
       media_url: localUrl,
+      parent_message: replyTarget ? {
+        id: replyTarget._id || replyTarget.id,
+        content: replyTarget.content || '[Media]',
+        sender: replyTarget.sender ? { full_name: replyTarget.sender.full_name, uniqueTag: replyTarget.sender.uniqueTag } : null,
+      } : null,
     }
 
     setMessages(prev => [...prev, optimistic])
     const sentText = input
     const attachment = selectedAttachment
     setInput('')
+    setReplyingTo(null)
     
     // Clear selection state without revoking the URL
     setSelectedAttachment(null)
@@ -808,14 +835,16 @@ export function ChatWindow({
 
     try {
       let res
+      const parentId = replyTarget ? (replyTarget._id || replyTarget.id) : undefined
       if (attachment) {
         res = await sendMediaMessage(chatId, attachment.file, {
           content: sentText,
           message_type: attachment.type === 'audio' ? 'voice' : attachment.type,
           clientId: tempId,
+          ...(parentId && { parent_message: parentId }),
         })
       } else {
-        res = await sendTextMessage(chatId, sentText, { clientId: tempId })
+        res = await sendTextMessage(chatId, sentText, { clientId: tempId, ...(parentId && { parent_message: parentId }) })
       }
       const data = res?.data || res
       setMessages(prev => prev.map(m => m._id === tempId ? { ...m, ...data, _id: data._id || tempId } : m))
@@ -1154,7 +1183,8 @@ export function ChatWindow({
                       return (
                         <div
                           key={msg._id}
-                          className={cn("flex items-end gap-2.5 group", own ? "justify-end" : "justify-start")}
+                          id={`msg-${msg._id}`}
+                          className={cn("flex items-end gap-2.5 group rounded-2xl transition-colors", own ? "justify-end" : "justify-start")}
                         >
                           {!own && (
                             <div className="cursor-pointer" onClick={() => onOpenProfile?.(msg.sender, true)}>
@@ -1175,6 +1205,13 @@ export function ChatWindow({
                                   </button>
                                 ))}
                                 <div className="h-4 w-px bg-black/10 mx-0.5" />
+                                <button
+                                  onClick={ev => { ev.stopPropagation(); setReplyingTo(msg); inputRef.current?.focus() }}
+                                  className="flex size-6 items-center justify-center rounded-lg hover:bg-black/5"
+                                  title="Reply"
+                                >
+                                  <Reply className="size-3.5 text-black/50" />
+                                </button>
                                 <button
                                   onClick={ev => { ev.stopPropagation(); setContextMenu({ msgId: msg._id, x: ev.clientX, y: ev.clientY }) }}
                                   className="flex size-6 items-center justify-center rounded-lg hover:bg-black/5"
@@ -1210,15 +1247,45 @@ export function ChatWindow({
                                 }}
                               >
                                 {!own && chat?.isGroupChat && !msg.isDeleted && (
-                                  <p 
+                                  <p
                                     className="text-[12px] font-semibold text-purple mb-1 cursor-pointer hover:underline"
                                     onClick={() => onOpenProfile?.(msg.sender, true)}
                                   >
                                     {senderName}
                                   </p>
                                 )}
+                                {msg.parent_message && !msg.isDeleted && (
+                                  <div
+                                    className={cn(
+                                      'mb-1.5 rounded-lg border-l-2 px-2 py-1 cursor-pointer',
+                                      own ? 'border-white/60 bg-white/15' : 'border-purple/50 bg-purple/5'
+                                    )}
+                                    onClick={() => {
+                                      const target = document.getElementById(`msg-${msg.parent_message.id}`)
+                                      if (target) {
+                                        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                        target.classList.add('bubble-flash')
+                                        setTimeout(() => target.classList.remove('bubble-flash'), 1200)
+                                      }
+                                    }}
+                                  >
+                                    <p className={cn('text-[10px] font-bold', own ? 'text-white/90' : 'text-purple')}>
+                                      {msg.parent_message.sender?.full_name || 'Reply'}
+                                    </p>
+                                    <p className={cn('truncate text-[11px]', own ? 'text-white/70' : 'text-ink-soft')}>
+                                      {msg.parent_message.content || '[Media]'}
+                                    </p>
+                                  </div>
+                                )}
                                  {msg.message_type === 'voice' ? (
-                                   <VoiceBubble msg={msg} own={own} />
+                                   <div className="flex flex-col gap-1">
+                                     <VoiceBubble msg={msg} own={own} />
+                                     {msg.transcript && (
+                                       <p className={cn('max-w-[260px] text-[11px] italic leading-snug', own ? 'text-white/80' : 'text-ink-soft')}>
+                                         “{msg.transcript}”
+                                       </p>
+                                     )}
+                                   </div>
                                  ) : msg.message_type === 'image' && (msg.mediaUrl || msg.media_url) ? (
                                    <div
                                      className="p-1.5 rounded-xl border flex flex-col gap-1.5"
@@ -1563,6 +1630,26 @@ export function ChatWindow({
                 </div>
               </div>
             )}
+            {replyingTo && (
+              <div className="mb-2 flex items-center gap-3 rounded-2xl border-l-4 border-purple bg-purple/5 px-3 py-2">
+                <Reply className="size-4 shrink-0 text-purple" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold text-purple">
+                    Replying to {isOwn(replyingTo) ? 'yourself' : (getDisplayName(replyingTo.sender) || 'message')}
+                  </p>
+                  <p className="truncate text-xs text-ink-soft">
+                    {replyingTo.content || (replyingTo.message_type === 'voice' ? '🎤 Voice message' : replyingTo.message_type === 'image' ? '📷 Photo' : '[Media]')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setReplyingTo(null)}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-black/5 hover:text-ink transition-colors"
+                  aria-label="Cancel reply"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-3 rounded-[20px] px-4 py-2.5 bg-black/3">
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -1716,6 +1803,11 @@ export function ChatWindow({
                     ))}
                   </div>
                 </div>
+                {!msg.isDeleted && (
+                  <button onClick={() => { setReplyingTo(msg); setContextMenu(null); inputRef.current?.focus() }} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-black/5 transition-colors">
+                    <Reply className="size-4 text-slate-600" /> Reply
+                  </button>
+                )}
                 <button onClick={() => { navigator.clipboard.writeText(msg.content || ''); setContextMenu(null); toast.success('Copied!') }} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-black/5 transition-colors">
                   <Copy className="size-4 text-slate-600" /> Copy
                 </button>

@@ -1605,9 +1605,21 @@ export function BrainView({ isNarrow = false }: { onMessage?: (user: any) => voi
 const WEB_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const WEB_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const WEB_TODAY = new Date()
+// Indicator spec (shared with mobile): green=meetings, yellow=recurring,
+// blue=events, purple=tasks, red=holidays.
 const WEB_EVENT_COLORS: Record<string, string> = {
-  meeting_video: '#6c5ce7', meeting_audio: '#0ea5e9',
-  company: '#f59e0b', holiday: '#22c55e', all_day: '#94a3b8',
+  meeting_video: '#22c55e', meeting_audio: '#22c55e',  // green
+  company: '#3b82f6', all_day: '#3b82f6',              // blue (general events)
+  holiday: '#ef4444',                                   // red
+  task: '#6c5ce7',                                      // purple
+}
+
+// Resolve a calendar item's indicator colour. Recurrence wins over base type so
+// a repeating event reads as yellow; tasks fall back to purple.
+function webEventColor(ev: any): string {
+  if (ev?.eventType === 'holiday') return '#ef4444'
+  if (ev?.isRecurring || ev?.recurrenceRule || ev?.parentEventId || ev?.__recurring) return '#eab308' // yellow
+  return WEB_EVENT_COLORS[ev?.eventType] || '#6c5ce7'
 }
 
 function isWebSameDay(a: Date, b: Date) {
@@ -1722,7 +1734,7 @@ export function CalendarView({ isNarrow = false }: { onMessage?: (user: any) => 
                     {day.getDate()}
                   </span>
                   <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center max-w-[30px]">
-                    {dayEvs.slice(0, 3).map((e, i) => <div key={i} className="size-1.5 rounded-full" style={{ backgroundColor: WEB_EVENT_COLORS[e.eventType] || '#6c5ce7' }} />)}
+                    {dayEvs.slice(0, 3).map((e, i) => <div key={i} className="size-1.5 rounded-full" style={{ backgroundColor: webEventColor(e) }} />)}
                   </div>
                 </button>
               )
@@ -1744,7 +1756,7 @@ export function CalendarView({ isNarrow = false }: { onMessage?: (user: any) => 
             <div className="space-y-2">
               {selectedDayEvents.map(event => (
                 <button key={event._id} onClick={() => setSelectedEvent(event)} className="w-full text-left rounded-2xl border border-black/5 p-3 hover:border-purple/20 hover:shadow-sm transition-all"
-                  style={{ borderLeftWidth: 3, borderLeftColor: WEB_EVENT_COLORS[event.eventType] || '#6c5ce7' }}>
+                  style={{ borderLeftWidth: 3, borderLeftColor: webEventColor(event) }}>
                   <p className="text-sm font-semibold text-ink">{event.title}</p>
                   {!event.isAllDay && <p className="text-xs text-ink-soft mt-0.5">{fmtT(event.startTime)} – {fmtT(event.endTime)}</p>}
                 </button>
@@ -1761,7 +1773,7 @@ export function CalendarView({ isNarrow = false }: { onMessage?: (user: any) => 
                   <h3 className="text-sm font-bold text-ink">Event Details</h3>
                   <button onClick={() => setSelectedEvent(null)} className="text-black/30 hover:text-black"><X className="size-4" /></button>
                 </div>
-                <div className="h-1.5 rounded-full mb-4" style={{ backgroundColor: WEB_EVENT_COLORS[selectedEvent.eventType] || '#6c5ce7' }} />
+                <div className="h-1.5 rounded-full mb-4" style={{ backgroundColor: webEventColor(selectedEvent) }} />
                 <h2 className="text-base font-bold text-ink mb-2">{selectedEvent.title}</h2>
                 <p className="text-xs text-ink-soft mb-1"><Clock className="inline size-3 mr-1" />{fmtD(selectedEvent.startTime)} · {fmtT(selectedEvent.startTime)} – {fmtT(selectedEvent.endTime)}</p>
                 {selectedEvent.summary && (
@@ -1795,7 +1807,7 @@ export function CalendarView({ isNarrow = false }: { onMessage?: (user: any) => 
                     <button key={event._id} onClick={() => setSelectedEvent(event)} className="w-full text-left rounded-xl border border-black/5 p-3 mb-2 hover:border-purple/20 transition-all">
                       <p className="text-xs font-semibold text-ink">{event.title}</p>
                       <p className="text-[10px] text-ink-soft mt-0.5">{fmtD(event.startTime)}</p>
-                      <div className="mt-1 h-0.5 rounded-full w-10" style={{ backgroundColor: WEB_EVENT_COLORS[event.eventType] }} />
+                      <div className="mt-1 h-0.5 rounded-full w-10" style={{ backgroundColor: webEventColor(event) }} />
                     </button>
                   ))}
               </div>
@@ -4826,7 +4838,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                     <span
                       key={`org-${i}`}
                       className="size-1.5 rounded-full ring-1 ring-purple/30"
-                      style={{ backgroundColor: selected ? '#fff' : (WEB_EVENT_COLORS[ev.eventType] || '#6c5ce7') }}
+                      style={{ backgroundColor: selected ? '#fff' : (webEventColor(ev)) }}
                       title={ev.eventType === 'holiday' ? `Holiday: ${ev.title}` : ev.title}
                     />
                   ))}
@@ -4918,7 +4930,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
                       {task.isOrgEvent ? (
                         <span
                           className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-tight flex items-center gap-1"
-                          style={{ backgroundColor: `${WEB_EVENT_COLORS[task.eventType] || '#6c5ce7'}1a`, color: WEB_EVENT_COLORS[task.eventType] || '#6c5ce7' }}
+                          style={{ backgroundColor: `${webEventColor(task)}1a`, color: webEventColor(task) }}
                         >
                           {(task.eventType === 'meeting_video' || task.eventType === 'meeting_audio') && (
                             task.eventType === 'meeting_audio' ? <Phone className="size-2.5" /> : <Video className="size-2.5" />

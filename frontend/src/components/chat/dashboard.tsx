@@ -5,7 +5,7 @@ import { NavSidebar, navItems, bottomItems } from '@/components/chat/nav-sidebar
 import { ChatList } from '@/components/chat/chat-list'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
-import { cn, getSecureMediaUrl } from '@/lib/utils'
+import { cn, getSecureMediaUrl, isFullMemberList } from '@/lib/utils'
 import { Loader2, X, LogOut } from 'lucide-react'
 import {
   FriendsView,
@@ -131,7 +131,16 @@ export function Dashboard({
       const c = (e as CustomEvent).detail
       const cid = c?._id || c?.id
       if (cid && String(cid) === String(activeChatId)) {
-        setActiveChat((prev: any) => ({ ...prev, ...c }))
+        setActiveChat((prev: any) => {
+          const merged = { ...prev, ...c }
+          // Never let a partial payload shrink a known-good member list. Only
+          // accept incoming `users` when it's a populated array of member
+          // objects at least as large as what we already have.
+          if (!isFullMemberList(c?.users, prev?.users)) {
+            merged.users = prev?.users ?? c?.users
+          }
+          return merged
+        })
       }
     }
     window.addEventListener('bubble:chat_updated', handler)

@@ -25,7 +25,7 @@ import { getSecureMediaUrl } from '@/lib/utils'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
 import { useDashboard } from '@/contexts/DashboardContext'
 import type { Conversation, FileCategory } from '@/lib/chat-data'
-import { getOrgInviteCode } from '@/lib/api'
+import { getOrgInviteCode, getChatById } from '@/lib/api'
 import { toast } from 'sonner'
 import { useNicknames } from '@/contexts/AppContext'
 
@@ -467,9 +467,10 @@ function FilesCard({
 
 function MembersCard({ conversation, onClose }: { conversation: Conversation; onClose?: () => void }) {
   const conv = conversation as any
-  // Deduplicate members by ID to prevent double-counting when the backend
-  // returns overlapping entries in both `members` and `users`.
-  const rawMembers = conv.members || (conv.isGroupChat ? conv.users : []) || []
+  // The Conversation model only has `users` (no `members` field); GroupInfo
+  // refetches the authoritative, fully-populated list. Dedupe defensively in
+  // case a live update briefly produced overlapping entries.
+  const rawMembers = (conv.isGroupChat ? conv.users : []) || []
   const seen = new Set<string>()
   const members = rawMembers.filter((m: any) => {
     const id = String(m._id || m.id || m.username || m.email || '')
@@ -1123,6 +1124,26 @@ export function GroupInfo({
   useEffect(() => {
     setConvoState(conversation)
   }, [conversation])
+
+  // The chat-list object can carry a partial `users` array (stale cache, a
+  // socket merge, or a trimmed `new_chat` payload), which made GroupInfo show
+  // the wrong member count and only members who were also in your contacts.
+  // Refetch the authoritative, fully-populated conversation whenever a group
+  // panel opens and merge in its full member list.
+  useEffect(() => {
+    const cid = (conversation as any)?.id || (conversation as any)?._id
+    const group = (conversation as any)?.isGroupChat || conversation.type === 'group'
+    if (!cid || !group) return
+    let cancelled = false
+    getChatById(String(cid))
+      .then((res: any) => {
+        const fresh = res?.conversation || res?.data || res
+        if (cancelled || !fresh || !Array.isArray(fresh.users)) return
+        setConvoState((prev: any) => ({ ...prev, ...fresh }))
+      })
+      .catch(() => { /* keep whatever we already have */ })
+    return () => { cancelled = true }
+  }, [(conversation as any)?.id, (conversation as any)?._id])
 
   return (
     <aside className="flex w-full flex-col gap-4 pointer-events-auto select-none">
