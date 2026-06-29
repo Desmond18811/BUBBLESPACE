@@ -69,7 +69,7 @@ function Login() {
     };
 
     const handleGoogleLogin = () => {
-        const BASE_URL = ((import.meta as any).env.VITE_API_URL?.replace(/ i$/, '')?.trim()) || 'https://bubble-backend-production-96a0.up.railway.app/api/v1';
+        const BASE_URL = ((import.meta as any).env.VITE_API_URL?.trim()) || 'https://bubble-backend-production-9ka0.up.railway.app/api/v1';
         window.location.href = `${BASE_URL}/auth/google`;
     };
 
