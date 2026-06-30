@@ -49,7 +49,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useChats, useNicknames } from '@/contexts/AppContext'
 import { useTheme } from 'next-themes'
 import { CreateGroupModal } from './create-group-modal'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { cn, getSecureMediaUrl } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ChatAvatar } from '@/components/chat/chat-avatar'
@@ -65,7 +65,6 @@ import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { useSocket } from '@/contexts/AppContext'
 import { MessageOverlay } from '@/components/chat/message-overlay'
-import { ZegoMeetingModal } from '@/components/chat/ZegoMeetingModal'
 import { countries } from '@/lib/countries'
 
 // Next.js Image polyfill for Vite.
@@ -722,15 +721,14 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
 /* ---------------- Calls ---------------- */
 
 export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
-  const { startCall, isUserOnline } = useSocket()
+  const { startCall, startMeeting, isUserOnline } = useSocket()
   const { getDisplayName } = useNicknames()
   const [selectionStep, setSelectionStep] = useState<'none' | 'source' | 'type'>('none')
-  const [activeMeeting, setActiveMeeting] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(null)
   const { user: currentUser, bgType } = useDashboard()
   const [callsTab, setCallsTab] = useState<'meet' | 'calendar' | 'logs'>('meet')
 
-  const generateRoomId = () => `bubble-${Math.random().toString(36).slice(2, 11)}`
-
+  // 1:1 → ring the coworker; no coworker → open a standalone LiveKit meeting room
+  // the host can invite people into (unified with mobile + the rest of web on LiveKit).
   const handleStartCall = (type: 'voice' | 'video', coworker?: any) => {
     if (coworker) {
       if (startCall) {
@@ -738,8 +736,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
       }
       return
     }
-    const roomId = generateRoomId()
-    setActiveMeeting({ roomId, type })
+    startMeeting(type)
     setSelectionStep('none')
   }
 
@@ -876,7 +873,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
                         ))}
                       </div>
                       <button
-                        onClick={() => handleStartCall('video')}
+                        onClick={() => startMeeting('video', room.roomId || room.id)}
                         className="flex size-12 items-center justify-center rounded-2xl bg-purple text-white shadow-lg shadow-purple/30 transition-transform hover:scale-110 active:scale-95 group-hover:rotate-6"
                       >
                         <Video className="size-5" />
@@ -959,17 +956,8 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
           <CallLogsSection />
         )}
 
-        {/* Meeting Modal - ZegoCloud */}
-        {activeMeeting && (
-          <ZegoMeetingModal
-            roomId={activeMeeting.roomId}
-            type={activeMeeting.type}
-            userId={currentUser?._id || currentUser?.id || 'user'}
-            userName={currentUser?.full_name || currentUser?.username || 'Guest'}
-            userAvatar={currentUser?.avatar}
-            onClose={() => setActiveMeeting(null)}
-          />
-        )}
+        {/* Meeting now runs on LiveKit via AppContext.startMeeting → LiveKitMeetingModal
+            (mounted globally in AppContext), unifying meetings with calls + mobile. */}
 
         {/* Meeting Selection Dialog */}
         {selectionStep !== 'none' && (
@@ -1606,18 +1594,18 @@ const WEB_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'Jul
 const WEB_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const WEB_TODAY = new Date()
 // Indicator spec (shared with mobile): green=meetings, yellow=recurring,
-// blue=events, purple=tasks, red=holidays.
+// blue=events, purple=tasks, orange=holidays.
 const WEB_EVENT_COLORS: Record<string, string> = {
   meeting_video: '#22c55e', meeting_audio: '#22c55e',  // green
   company: '#3b82f6', all_day: '#3b82f6',              // blue (general events)
-  holiday: '#ef4444',                                   // red
+  holiday: '#f4663b',                                   // orange (matches mobile COLOR_HOLIDAY)
   task: '#6c5ce7',                                      // purple
 }
 
 // Resolve a calendar item's indicator colour. Recurrence wins over base type so
 // a repeating event reads as yellow; tasks fall back to purple.
 function webEventColor(ev: any): string {
-  if (ev?.eventType === 'holiday') return '#ef4444'
+  if (ev?.eventType === 'holiday') return '#f4663b'
   if (ev?.isRecurring || ev?.recurrenceRule || ev?.parentEventId || ev?.__recurring) return '#eab308' // yellow
   return WEB_EVENT_COLORS[ev?.eventType] || '#6c5ce7'
 }
@@ -4432,6 +4420,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<any | null>(null)
+  const [actionItemsOpen, setActionItemsOpen] = useState(false)
 
   // Query to fetch tasks
   const { data: tasks = [], refetch: refetchTasksList, isLoading: isTasksLoading } = useQuery({
@@ -4462,6 +4451,24 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
       return res?.events || []
     },
   })
+
+  // Holidays, fetched unbounded by date (mirrors mobile's `type: 'holiday'` query) so
+  // the month-scoped `calendarEvents` query above never crowds them out and counts match.
+  const { data: holidayEvents = [] } = useQuery({
+    queryKey: ['calendarHolidays'],
+    queryFn: async () => {
+      const res = await getCalendarEvents({ type: 'holiday' })
+      return (res?.events || []).filter((e: any) => e?.eventType === 'holiday')
+    },
+    staleTime: 60 * 60 * 1000,
+  })
+
+  // Merge: month-scoped events + the full holiday set, de-duped by _id.
+  const allCalEvents = useMemo(() => {
+    const ids = new Set(calendarEvents.map((e: any) => e._id))
+    const extraHolidays = holidayEvents.filter((h: any) => !ids.has(h._id))
+    return [...calendarEvents, ...extraHolidays]
+  }, [calendarEvents, holidayEvents])
 
   // Modal Form State
   const [title, setTitle] = useState('')
@@ -4613,7 +4620,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
   // Org calendar events (holidays, company events, video/audio meetings) for the
   // selected day, normalized to the task shape so the agenda can render both in one
   // merged list. These aren't Task records, so they never get Edit/Delete.
-  const selectedDayCalEvents = calendarEvents
+  const selectedDayCalEvents = allCalEvents
     .filter((ev: any) => {
       const d = new Date(ev.startTime)
       return (
@@ -4776,7 +4783,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
             })
 
             // Also merge in real org calendar events from /api/v1/events
-            const dayCalEvents = calendarEvents.filter((ev: any) => {
+            const dayCalEvents = allCalEvents.filter((ev: any) => {
               const ed = new Date(ev.startTime)
               return (
                 ed.getDate() === dayNum &&
@@ -4851,64 +4858,74 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
 
       {/* Right: Selected Day Agenda */}
       <div className="w-full md:w-80 p-6 flex flex-col overflow-y-auto bg-slate-50/30">
-        {/* Action Items captured from meeting transcripts (F3) */}
-        {(() => {
-          const actionItems = (tasks as any[]).filter((t: any) => t.source === 'meeting')
-          if (actionItems.length === 0) return null
-          const now = Date.now()
-          return (
-            <div className="mb-6">
-              <div className="flex items-center gap-1.5 mb-3">
-                <ClipboardList className="size-3.5 text-purple" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-purple">Action Items</h4>
-                <span className="text-[10px] text-ink-soft normal-case">from meetings</span>
-              </div>
-              <div className="space-y-2">
-                {actionItems.map((item: any) => {
-                  const done = item.status === 'done'
-                  const overdue = !done && item.end_time && new Date(item.end_time).getTime() < now
-                  const meetingName = item.meetingRef?.title || (item.description || '').replace(/^From meeting:\s*/, '')
-                  return (
-                    <div key={item._id} className="p-3 rounded-2xl bg-white border border-black/5 shadow-sm flex items-start gap-2.5">
-                      <button
-                        onClick={() => handleToggleActionItem(item)}
-                        className={cn(
-                          'mt-0.5 size-4 rounded-md border flex items-center justify-center shrink-0 transition-colors',
-                          done ? 'bg-emerald-500 border-emerald-500' : 'border-black/20 hover:border-purple'
-                        )}
-                        title={done ? 'Reopen' : 'Mark done'}
-                      >
-                        {done && <Check className="size-3 text-white" />}
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <p className={cn('text-[13px] font-semibold leading-snug', done ? 'line-through text-ink-soft' : 'text-ink')}>
-                          {item.title}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          <span className={cn(
-                            'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
-                            done ? 'bg-emerald-50 text-emerald-600' : overdue ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'
-                          )}>
-                            {done ? 'Done' : overdue ? 'Overdue' : 'Pending'}
-                          </span>
-                          {item.assignedToName && <span className="text-[10px] text-ink-soft">· {item.assignedToName}</span>}
-                          {meetingName && <span className="text-[10px] text-ink-soft truncate max-w-[120px]">· {meetingName}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })()}
-
         <div className="mb-6">
           <h4 className="text-xs font-bold uppercase tracking-wider text-black/30 italic">Agenda for</h4>
           <h3 className="text-lg font-bold text-ink mt-0.5">
             {selectedDate.toLocaleDateString('en-US', { dateStyle: 'medium' })}
           </h3>
         </div>
+
+        {/* Action Items captured from meeting transcripts (F3) — collapsible dropdown under the agenda */}
+        {(() => {
+          const actionItems = (tasks as any[]).filter((t: any) => t.source === 'meeting')
+          if (actionItems.length === 0) return null
+          const now = Date.now()
+          const pendingCount = actionItems.filter((item: any) => item.status !== 'done').length
+          return (
+            <div className="mb-6 rounded-2xl border border-black/5 bg-white overflow-hidden">
+              <button
+                onClick={() => setActionItemsOpen(v => !v)}
+                className="w-full flex items-center gap-1.5 px-3 py-3 cursor-pointer"
+              >
+                <ClipboardList className="size-3.5 text-purple" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-purple">Action Items</h4>
+                {pendingCount > 0 && (
+                  <span className="text-[10px] font-bold bg-purple/10 text-purple px-1.5 py-0.5 rounded-full">{pendingCount}</span>
+                )}
+                <span className="text-[10px] text-ink-soft normal-case">from meetings</span>
+                <ChevronDownIcon className={cn("size-3.5 text-ink-soft ml-auto transition-transform", actionItemsOpen && "rotate-180")} />
+              </button>
+              {actionItemsOpen && (
+                <div className="space-y-2 px-3 pb-3">
+                  {actionItems.map((item: any) => {
+                    const done = item.status === 'done'
+                    const overdue = !done && item.end_time && new Date(item.end_time).getTime() < now
+                    const meetingName = item.meetingRef?.title || (item.description || '').replace(/^From meeting:\s*/, '')
+                    return (
+                      <div key={item._id} className="p-3 rounded-2xl bg-slate-50/60 border border-black/5 shadow-sm flex items-start gap-2.5">
+                        <button
+                          onClick={() => handleToggleActionItem(item)}
+                          className={cn(
+                            'mt-0.5 size-4 rounded-md border flex items-center justify-center shrink-0 transition-colors',
+                            done ? 'bg-emerald-500 border-emerald-500' : 'border-black/20 hover:border-purple'
+                          )}
+                          title={done ? 'Reopen' : 'Mark done'}
+                        >
+                          {done && <Check className="size-3 text-white" />}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className={cn('text-[13px] font-semibold leading-snug', done ? 'line-through text-ink-soft' : 'text-ink')}>
+                            {item.title}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className={cn(
+                              'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
+                              done ? 'bg-emerald-50 text-emerald-600' : overdue ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'
+                            )}>
+                              {done ? 'Done' : overdue ? 'Overdue' : 'Pending'}
+                            </span>
+                            {item.assignedToName && <span className="text-[10px] text-ink-soft">· {item.assignedToName}</span>}
+                            {meetingName && <span className="text-[10px] text-ink-soft truncate max-w-[120px]">· {meetingName}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         <div className="flex-1 space-y-4 mb-6">
           {selectedDayItems.length === 0 ? (

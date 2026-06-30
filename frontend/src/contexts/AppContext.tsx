@@ -23,6 +23,12 @@ interface SocketContextValue {
     startCall: (toUserId: string, targetName: string, targetAvatar?: string, type?: 'voice' | 'video') => void
     /** Start a group call: rings every other member into one room and opens the call UI. */
     startGroupCall: (members: any[], type?: 'voice' | 'video') => void
+    /**
+     * Open a standalone LiveKit meeting room (no ringing). The host joins an empty
+     * room and can invite members from inside the call. Pass a roomId to join an
+     * existing live room. Used by Events & Meets ("Start New Meeting" / join room).
+     */
+    startMeeting: (type?: 'voice' | 'video', roomId?: string) => void
     callState: CallState
     endCall: () => void
     /** Single source of truth for presence — set of userIds currently online. */
@@ -36,6 +42,7 @@ const SocketContext = createContext<SocketContextValue>({
     connected: false,
     startCall: () => {},
     startGroupCall: () => {},
+    startMeeting: () => {},
     callState: { status: 'idle' },
     endCall: () => {},
     onlineUsers: new Set(),
@@ -269,6 +276,14 @@ export function AppProvider({ children, user }: AppProviderProps) {
         setGroupMeeting({ roomId, type })
     }, [user])
 
+    // Open a standalone meeting room on LiveKit (no ringing). Used by Events & Meets:
+    // "Start New Meeting" opens a fresh room the host can invite into; passing a roomId
+    // joins an already-live room (e.g. tapping an active collaborative space).
+    const startMeeting = useCallback((type: 'voice' | 'video' = 'video', roomId?: string) => {
+        const id = roomId || `bubble-${Math.random().toString(36).slice(2, 11)}`
+        setGroupMeeting({ roomId: id, type })
+    }, [])
+
     // Initialize socket when user is available
     useEffect(() => {
         const token = localStorage.getItem('access_token')
@@ -415,6 +430,16 @@ export function AppProvider({ children, user }: AppProviderProps) {
             }))
         })
 
+        // Server confirms this user's unread count for a chat (fires after markMessagesRead,
+        // and whenever a new message bumps it). Keeps the chat-list badge in sync without
+        // waiting for a full chat-list refetch.
+        sock?.on('unread_count_updated', ({ chatId, unreadCount }: { chatId: string, unreadCount: number }) => {
+            setChats(prev => prev.map(c => {
+                const cid = c._id || c.id
+                return String(cid) === String(chatId) ? { ...c, unreadCount } : c
+            }))
+        })
+
         sock?.on('message_reaction', ({ messageId, chatId, reactions }: { messageId: string, chatId: string, reactions: any[] }) => {
             setChats(prev => prev.map(c => {
                 const cid = c._id || c.id
@@ -556,6 +581,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('chat_deleted')
             sock?.off('chat_updated')
             sock?.off('messages_read')
+            sock?.off('unread_count_updated')
             sock?.off('message_reaction')
             sock?.off('message_deleted')
             sock?.off('meeting_ended')
@@ -615,7 +641,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
     }, [])
 
     return (
-        <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, startGroupCall, callState, endCall, onlineUsers, isUserOnline }}>
+        <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, startGroupCall, startMeeting, callState, endCall, onlineUsers, isUserOnline }}>
             <ChatContext.Provider value={{ chats, loadingChats, refreshChats, updateChatInList, removeChatFromList }}>
             <NicknameContext.Provider value={{ nicknames, getDisplayName, saveNickname }}>
                 {children}

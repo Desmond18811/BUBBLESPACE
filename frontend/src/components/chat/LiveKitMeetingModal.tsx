@@ -14,6 +14,7 @@ import {
   Volume2,
   Smile,
   Maximize2,
+  Minus,
   LogOut,
   SlidersHorizontal,
   User,
@@ -80,8 +81,49 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
   const [permissionsError, setPermissionsError] = useState<string | null>(null)
   const [meetingDbId, setMeetingDbId] = useState<string | null>(null)
   const meetingDbIdRef = useRef<string | null>(null)
+  // The Meeting record's host userId — used to label the People panel correctly
+  // (whoever created the DB record, not "whichever client is rendering this").
+  const [meetingHostId, setMeetingHostId] = useState<string | null>(null)
   const hasEndedRef = useRef(false)
   const [showEndPrompt, setShowEndPrompt] = useState(false)
+
+  // ── Minimizable floating window ───────────────────────────────────────────────
+  // Minimizing collapses the call to a small draggable pill while keeping the
+  // LiveKitRoom mounted, so media/transcript stay live and the user can keep using
+  // the app. Only End/cancel/network actually disconnect (handled elsewhere).
+  const [minimized, setMinimized] = useState(false)
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const dragOrigin = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null)
+  const PILL_W = 280
+  const PILL_H = 198
+
+  const handleDragMove = useCallback((e: PointerEvent) => {
+    const o = dragOrigin.current
+    if (!o) return
+    let nx = o.ox + (e.clientX - o.px)
+    let ny = o.oy + (e.clientY - o.py)
+    nx = Math.max(8, Math.min(window.innerWidth - PILL_W - 8, nx))
+    ny = Math.max(8, Math.min(window.innerHeight - PILL_H - 8, ny))
+    setPos({ x: nx, y: ny })
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    dragOrigin.current = null
+    window.removeEventListener('pointermove', handleDragMove)
+    window.removeEventListener('pointerup', handleDragEnd)
+  }, [handleDragMove])
+
+  const handleDragStart = useCallback((e: React.PointerEvent) => {
+    const cur = pos ?? { x: window.innerWidth - PILL_W - 16, y: window.innerHeight - PILL_H - 16 }
+    dragOrigin.current = { px: e.clientX, py: e.clientY, ox: cur.x, oy: cur.y }
+    window.addEventListener('pointermove', handleDragMove)
+    window.addEventListener('pointerup', handleDragEnd)
+  }, [pos, handleDragMove, handleDragEnd])
+
+  const handleMinimize = useCallback(() => {
+    setPos(p => p ?? { x: window.innerWidth - PILL_W - 16, y: window.innerHeight - PILL_H - 16 })
+    setMinimized(true)
+  }, [])
 
   // Live transcript recognizer handle + a "stopping" guard. Web Speech auto-restarts
   // itself via onend; without an explicit guard, stop() is instantly undone and the
@@ -226,11 +268,13 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
           type: type === 'video' ? 'video' : 'voice',
         })
         const dbId = res?.meeting?._id || res?._id || null
+        const hostId = res?.meeting?.host || null
         if (dbId) {
           setMeetingDbId(dbId)
           meetingDbIdRef.current = dbId
           socketRef.current?.emit('meeting_started', { roomId, meetingId: dbId })
         }
+        if (hostId) setMeetingHostId(String(hostId))
       } catch (err) {
         console.warn('[LiveKit] Failed to create meeting record:', err)
       }
@@ -330,9 +374,23 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none p-0 md:p-5 lg:p-8">
-      <div className="w-full h-full md:h-[min(960px,92vh)] 2xl:h-[min(1080px,88vh)] max-w-[1760px] flex bg-transparent pointer-events-auto overflow-hidden md:pl-[88px]">
-        <div className="w-full h-full relative flex bg-white rounded-none md:rounded-[26px] overflow-hidden border border-slate-200/60 shadow-2xl">
+    <div className={cn(
+      "fixed inset-0 z-[200] pointer-events-none",
+      !minimized && "flex items-center justify-center p-0 md:p-5 lg:p-8"
+    )}>
+      <div
+        className={cn(
+          "pointer-events-auto overflow-hidden",
+          minimized
+            ? "absolute"
+            : "w-full h-full md:h-[min(960px,92vh)] 2xl:h-[min(1080px,88vh)] max-w-[1760px] flex bg-transparent md:pl-[88px]"
+        )}
+        style={minimized ? { left: pos?.x ?? 0, top: pos?.y ?? 0, width: PILL_W, height: PILL_H } : undefined}
+      >
+        <div className={cn(
+          "w-full h-full relative flex bg-white overflow-hidden border border-slate-200/60 shadow-2xl",
+          minimized ? "rounded-[20px]" : "rounded-none md:rounded-[26px]"
+        )}>
           {permissionsError ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8 bg-[#f8fafc] text-slate-800">
               <div className="size-16 rounded-3xl bg-red-500/10 flex items-center justify-center mb-4 border border-red-500/20">
@@ -377,6 +435,7 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
                 type={type}
                 userName={userName}
                 userAvatar={userAvatar}
+                meetingHostId={meetingHostId}
                 onClose={() => {
                   if (meetingDbIdRef.current) {
                     setShowEndPrompt(true)
@@ -389,6 +448,10 @@ export function LiveKitMeetingModal({ roomId, type, userId, userName, userAvatar
                 roomId={roomId}
                 videoResolution={videoResolution}
                 setVideoResolution={setVideoResolution}
+                minimized={minimized}
+                onMinimize={handleMinimize}
+                onExpand={() => setMinimized(false)}
+                onDragStart={handleDragStart}
               />
               <RoomAudioRenderer />
             </LiveKitRoom>
@@ -463,22 +526,32 @@ function MeetingRoomLayout({
   type,
   userName,
   userAvatar,
+  meetingHostId,
   onClose,
   transcript,
   setTranscript,
   roomId,
   videoResolution,
   setVideoResolution,
+  minimized,
+  onMinimize,
+  onExpand,
+  onDragStart,
 }: {
   type: 'voice' | 'video'
   userName: string
   userAvatar?: string
+  meetingHostId: string | null
   onClose: () => void
   transcript: TranscriptEntry[]
   setTranscript: React.Dispatch<React.SetStateAction<TranscriptEntry[]>>
   roomId: string
   videoResolution: { width: number; height: number }
   setVideoResolution: React.Dispatch<React.SetStateAction<{ width: number; height: number }>>
+  minimized: boolean
+  onMinimize: () => void
+  onExpand: () => void
+  onDragStart: (e: React.PointerEvent) => void
 }) {
   const { localParticipant } = useLocalParticipant()
   const remoteParticipants = useRemoteParticipants()
@@ -520,16 +593,18 @@ function MeetingRoomLayout({
   const handleInviteContact = useCallback((c: any) => {
     const toUserId = c._id || c.id || c.userId
     if (!toUserId) return
-    socketRef.current?.emit('call_invite', {
+    // Rings the contact via the same call_invite path startGroupCall uses: they get
+    // an incoming-call prompt (accept = join consent) and land in this room.
+    socket?.emit('call_invite', {
       toUserId,
-      roomId: roomIdRef.current,
+      roomId,
       callerName: userName,
       callerAvatar: userAvatar,
       type,
     })
     setInvitedIds(prev => new Set(prev).add(toUserId))
     toast.success(`Invited ${c.full_name || c.username || 'contact'}`)
-  }, [userName, userAvatar, type])
+  }, [socket, roomId, userName, userAvatar, type])
 
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessageEntry[]>([])
@@ -716,6 +791,68 @@ function MeetingRoomLayout({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
+  // ── Minimized pill ────────────────────────────────────────────────────────────
+  // Rendered while the call is collapsed. Stays inside <LiveKitRoom> so media keeps
+  // flowing; the header is the drag handle, buttons stop propagation so dragging the
+  // pill never triggers mic/expand/leave.
+  if (minimized) {
+    const showVideo = mainTrack && mainTrack.source === Track.Source.Camera && mainTrack.participant.isCameraEnabled
+    return (
+      <div className="flex flex-col h-full w-full bg-white text-ink overflow-hidden rounded-[20px] font-sans">
+        <div
+          onPointerDown={onDragStart}
+          className="flex items-center gap-2 px-3 h-9 bg-purple text-white cursor-move select-none shrink-0"
+        >
+          <span className="size-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span className="text-[11px] font-bold truncate flex-1">
+            {type === 'video' ? 'Video call' : 'Voice call'} · {formatDuration(callDuration)}
+          </span>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onExpand() }}
+            title="Expand"
+            className="p-1 hover:bg-white/20 rounded-lg transition-colors cursor-pointer"
+          >
+            <Maximize2 className="size-3.5" />
+          </button>
+        </div>
+        <div className="flex-1 relative bg-purple-soft/40 flex items-center justify-center overflow-hidden">
+          {showVideo ? (
+            <VideoTrack trackRef={mainTrack as any} className="w-full h-full object-cover" />
+          ) : (
+            <ChatAvatar
+              src={mainTrack ? getParticipantAvatar(mainTrack.participant) : userAvatar}
+              name={mainTrack?.participant?.name || userName}
+              className="size-16 rounded-2xl object-cover shadow"
+            />
+          )}
+          <span className="absolute bottom-1.5 left-1.5 text-[9px] font-bold text-ink bg-white/85 px-2 py-0.5 rounded-full select-none">
+            {totalParticipantsCount} in call
+          </span>
+        </div>
+        <div className="flex items-center justify-center gap-2 h-11 bg-white border-t border-black/5 shrink-0">
+          <button
+            onClick={toggleMicrophone}
+            className={cn(
+              "size-8 rounded-full flex items-center justify-center transition-all cursor-pointer",
+              isMicrophoneEnabled ? "bg-purple/10 text-purple hover:bg-purple/20" : "bg-red-500 text-white"
+            )}
+            title={isMicrophoneEnabled ? "Mute" : "Unmute"}
+          >
+            {isMicrophoneEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+          </button>
+          <button
+            onClick={onClose}
+            className="size-8 rounded-full bg-red-500 text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+            title="Leave / End"
+          >
+            <Phone className="size-4 rotate-[135deg]" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full w-full bg-white text-ink overflow-hidden font-sans relative">
       <style>{`
@@ -738,8 +875,8 @@ function MeetingRoomLayout({
       {/* Header */}
       <div className="flex h-16 items-center justify-between px-3 md:px-6 border-b border-black/5 shrink-0 select-none bg-white">
         <div className="flex items-center gap-4">
-          <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-xl transition-colors cursor-pointer">
-            <ChevronLeft className="size-5 text-ink" />
+          <button onClick={onMinimize} title="Minimize call" className="p-2 hover:bg-black/5 rounded-xl transition-colors cursor-pointer">
+            <Minus className="size-5 text-ink" />
           </button>
           <div>
             <h2 className="font-bold text-sm text-ink leading-none">
@@ -1026,13 +1163,16 @@ function MeetingRoomLayout({
                     const avatar = getParticipantAvatar(p)
                     const name = p.isLocal ? `${userName} (You)` : (p.name || p.identity)
                     const isMuted = !p.isMicrophoneEnabled
+                    // LiveKit identity == Bubble userId (see generateLiveKitToken), so this
+                    // reflects the actual Meeting.host, not just "whichever client renders this".
+                    const isHost = meetingHostId ? p.identity === meetingHostId : p.isLocal
                     return (
                       <div key={p.sid || p.identity || i} className="flex items-center justify-between p-2 rounded-xl hover:bg-purple-soft/30 transition-colors">
                         <div className="flex items-center gap-3 min-w-0">
                           <ChatAvatar src={avatar} name={name} className="size-8 rounded-full ring-1 ring-slate-100 object-cover shrink-0" />
                           <div className="min-w-0">
                             <span className="text-xs font-bold text-ink block truncate max-w-[120px]">{name}</span>
-                            <span className="text-[10px] text-ink-soft block">{p.isLocal ? 'Host' : 'Participant'}</span>
+                            <span className="text-[10px] text-ink-soft block">{isHost ? 'Host' : 'Participant'}</span>
                           </div>
                         </div>
                         {isMuted ? (

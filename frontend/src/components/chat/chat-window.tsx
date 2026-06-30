@@ -297,6 +297,9 @@ export function ChatWindow({
       .finally(() => setLoading(false))
 
     markMessagesRead(chatId).catch(() => { })
+    // Optimistic zero-out so the chat-list badge clears immediately; the server's
+    // 'unread_count_updated' event (handled in AppContext) confirms it shortly after.
+    updateChatInList(chatId, { unreadCount: 0 })
 
     // Trigger initial AI suggestions
     handleInputChange('')
@@ -392,6 +395,7 @@ export function ChatWindow({
         return [...prev, normalized]
       })
       markMessagesRead(chatId).catch(() => { })
+      updateChatInList(chatId, { unreadCount: 0 })
     }
 
     const onMsgUpdated = (msg: any) => {
