@@ -14,7 +14,7 @@ import {
   Volume2,
   Smile,
   Maximize2,
-  Minus,
+  ChevronDown,
   LogOut,
   SlidersHorizontal,
   User,
@@ -875,8 +875,9 @@ function MeetingRoomLayout({
       {/* Header */}
       <div className="flex h-16 items-center justify-between px-3 md:px-6 border-b border-black/5 shrink-0 select-none bg-white">
         <div className="flex items-center gap-4">
-          <button onClick={onMinimize} title="Minimize call" className="p-2 hover:bg-black/5 rounded-xl transition-colors cursor-pointer">
-            <Minus className="size-5 text-ink" />
+          <button onClick={onMinimize} title="Minimize to floating pill" className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-black/5 rounded-xl transition-colors cursor-pointer text-ink-soft hover:text-ink">
+            <ChevronDown className="size-4" />
+            <span className="text-xs font-medium hidden sm:block">Minimize</span>
           </button>
           <div>
             <h2 className="font-bold text-sm text-ink leading-none">

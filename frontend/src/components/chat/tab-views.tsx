@@ -607,12 +607,34 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                       >
                         <Phone className="size-3" />
                       </button>
+                      <button
+                        className="flex size-7 items-center justify-center rounded-lg border border-black/5 text-black/30 hover:text-purple hover:border-purple/20 transition-all"
+                        onClick={() => startCall && startCall(contact._id || contact.id, getDisplayName(contact), contact.avatar, 'video')}
+                      >
+                        <Video className="size-3" />
+                      </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => onMessage?.(contact)}
-                      className="absolute inset-0 z-10"
-                    />
+                    <div className="flex items-center gap-1.5 mt-1 z-10 relative">
+                      <button
+                        onClick={() => onMessage?.(contact)}
+                        className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-purple/10 py-1.5 text-[11px] font-semibold text-purple hover:bg-purple hover:text-white transition-all"
+                      >
+                        <MessageSquare className="size-3" /> Chat
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startCall && startCall(contact._id || contact.id, getDisplayName(contact), contact.avatar, 'voice') }}
+                        className="flex size-8 items-center justify-center rounded-lg border border-black/5 text-black/40 hover:text-purple hover:border-purple/20 transition-all"
+                      >
+                        <Phone className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startCall && startCall(contact._id || contact.id, getDisplayName(contact), contact.avatar, 'video') }}
+                        className="flex size-8 items-center justify-center rounded-lg border border-black/5 text-black/40 hover:text-purple hover:border-purple/20 transition-all"
+                      >
+                        <Video className="size-3.5" />
+                      </button>
+                    </div>
                   )}
 
                   {/* Dropdown Menu */}
@@ -641,8 +663,8 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleRemove(cid)
                                 setActiveDropdownId(null)
+                                if (confirm(`Remove ${getDisplayName(contact)} from your contacts?`)) handleRemove(cid)
                               }}
                               className="w-full text-left rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-black/60 hover:bg-red-50 hover:text-red-500 transition-colors"
                             >
@@ -651,8 +673,8 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleBlock(cid)
                                 setActiveDropdownId(null)
+                                if (confirm(`Block ${getDisplayName(contact)}? They won't be able to message you.`)) handleBlock(cid)
                               }}
                               className="w-full text-left rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-black/60 hover:bg-red-50 hover:text-red-500 transition-colors"
                             >
@@ -2491,6 +2513,7 @@ export function EditView({
     phone_number: user?.phone_number || '',
     organization: user?.organization || '',
     inviteCode: '',
+    actionItemEmailMode: (user?.actionItemEmailMode as 'each' | 'summary' | 'off') || 'each',
   })
 
   // Join-a-group-by-code (independent of the profile form).
@@ -2870,6 +2893,34 @@ export function EditView({
               <span className="mt-1 block text-[11px] text-ink-soft">Ask a group member for the code, or paste the full invite link.</span>
             </label>
 
+
+            {/* Action-Item Email Mode */}
+            <div className="pt-2">
+              <span className="mb-1.5 block text-[14px] font-semibold text-ink">Action-Item Emails</span>
+              <p className="mb-4 text-[12px] text-ink-soft">Choose how BubbleSpace emails you about meeting action items assigned to you.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {([
+                  { value: 'each', label: 'Each item', desc: 'One email per due / overdue item' },
+                  { value: 'summary', label: 'Daily summary', desc: 'All items in your morning brief' },
+                  { value: 'off', label: 'Off', desc: 'No action-item emails' },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, actionItemEmailMode: opt.value }))}
+                    className={cn(
+                      'flex flex-col items-start gap-0.5 rounded-2xl border-2 px-4 py-3.5 text-left transition-all',
+                      formData.actionItemEmailMode === opt.value
+                        ? 'border-purple bg-purple/5 ring-2 ring-purple/10'
+                        : 'border-transparent bg-purple-soft/30 hover:bg-purple-soft/60',
+                    )}
+                  >
+                    <span className="text-[13px] font-bold text-ink">{opt.label}</span>
+                    <span className="text-[11px] text-ink-soft">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* App Background */}
             <div className="pt-2">
@@ -4129,102 +4180,128 @@ function MeetingDetailModal({ log, onClose }: { log: any; onClose: () => void })
   const durationStr = log.duration ? `${Math.round(log.duration / 60)} min${Math.round(log.duration / 60) !== 1 ? 's' : ''}` : 'N/A'
   const dateStr = log.timestamp.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
   const { getDisplayName } = useNicknames()
+  const [activeTab, setActiveTab] = useState<'summary' | 'actions' | 'transcript'>('summary')
+
+  const hasActionItems = log.actionItems && log.actionItems.length > 0
+  const hasTranscript = !!log.transcriptRaw
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-white rounded-[2rem] p-6 shadow-2xl border border-slate-200/60 overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+      <div className="w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl border border-slate-200/60 overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-xl bg-purple/10 flex items-center justify-center">
               <Sparkles className="size-5 text-purple" />
             </div>
             <div>
-              <h3 className="font-bold text-ink text-base">Meeting Details</h3>
-              <p className="text-xs text-ink-soft">Review AI summary, transcripts, and action items</p>
+              <h3 className="font-bold text-ink text-base truncate max-w-[280px]">{log.title}</h3>
+              <p className="text-xs text-ink-soft">📅 {dateStr} · ⏱️ {durationStr}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="size-8 rounded-xl flex items-center justify-center hover:bg-slate-100 text-ink-soft transition-colors cursor-pointer"
+            className="size-8 rounded-xl flex items-center justify-center hover:bg-slate-100 text-ink-soft transition-colors cursor-pointer shrink-0"
           >
             <X className="size-5" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto py-5 space-y-6 pr-1">
-          {/* Metadata Grid */}
-          <div className="grid grid-cols-2 gap-4 p-5 rounded-2xl bg-purple-soft/5 border border-purple/10">
-            <div>
-              <p className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Date & Time</p>
-              <p className="text-sm font-semibold text-ink mt-1">📅 {dateStr}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Duration</p>
-              <p className="text-sm font-semibold text-ink mt-1">⏱️ {durationStr}</p>
-            </div>
-          </div>
-
-          {/* Attendees */}
-          {((log.host) || (log.attendees && log.attendees.length > 0)) && (
-            <div>
-              <h5 className="text-[10px] font-bold text-ink-soft uppercase tracking-wider mb-2.5">Participants</h5>
-              <div className="flex flex-wrap gap-3">
-                {log.host && (
-                  <div className="flex items-center gap-2 bg-purple/5 border border-purple/10 rounded-xl px-3 py-1.5 text-xs text-ink">
-                    <ChatAvatar src={log.host.avatar} name={getDisplayName(log.host)} className="size-6 rounded-lg" />
-                    <span>{getDisplayName(log.host)} (Host)</span>
-                  </div>
-                )}
-                {log.attendees?.map((att: any, idx: number) => (
-                  <div key={idx} className="flex items-center gap-2 bg-slate-100 border border-slate-200/50 rounded-xl px-3 py-1.5 text-xs text-ink">
-                    <ChatAvatar src={att.avatar} name={getDisplayName(att)} className="size-6 rounded-lg" />
-                    <span>{getDisplayName(att)}</span>
-                  </div>
-                ))}
+        {/* Participants row */}
+        {((log.host) || (log.attendees && log.attendees.length > 0)) && (
+          <div className="px-6 py-3 border-b border-slate-50 flex flex-wrap gap-2 shrink-0">
+            {log.host && (
+              <div className="flex items-center gap-1.5 bg-purple/5 border border-purple/10 rounded-lg px-2.5 py-1 text-xs text-ink">
+                <ChatAvatar src={log.host.avatar} name={getDisplayName(log.host)} className="size-5 rounded-md" />
+                <span className="font-medium">{getDisplayName(log.host)}</span>
+                <span className="text-[9px] text-purple font-bold uppercase">Host</span>
               </div>
+            )}
+            {log.attendees?.map((att: any, idx: number) => (
+              <div key={idx} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/50 rounded-lg px-2.5 py-1 text-xs text-ink">
+                <ChatAvatar src={att.avatar} name={getDisplayName(att)} className="size-5 rounded-md" />
+                <span>{getDisplayName(att)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Tab bar */}
+        <div className="flex border-b border-slate-100 px-6 shrink-0">
+          <button
+            onClick={() => setActiveTab('summary')}
+            className={cn("pb-3 pt-2.5 text-xs font-bold border-b-2 mr-5 transition-all", activeTab === 'summary' ? "border-purple text-purple" : "border-transparent text-ink-soft hover:text-ink")}
+          >
+            Summary
+          </button>
+          <button
+            onClick={() => setActiveTab('actions')}
+            className={cn("pb-3 pt-2.5 text-xs font-bold border-b-2 mr-5 transition-all flex items-center gap-1.5", activeTab === 'actions' ? "border-purple text-purple" : "border-transparent text-ink-soft hover:text-ink")}
+          >
+            Action Items
+            {hasActionItems && (
+              <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full", activeTab === 'actions' ? "bg-purple text-white" : "bg-purple/10 text-purple")}>
+                {log.actionItems.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('transcript')}
+            className={cn("pb-3 pt-2.5 text-xs font-bold border-b-2 transition-all", activeTab === 'transcript' ? "border-purple text-purple" : "border-transparent text-ink-soft hover:text-ink")}
+          >
+            Transcript
+          </button>
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {activeTab === 'summary' && (
+            <div className="bg-purple-soft/5 border border-purple/10 rounded-2xl p-4 text-xs text-ink leading-relaxed whitespace-pre-line shadow-inner min-h-[120px]">
+              {log.summary || 'AI Summary is generating or unavailable for this meeting.'}
             </div>
           )}
 
-          {/* AI Summary */}
-          <div>
-            <h5 className="text-[10px] font-bold text-purple uppercase tracking-wider mb-2">Aida Brain Meeting Summary</h5>
-            <div className="bg-purple-soft/5 border border-purple/10 rounded-2xl p-4 text-xs text-ink leading-relaxed whitespace-pre-line shadow-inner">
-              {log.summary || 'AI Summary is generating or unavailable for this meeting.'}
-            </div>
-          </div>
-
-          {/* Action Items */}
-          {log.actionItems && log.actionItems.length > 0 && (
-            <div>
-              <h5 className="text-[10px] font-bold text-purple uppercase tracking-wider mb-2">Action Items Sourced</h5>
+          {activeTab === 'actions' && (
+            hasActionItems ? (
               <div className="space-y-2">
                 {log.actionItems.map((item: any, idx: number) => (
-                  <div key={idx} className="flex items-start gap-2 bg-white border border-slate-100 rounded-xl p-3 text-xs text-ink leading-tight shadow-sm">
-                    <span className="text-purple">📌</span>
+                  <div key={idx} className="flex items-start gap-2.5 bg-white border border-slate-100 rounded-xl p-3.5 text-xs text-ink leading-tight shadow-sm">
+                    <span className="text-purple mt-0.5">📌</span>
                     <div className="flex-1">
-                      <p className="font-semibold text-ink">{item.text || item.task}</p>
+                      <p className="font-semibold text-ink">{item.text || item.task || item.title}</p>
                       {(item.assignedToName || item.assignedTo?.full_name) && (
                         <p className="text-[9px] text-purple font-bold tracking-wide mt-0.5 uppercase">
                           Assigned to: {item.assignedToName || item.assignedTo?.full_name}
                         </p>
                       )}
+                      {item.status && (
+                        <span className={cn("inline-block text-[9px] font-bold uppercase px-1.5 py-0.5 rounded mt-1", item.status === 'done' ? "bg-emerald-50 text-emerald-600" : "bg-yellow-50 text-yellow-600")}>
+                          {item.status}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            ) : (
+              <div className="py-12 text-center text-ink-soft">
+                <ClipboardList className="size-8 mx-auto mb-2 opacity-30" />
+                <p className="text-xs">No action items were captured for this meeting.</p>
+              </div>
+            )
           )}
 
-          {/* Raw Transcript */}
-          {log.transcriptRaw && (
-            <div>
-              <h5 className="text-[10px] font-bold text-ink-soft uppercase tracking-wider mb-2">Full Conversation Transcript</h5>
-              <div className="bg-slate-50 border border-slate-250/50 rounded-2xl p-4 font-mono text-[10px] leading-relaxed max-h-56 overflow-y-auto text-ink">
+          {activeTab === 'transcript' && (
+            hasTranscript ? (
+              <div className="bg-slate-50 border border-slate-200/50 rounded-2xl p-4 font-mono text-[10px] leading-relaxed text-ink whitespace-pre-line">
                 {log.transcriptRaw}
               </div>
-            </div>
+            ) : (
+              <div className="py-12 text-center text-ink-soft">
+                <FileText className="size-8 mx-auto mb-2 opacity-30" />
+                <p className="text-xs">No transcript was captured for this meeting.</p>
+              </div>
+            )
           )}
         </div>
       </div>
@@ -4334,64 +4411,57 @@ function CallLogsSection() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {logs.map((log: any) => {
-            const dateStr = log.timestamp.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+            const dateStr = log.timestamp.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
             const timeStr = log.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            
+
             return (
-              <div 
-                key={log.id} 
-                className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] border border-black/5 bg-white p-5 transition-all hover:shadow-lg hover:border-purple/35"
+              <div
+                key={log.id}
+                className="group relative flex items-center gap-4 overflow-hidden rounded-2xl border border-black/5 bg-white px-4 py-3.5 transition-all hover:shadow-md hover:border-purple/25"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h4 className="font-bold text-ink text-[15px] truncate max-w-[200px]" title={log.title}>
+                {/* Icon pill */}
+                <div className={cn(
+                  "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                  log.missed ? "bg-red-50" : log.isMeeting ? "bg-emerald-50" : "bg-purple-soft/40"
+                )}>
+                  {log.type === 'video'
+                    ? <Video className={cn("size-5", log.missed ? "text-red-400" : log.isMeeting ? "text-emerald-500" : "text-purple")} />
+                    : <Phone className={cn("size-5", log.missed ? "text-red-400" : log.isMeeting ? "text-emerald-500" : "text-purple")} />
+                  }
+                </div>
+
+                {/* Details */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-ink text-[13px] truncate" title={log.title}>
                       {log.title}
                     </h4>
-                    <div className="flex items-center gap-2 mt-1 text-[11px] text-ink-soft font-medium">
-                      <span>📅 {dateStr} at {timeStr}</span>
-                      <span>•</span>
-                      <span>⏱️ {log.missed ? 'Missed' : formatDuration(log.duration)}</span>
-                    </div>
+                    <span className={cn(
+                      "shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider",
+                      log.missed ? "bg-red-50 text-red-400" : log.isMeeting ? "bg-emerald-50 text-emerald-600" : "bg-purple/10 text-purple"
+                    )}>
+                      {log.missed ? 'Missed' : log.isMeeting ? 'Meeting' : log.type === 'video' ? 'Video' : 'Voice'}
+                    </span>
                   </div>
-
-                  <span className={cn(
-                    "px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider",
-                    log.missed 
-                      ? "bg-red-50 text-red-500" 
-                      : log.isMeeting 
-                        ? "bg-purple/10 text-purple" 
-                        : "bg-green-50 text-green-600"
-                  )}>
-                    {log.missed ? 'Missed' : log.isMeeting ? 'Meeting' : 'Call'}
-                  </span>
+                  <p className="text-[11px] text-ink-soft mt-0.5">
+                    {dateStr} · {timeStr}
+                    {!log.missed && log.duration > 0 && <span className="ml-1">· {formatDuration(log.duration)}</span>}
+                  </p>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-slate-50 pt-3">
-                  <div className="flex items-center gap-1">
-                    {log.type === 'video' ? (
-                      <span className="text-[10px] text-ink-soft font-semibold flex items-center gap-1">
-                        📹 Video Session
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-ink-soft font-semibold flex items-center gap-1">
-                        📞 Voice Session
-                      </span>
-                    )}
-                  </div>
-
-                  {log.isMeeting ? (
-                    <button
-                      onClick={() => setSelectedLog(log)}
-                      className="text-[11px] font-extrabold text-purple bg-purple-soft/60 px-3 py-1.5 rounded-xl hover:bg-purple hover:text-white transition-all cursor-pointer shadow-sm"
-                    >
-                      ✦ AI Brief & Transcript
-                    </button>
-                  ) : (
-                    <span className="text-[10px] text-ink-soft italic font-medium">Direct Chat Call</span>
-                  )}
-                </div>
+                {/* Action */}
+                {log.isMeeting ? (
+                  <button
+                    onClick={() => setSelectedLog(log)}
+                    className="shrink-0 text-[10px] font-bold text-purple bg-purple-soft/60 px-2.5 py-1.5 rounded-xl hover:bg-purple hover:text-white transition-all cursor-pointer"
+                  >
+                    Details
+                  </button>
+                ) : (
+                  <div className="shrink-0 size-2.5 rounded-full" />
+                )}
               </div>
             )
           })}

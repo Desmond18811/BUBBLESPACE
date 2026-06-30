@@ -491,9 +491,9 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
   const currentUserId = currentUser.id || currentUser._id || ''
   const adminId = conv.groupAdmin?._id || conv.groupAdmin?.id || conv.groupAdmin
 
-  // Collapse long member lists: show the first 3, then reveal the rest on demand.
-  const [showAllMembers, setShowAllMembers] = useState(false)
-  const COLLAPSED_COUNT = 3
+  // Show all members by default; collapse only when explicitly toggled.
+  const [showAllMembers, setShowAllMembers] = useState(true)
+  const COLLAPSED_COUNT = 5
   const visibleMembers = showAllMembers ? members : members.slice(0, COLLAPSED_COUNT)
   const hiddenCount = members.length - visibleMembers.length
 
@@ -510,7 +510,7 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
         </button>
       )}
       <h2 className="text-[17px] font-bold text-ink mb-3">Members ({members.length})</h2>
-      <div className={cn("space-y-1.5 pr-1", showAllMembers && "max-h-[260px] overflow-y-auto")}>
+      <div className="space-y-1.5 pr-1 max-h-[340px] overflow-y-auto">
         {visibleMembers.map((m: any) => {
           const isMemberAdmin = adminId && String(m._id || m.id) === String(adminId)
           const isMe = String(m._id || m.id) === String(currentUserId)
