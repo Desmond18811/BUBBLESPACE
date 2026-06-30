@@ -124,7 +124,22 @@ export function AppProvider({ children, user }: AppProviderProps) {
 
     // Call state & ringtone refs
     const [callState, setCallState] = useState<CallState>({ status: 'idle' })
-    const [groupMeeting, setGroupMeeting] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(null)
+    const MEETING_PERSIST_KEY = 'bubble_active_meeting'
+    const [groupMeeting, setGroupMeetingState] = useState<{ roomId: string; type: 'voice' | 'video' } | null>(() => {
+        try {
+            const saved = localStorage.getItem(MEETING_PERSIST_KEY)
+            if (saved) return JSON.parse(saved)
+        } catch { /* ignore */ }
+        return null
+    })
+    const setGroupMeeting = (v: { roomId: string; type: 'voice' | 'video' } | null) => {
+        setGroupMeetingState(v)
+        if (v) {
+            try { localStorage.setItem(MEETING_PERSIST_KEY, JSON.stringify(v)) } catch { /* ignore */ }
+        } else {
+            try { localStorage.removeItem(MEETING_PERSIST_KEY) } catch { /* ignore */ }
+        }
+    }
     const ringtoneRef = useRef<RingtonePlayer | null>(null)
     const timeoutRef = useRef<any>(null)
 
@@ -294,6 +309,17 @@ export function AppProvider({ children, user }: AppProviderProps) {
     const startMeeting = useCallback((type: 'voice' | 'video' = 'video', roomId?: string) => {
         const id = roomId || `bubble-${Math.random().toString(36).slice(2, 11)}`
         setGroupMeeting({ roomId: id, type })
+    }, [])
+
+    // Allow isolated components (e.g. CalendarSection) to trigger meeting joins via
+    // a custom window event rather than threading startMeeting through props.
+    useEffect(() => {
+        const handleJoin = (e: Event) => {
+            const { roomId, type } = (e as CustomEvent).detail || {}
+            if (roomId) setGroupMeeting({ roomId, type: type || 'video' })
+        }
+        window.addEventListener('bubble:join_meeting', handleJoin)
+        return () => window.removeEventListener('bubble:join_meeting', handleJoin)
     }, [])
 
     // Initialize socket when user is available

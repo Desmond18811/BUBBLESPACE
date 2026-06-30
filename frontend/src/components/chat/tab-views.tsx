@@ -60,7 +60,7 @@ import {
   profile,
   type Friend,
 } from '@/lib/chat-data'
-import { fetchAllUserChats, fetchCallLogs, fetchMeetings, accessOrCreateChat, joinOrganizationByInvite, joinGroupChat, getOrgMembers } from '@/lib/api'
+import { fetchAllUserChats, fetchCallLogs, fetchMeetings, fetchActiveMeetings, accessOrCreateChat, joinOrganizationByInvite, joinGroupChat, getOrgMembers } from '@/lib/api'
 import { ChatWindow } from '@/components/chat/chat-window'
 import { GroupInfo } from '@/components/chat/group-info'
 import { useSocket } from '@/contexts/AppContext'
@@ -743,11 +743,12 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
 /* ---------------- Calls ---------------- */
 
 export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
-  const { startCall, startMeeting, isUserOnline } = useSocket()
+  const { startCall, startMeeting, isUserOnline, socket } = useSocket()
   const { getDisplayName } = useNicknames()
   const [selectionStep, setSelectionStep] = useState<'none' | 'source' | 'type'>('none')
   const { user: currentUser, bgType } = useDashboard()
   const [callsTab, setCallsTab] = useState<'meet' | 'calendar' | 'logs'>('meet')
+  const queryClient = useQueryClient()
 
   // 1:1 → ring the coworker; no coworker → open a standalone LiveKit meeting room
   // the host can invite people into (unified with mobile + the rest of web on LiveKit).
@@ -772,25 +773,34 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
 
   const myId = currentUser?._id || currentUser?.id
 
-  // Fetch real data. `initialData` seeds instantly from the last-known localStorage
-  // snapshot so revisiting this tab (or a slow/flaky backend) doesn't flash the
-  // skeleton grid again — the query still revalidates in the background.
-  const { data: callLogsData, isLoading } = useQuery({
-    queryKey: ['callLogs'],
+  // Active (live) meeting rooms — dedicated endpoint, refreshed on socket events.
+  const { data: activeRooms = [], isLoading: roomsLoading } = useQuery({
+    queryKey: ['active-rooms'],
     queryFn: async () => {
-      const res = await fetchCallLogs()
-      const data = res.data || { rooms: [], coworkers: [] }
-      writeCache(myId, CACHE_KEYS.callLogs, data)
-      return data
+      const res = await fetchActiveMeetings()
+      return res?.rooms || []
     },
-    initialData: () => readCache<any>(myId, CACHE_KEYS.callLogs) || undefined,
-    staleTime: 1000 * 60,
+    refetchInterval: 30_000, // poll every 30 s as a safety net
+    staleTime: 10_000,
   })
+
+  // Subscribe to real-time room updates so the list refreshes the moment a new
+  // meeting starts or an existing one ends — no manual polling needed in practice.
+  useEffect(() => {
+    if (!socket) return
+    const refresh = () => queryClient.invalidateQueries({ queryKey: ['active-rooms'] })
+    socket.on('meeting_room_update', refresh)
+    socket.on('meeting_ended', refresh)
+    return () => {
+      socket.off('meeting_room_update', refresh)
+      socket.off('meeting_ended', refresh)
+    }
+  }, [socket, queryClient])
 
   // Full org roster (same endpoint as Work), not the capped search — "People in
   // the office" is meant to be everyone currently online, so it needs the whole
   // org to filter against, not a 30-row search slice.
-  const { data: coworkerData } = useQuery({
+  const { data: coworkerData, isLoading } = useQuery({
     queryKey: ['coworkers-calls'],
     queryFn: async () => {
       const res = await getOrgMembers()
@@ -802,7 +812,6 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
     staleTime: 1000 * 60,
   })
 
-  const activeRooms = callLogsData?.rooms || []
   // Filter out self and bots, then to only those currently online — this section
   // is "people in the office right now," not the full roster (that's Work).
   const coworkers = (coworkerData || []).filter((w: any) => {
@@ -862,36 +871,58 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {activeRooms.length === 0 ? (
+                {roomsLoading && activeRooms.length === 0 ? (
+                  [1, 2].map(i => <div key={i} className="h-40 rounded-[28px] bg-black/3 animate-pulse" />)
+                ) : activeRooms.length === 0 ? (
                   <div className="col-span-full py-8 text-center rounded-[28px] border-2 border-dashed border-black/5 bg-black/2">
                     <p className="text-sm text-black/30 font-medium">No active live meetings. Start one to collaborate!</p>
                   </div>
-                ) : activeRooms.map((room: any) => (
-                  <div key={room.id} className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] bg-purple-soft/40 p-5 transition-all hover:bg-purple-soft/70 hover:shadow-xl border border-purple/5">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="text-[17px] font-bold text-ink">{room.title}</h3>
-                        <p className="text-[11px] text-ink-soft font-medium uppercase tracking-tight">{room.members} members joined</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-8 flex items-end justify-between">
-                      <div className="flex -space-x-3">
-                        {room.callers?.slice(0, 3).map((c: string, i: number) => (
-                          <div key={i} className="flex size-10 items-center justify-center rounded-full border-2 border-white bg-purple text-[12px] font-bold text-white shadow-sm shrink-0">
-                            {c[0]}
+                ) : activeRooms.map((room: any) => {
+                  const participants = [room.host, ...(room.attendees || [])].filter(Boolean)
+                  const whenStr = room.startedAt ? new Date(room.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+                  return (
+                    <div key={room.id} className="group relative flex flex-col justify-between overflow-hidden rounded-[28px] bg-purple-soft/40 p-5 transition-all hover:bg-purple-soft/70 hover:shadow-xl border border-purple/5">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="size-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">Live{whenStr ? ` · Started ${whenStr}` : ''}</span>
                           </div>
-                        ))}
+                          <h3 className="text-[16px] font-bold text-ink truncate">{room.title}</h3>
+                          <p className="text-[11px] text-ink-soft font-medium">{room.members} {room.members === 1 ? 'person' : 'people'} joined</p>
+                        </div>
+                        <span className="ml-2 flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-white/60 text-ink-soft border border-black/5">
+                          {room.type === 'video' ? 'Video' : 'Audio'}
+                        </span>
                       </div>
-                      <button
-                        onClick={() => startMeeting('video', room.roomId || room.id)}
-                        className="flex size-12 items-center justify-center rounded-2xl bg-purple text-white shadow-lg shadow-purple/30 transition-transform hover:scale-110 active:scale-95 group-hover:rotate-6"
-                      >
-                        <Video className="size-5" />
-                      </button>
+
+                      <div className="mt-5 flex items-end justify-between">
+                        <div className="flex -space-x-2">
+                          {participants.slice(0, 4).map((p: any, i: number) => (
+                            <ChatAvatar
+                              key={i}
+                              src={getSecureMediaUrl(p?.avatar)}
+                              name={p?.full_name || p?.username || '?'}
+                              className="size-9 rounded-full border-2 border-white shadow-sm"
+                            />
+                          ))}
+                          {participants.length > 4 && (
+                            <div className="flex size-9 items-center justify-center rounded-full border-2 border-white bg-purple/10 text-[10px] font-bold text-purple shadow-sm">
+                              +{participants.length - 4}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => startMeeting(room.type === 'video' ? 'video' : 'voice', room.roomId)}
+                          className="flex items-center gap-1.5 rounded-2xl bg-purple px-4 py-2.5 text-white shadow-lg shadow-purple/30 transition-transform hover:scale-105 active:scale-95 text-sm font-bold"
+                        >
+                          <Video className="size-4" />
+                          Join
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </section>
 
@@ -4529,6 +4560,25 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
     return [...calendarEvents, ...extraHolidays]
   }, [calendarEvents, holidayEvents])
 
+  // Past/ended meetings for the selected day — used to show transcripts, summaries,
+  // and action items inline in the agenda when you click a past day.
+  const { data: dayMeetings = [] } = useQuery({
+    queryKey: ['day-meetings', selectedDate.toDateString()],
+    queryFn: async () => {
+      const res = await fetchMeetings(1, 50)
+      const all: any[] = res?.meetings || []
+      return all.filter((m: any) => {
+        const d = new Date(m.startedAt || m.createdAt)
+        return (
+          d.getDate() === selectedDate.getDate() &&
+          d.getMonth() === selectedDate.getMonth() &&
+          d.getFullYear() === selectedDate.getFullYear()
+        )
+      })
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
   // Modal Form State
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -4926,7 +4976,16 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
 
         {/* Action Items captured from meeting transcripts (F3) — collapsible dropdown under the agenda */}
         {(() => {
-          const actionItems = (tasks as any[]).filter((t: any) => t.source === 'meeting')
+          const actionItems = (tasks as any[]).filter((t: any) => {
+            if (t.source !== 'meeting') return false
+            // Show action items that were created on (or are assigned to) the selected day.
+            const d = new Date(t.start_time || t.createdAt)
+            return (
+              d.getDate() === selectedDate.getDate() &&
+              d.getMonth() === selectedDate.getMonth() &&
+              d.getFullYear() === selectedDate.getFullYear()
+            )
+          })
           if (actionItems.length === 0) return null
           const now = Date.now()
           const pendingCount = actionItems.filter((item: any) => item.status !== 'done').length
@@ -5122,6 +5181,61 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
             })
           )}
         </div>
+
+        {/* Past meeting sessions on this day */}
+        {dayMeetings.length > 0 && (
+          <div className="mb-4 space-y-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-black/30 italic flex items-center gap-1.5">
+              <Video className="size-3" />
+              Meeting Sessions
+            </h4>
+            {dayMeetings.map((m: any) => {
+              const dur = m.duration ? `${Math.floor(m.duration / 60)}:${String(m.duration % 60).padStart(2, '0')}` : ''
+              const isLive = m.status === 'live'
+              const attendees: any[] = m.attendees || []
+              return (
+                <div key={m._id} className="rounded-2xl border border-black/5 bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2.5">
+                    <div className={`size-2 rounded-full flex-shrink-0 ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-purple/40'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-bold text-ink truncate">{m.title || 'Untitled Meeting'}</p>
+                      <p className="text-[10px] text-ink-soft">{isLive ? 'Live now' : `Ended${dur ? ` · ${dur}` : ''}`}{attendees.length ? ` · ${attendees.length + 1} people` : ''}</p>
+                    </div>
+                    {isLive ? (
+                      <button
+                        onClick={() => {/* use startMeeting from context — CalendarSection is isolated, so just dispatch event */
+                          window.dispatchEvent(new CustomEvent('bubble:join_meeting', { detail: { roomId: m.roomId, type: m.type || 'video' } }))
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-purple text-white text-[10px] font-bold hover:opacity-90 transition-all flex-shrink-0"
+                      >Join</button>
+                    ) : m.summary ? (
+                      <button
+                        onClick={() => {
+                          window.dispatchEvent(new CustomEvent('bubble:view_meeting', { detail: { meetingId: String(m._id) } }))
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-purple/10 text-purple text-[10px] font-bold hover:bg-purple/20 transition-all flex-shrink-0"
+                      >Summary</button>
+                    ) : null}
+                  </div>
+                  {!isLive && m.actionItems?.length > 0 && (
+                    <div className="border-t border-black/5 px-3 py-2 space-y-1">
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-black/30 mb-1">Action Items</p>
+                      {m.actionItems.slice(0, 3).map((ai: any, i: number) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <div className={`mt-0.5 size-3 rounded flex-shrink-0 flex items-center justify-center ${ai.status === 'done' ? 'bg-emerald-100' : 'bg-purple/10'}`}>
+                            {ai.status === 'done' && <Check className="size-2 text-emerald-600" />}
+                          </div>
+                          <p className={`text-[11px] leading-snug ${ai.status === 'done' ? 'line-through text-ink-soft' : 'text-ink'}`}>{ai.text}</p>
+                        </div>
+                      ))}
+                      {m.actionItems.length > 3 && <p className="text-[10px] text-ink-soft">+{m.actionItems.length - 3} more</p>}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         <button
           onClick={openCreateModal}

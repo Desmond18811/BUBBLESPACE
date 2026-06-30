@@ -980,31 +980,56 @@ export function ChatWindow({
     ? visibleMessages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
     : null
 
-  // Render message content with clickable @mentions
+  // Render message content with clickable @mentions and hyperlinks.
+  // URLs are made clickable and truncated visually so they don't blow out the bubble.
   const renderMentionText = (text: string) => {
-    if (!text || !text.includes('@')) return text
-    const parts = text.split(/(@\w[\w.-]*)/g)
-    return parts.map((part, i) => {
-      if (part.startsWith('@') && part.length > 1) {
-        const uname = part.slice(1)
-        const mentionedMember = (chat?.users || chat?.members || []).find((m: any) =>
-          (m.username || '').toLowerCase() === uname.toLowerCase() ||
-          (m.full_name || '').toLowerCase().startsWith(uname.toLowerCase())
-        )
+    if (!text) return text
+    // Split on URLs first, then handle @mentions within non-URL segments.
+    const urlRegex = /(https?:\/\/[^\s<>"']+)/g
+    const urlParts = text.split(urlRegex)
+    return urlParts.map((segment, si) => {
+      if (urlRegex.test(segment)) {
+        // Reset lastIndex after test()
+        urlRegex.lastIndex = 0
         return (
-          <span
-            key={i}
-            className="text-purple font-semibold cursor-pointer hover:underline"
-            onClick={(e) => {
-              e.stopPropagation()
-              if (mentionedMember) onOpenProfile?.(mentionedMember, true)
-            }}
+          <a
+            key={`url-${si}`}
+            href={segment}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-500 underline break-all max-w-full inline-block"
+            onClick={e => e.stopPropagation()}
           >
-            {part}
-          </span>
+            {segment.length > 60 ? segment.slice(0, 57) + '…' : segment}
+          </a>
         )
       }
-      return <span key={i}>{part}</span>
+      urlRegex.lastIndex = 0
+      // Handle @mentions within this plain-text segment
+      if (!segment.includes('@')) return <span key={`seg-${si}`}>{segment}</span>
+      const parts = segment.split(/(@\w[\w.-]*)/g)
+      return parts.map((part, i) => {
+        if (part.startsWith('@') && part.length > 1) {
+          const uname = part.slice(1)
+          const mentionedMember = (chat?.users || chat?.members || []).find((m: any) =>
+            (m.username || '').toLowerCase() === uname.toLowerCase() ||
+            (m.full_name || '').toLowerCase().startsWith(uname.toLowerCase())
+          )
+          return (
+            <span
+              key={`${si}-${i}`}
+              className="text-purple font-semibold cursor-pointer hover:underline"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (mentionedMember) onOpenProfile?.(mentionedMember, true)
+              }}
+            >
+              {part}
+            </span>
+          )
+        }
+        return <span key={`${si}-${i}`}>{part}</span>
+      })
     })
   }
 
@@ -1332,8 +1357,8 @@ export function ChatWindow({
                                        }}
                                      />
                                      {msg.content && (
-                                       <p className="px-1.5 py-1 text-sm leading-normal text-current">
-                                         {msg.content}
+                                       <p className="px-1.5 py-1 text-sm leading-normal text-current break-words min-w-0">
+                                         {renderMentionText(msg.content)}
                                        </p>
                                      )}
                                    </div>
@@ -1356,8 +1381,8 @@ export function ChatWindow({
                                        className="max-w-[280px] max-h-[220px] rounded-lg object-cover"
                                      />
                                      {msg.content && (
-                                       <p className="px-1.5 py-1 text-sm leading-normal text-current">
-                                         {msg.content}
+                                       <p className="px-1.5 py-1 text-sm leading-normal text-current break-words min-w-0">
+                                         {renderMentionText(msg.content)}
                                        </p>
                                      )}
                                    </div>
@@ -1387,13 +1412,13 @@ export function ChatWindow({
                                        </div>
                                      </div>
                                      {msg.content && (
-                                       <p className="px-1 text-sm leading-normal text-current">
-                                         {msg.content}
+                                       <p className="px-1 text-sm leading-normal text-current break-words min-w-0">
+                                         {renderMentionText(msg.content)}
                                        </p>
                                      )}
                                    </a>
                                  ) : (
-                                  <span>
+                                  <span className="break-words min-w-0 block">
                                     {renderMentionText(msg.content || '')}
                                     {msg.isEdited && <span className="ml-1 text-[10px] opacity-50">(edited)</span>}
                                   </span>
