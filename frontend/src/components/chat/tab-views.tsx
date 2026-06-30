@@ -830,34 +830,23 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
         />
 
         {/* Tab switcher navigation */}
-        <div className="flex border-b border-black/5 px-6 bg-white gap-6">
-          <button
-            onClick={() => setCallsTab('meet')}
-            className={cn(
-              "pb-3 pt-2 text-sm font-bold border-b-2 transition-all relative",
-              callsTab === 'meet' ? "border-purple text-purple font-extrabold" : "border-transparent text-ink-soft hover:text-ink"
-            )}
-          >
-            Live Meetings
-          </button>
-          <button
-            onClick={() => setCallsTab('calendar')}
-            className={cn(
-              "pb-3 pt-2 text-sm font-bold border-b-2 transition-all relative",
-              callsTab === 'calendar' ? "border-purple text-purple font-extrabold" : "border-transparent text-ink-soft hover:text-ink"
-            )}
-          >
-            Business Calendar
-          </button>
-          <button
-            onClick={() => setCallsTab('logs')}
-            className={cn(
-              "pb-3 pt-2 text-sm font-bold border-b-2 transition-all relative",
-              callsTab === 'logs' ? "border-purple text-purple font-extrabold" : "border-transparent text-ink-soft hover:text-ink"
-            )}
-          >
-            Call Logs
-          </button>
+        <div className="flex border-b border-black/5 px-4 sm:px-6 bg-white gap-4 sm:gap-6 overflow-x-auto scrollbar-hide flex-shrink-0">
+          {([
+            { key: 'meet', label: 'Meetings' },
+            { key: 'calendar', label: 'Calendar' },
+            { key: 'logs', label: 'Call Logs' },
+          ] as const).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setCallsTab(key)}
+              className={cn(
+                "pb-3 pt-2 text-sm font-bold border-b-2 transition-all whitespace-nowrap flex-shrink-0",
+                callsTab === key ? "border-purple text-purple font-extrabold" : "border-transparent text-ink-soft hover:text-ink"
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {callsTab === 'meet' ? (
@@ -4768,9 +4757,9 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
   ]
 
   return (
-    <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white">
+    <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden bg-white">
       {/* Left: Monthly Grid */}
-      <div className="flex-1 flex flex-col p-6 border-r border-black/5 overflow-y-auto min-w-0">
+      <div className="flex-1 flex flex-col p-6 border-r border-black/5 md:overflow-y-auto min-w-0">
 
         {/* ── Morning Brief (Brain Daily Digest) ── */}
         {(isDigestLoading || digestData) && (
@@ -4927,7 +4916,7 @@ function CalendarSection({ coworkers }: CalendarSectionProps) {
       </div>
 
       {/* Right: Selected Day Agenda */}
-      <div className="w-full md:w-80 p-6 flex flex-col overflow-y-auto bg-slate-50/30">
+      <div className="w-full md:w-80 p-6 flex flex-col md:overflow-y-auto bg-slate-50/30">
         <div className="mb-6">
           <h4 className="text-xs font-bold uppercase tracking-wider text-black/30 italic">Agenda for</h4>
           <h3 className="text-lg font-bold text-ink mt-0.5">

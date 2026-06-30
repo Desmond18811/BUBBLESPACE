@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   X,
   ChevronDown,
@@ -510,7 +510,7 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
         </button>
       )}
       <h2 className="text-[17px] font-bold text-ink mb-3">Members ({members.length})</h2>
-      <div className="space-y-1.5 pr-1 max-h-[340px] overflow-y-auto">
+      <div className="space-y-1.5 pr-1">
         {visibleMembers.map((m: any) => {
           const isMemberAdmin = adminId && String(m._id || m.id) === String(adminId)
           const isMe = String(m._id || m.id) === String(currentUserId)
@@ -1121,24 +1121,39 @@ export function GroupInfo({
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null)
 
   const [convoState, setConvoState] = useState(conversation)
+  // Track whether we've loaded the authoritative full member list yet.
+  const fullMembersLoadedRef = useRef(false)
+
   useEffect(() => {
-    setConvoState(conversation)
+    // Merge incoming prop updates but never let a socket-partial `users` array
+    // overwrite a larger authoritative list we already fetched via getChatById.
+    setConvoState(prev => {
+      const prevUsers = (prev as any)?.users
+      const nextUsers = (conversation as any)?.users
+      const prevLen = Array.isArray(prevUsers) ? prevUsers.length : 0
+      const nextLen = Array.isArray(nextUsers) ? nextUsers.length : 0
+      // If we have a known-good full list and the incoming is smaller, keep ours.
+      if (fullMembersLoadedRef.current && prevLen > nextLen) {
+        return { ...conversation, users: prevUsers }
+      }
+      return conversation
+    })
   }, [conversation])
 
-  // The chat-list object can carry a partial `users` array (stale cache, a
-  // socket merge, or a trimmed `new_chat` payload), which made GroupInfo show
-  // the wrong member count and only members who were also in your contacts.
-  // Refetch the authoritative, fully-populated conversation whenever a group
-  // panel opens and merge in its full member list.
+  // Fetch the authoritative, fully-populated conversation whenever a group
+  // panel opens so the member list never depends on a possibly-partial
+  // chat-list object (stale cache, socket merge, trimmed new_chat payload).
   useEffect(() => {
     const cid = (conversation as any)?.id || (conversation as any)?._id
     const group = (conversation as any)?.isGroupChat || conversation.type === 'group'
     if (!cid || !group) return
+    fullMembersLoadedRef.current = false
     let cancelled = false
     getChatById(String(cid))
       .then((res: any) => {
         const fresh = res?.conversation || res?.data || res
-        if (cancelled || !fresh || !Array.isArray(fresh.users)) return
+        if (cancelled || !fresh || !Array.isArray(fresh.users) || fresh.users.length === 0) return
+        fullMembersLoadedRef.current = true
         setConvoState((prev: any) => ({ ...prev, ...fresh }))
       })
       .catch(() => { /* keep whatever we already have */ })

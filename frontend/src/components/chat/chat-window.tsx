@@ -181,7 +181,7 @@ export function ChatWindow({
   setMessages: React.Dispatch<React.SetStateAction<any[]>>
 }) {
   const { socket, startCall, startGroupCall, isUserOnline } = useSocket()
-  const { chats, updateChatInList } = useChats()
+  const { chats, updateChatInList, setActiveChatId } = useChats()
   const { bgType, onOpenProfile } = useDashboard()
   const { getDisplayName } = useNicknames()
   const myId = currentUser?._id || currentUser?.id
@@ -269,6 +269,12 @@ export function ChatWindow({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionResults, setMentionResults] = useState<any[]>([])
   const [mentionIndex, setMentionIndex] = useState(0)
+
+  // Track the active chat so AppContext can suppress in-app notifications for it.
+  useEffect(() => {
+    setActiveChatId(chatId || null)
+    return () => setActiveChatId(null)
+  }, [chatId, setActiveChatId])
 
   // Fetch messages and reset state when chat changes (only chatId triggers this)
   useEffect(() => {

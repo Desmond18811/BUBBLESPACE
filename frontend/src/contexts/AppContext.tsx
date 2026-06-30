@@ -59,6 +59,8 @@ interface ChatContextValue {
     refreshChats: () => Promise<void>
     updateChatInList: (chatId: string, updates: Partial<any>) => void
     removeChatFromList: (chatId: string) => void
+    /** The chat currently open in the window, if any — used to suppress new-message toasts/notifications for it. */
+    setActiveChatId: (chatId: string | null) => void
 }
 
 const ChatContext = createContext<ChatContextValue>({
@@ -67,6 +69,7 @@ const ChatContext = createContext<ChatContextValue>({
     refreshChats: async () => { },
     updateChatInList: () => { },
     removeChatFromList: () => { },
+    setActiveChatId: () => { },
 })
 
 export const useChats = () => useContext(ChatContext)
@@ -105,6 +108,15 @@ export function AppProvider({ children, user }: AppProviderProps) {
     // then refreshChats revalidates from the network.
     const [chats, setChats] = useState<any[]>(() => readCache<any[]>(userId, CACHE_KEYS.chats) || [])
     const [loadingChats, setLoadingChats] = useState(false)
+    // The chat currently open in the window. Kept in a ref (not just state) so the
+    // long-lived 'new_message' socket listener below always reads the latest value
+    // instead of the one captured when the listener was registered.
+    const activeChatIdRef = useRef<string | null>(null)
+    const setActiveChatId = useCallback((chatId: string | null) => {
+        activeChatIdRef.current = chatId
+    }, [])
+    const baseTitleRef = useRef<string>(typeof document !== 'undefined' ? document.title : 'BubbleSpace')
+    const unreadTitleCountRef = useRef(0)
     // Central presence map — the one place online status lives. Seeded by the
     // server's presence_snapshot on connect, updated by user_status_change deltas.
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
@@ -347,7 +359,65 @@ export function AppProvider({ children, user }: AppProviderProps) {
                 const chat = updated.splice(idx, 1)[0]
                 return [chat, ...updated]
             })
+
+            // ── In-tab notification: toast + browser Notification + title badge ──
+            // Skip if this message is for the chat the user is currently looking at,
+            // or if it's from the logged-in user themselves (echo of own sends).
+            const senderId = String(m?.sender?.id || m?.sender?._id || m?.sender || '')
+            const selfId = String(userId || '')
+            if (isBotMsg) return
+            if (String(chatId) === String(activeChatIdRef.current)) return
+            if (selfId && senderId === selfId) return
+
+            const senderName = m?.sender?.full_name || m?.sender?.username || 'Someone'
+            let bodyText = m?.content || ''
+            if (!bodyText) {
+                if (m?.message_type === 'image') bodyText = '📷 Image'
+                else if (m?.message_type === 'voice') bodyText = '🎤 Voice message'
+                else if (m?.message_type === 'video') bodyText = '🎥 Video'
+                else if (m?.message_type === 'file') bodyText = '📎 Attachment'
+                else bodyText = 'New message'
+            }
+
+            // In-app sonner toast
+            toast(senderName, {
+                description: bodyText,
+                duration: 4000,
+            })
+
+            // Browser Notification API (when tab not focused)
+            if (typeof window !== 'undefined' && 'Notification' in window) {
+                if (Notification.permission === 'default') {
+                    Notification.requestPermission().catch(() => {})
+                }
+                if (Notification.permission === 'granted' && document.hidden) {
+                    try {
+                        const n = new Notification(senderName, {
+                            body: bodyText,
+                            icon: '/favicon.svg',
+                            tag: String(chatId),
+                        })
+                        n.onclick = () => { window.focus(); n.close() }
+                    } catch { /* silently skip */ }
+                }
+            }
+
+            // Document title unread badge: "(3) BubbleSpace"
+            if (typeof document !== 'undefined') {
+                unreadTitleCountRef.current += 1
+                const base = baseTitleRef.current.replace(/^\(\d+\)\s*/, '')
+                document.title = `(${unreadTitleCountRef.current}) ${base}`
+            }
         })
+
+        // Reset unread title badge when user focuses the tab
+        const onVisibilityChange = () => {
+            if (!document.hidden && unreadTitleCountRef.current > 0) {
+                unreadTitleCountRef.current = 0
+                document.title = baseTitleRef.current.replace(/^\(\d+\)\s*/, '')
+            }
+        }
+        document.addEventListener('visibilitychange', onVisibilityChange)
 
         // Seed the full online set when the socket connects.
         sock?.on('presence_snapshot', ({ online }: { online: string[] }) => {
@@ -402,6 +472,24 @@ export function AppProvider({ children, user }: AppProviderProps) {
             }))
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('bubble:chat_updated', { detail: c }))
+            }
+        })
+
+        // Fired when someone joins a group via invite code (joinGroupChatByInvite).
+        // The backend sends only the new member object, so we append them to the
+        // existing users array rather than replacing it.
+        sock?.on('member_added', ({ chatId, member }: { chatId: string; member: any }) => {
+            if (!chatId || !member) return
+            setChats(prev => prev.map(existing => {
+                const eid = String(existing._id || existing.id)
+                if (eid !== String(chatId)) return existing
+                const prevUsers: any[] = Array.isArray(existing.users) ? existing.users : []
+                const alreadyIn = prevUsers.some((u: any) => String(u._id || u.id || u) === String(member._id || member.id || member))
+                if (alreadyIn) return existing
+                return { ...existing, users: [...prevUsers, member] }
+            }))
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('bubble:chat_updated', { detail: { _id: chatId } }))
             }
         })
 
@@ -569,6 +657,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
         })
 
         return () => {
+            document.removeEventListener('visibilitychange', onVisibilityChange)
             disconnectSocket()
             setConnected(false)
             sock?.off('incoming_call')
@@ -642,7 +731,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
 
     return (
         <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, startGroupCall, startMeeting, callState, endCall, onlineUsers, isUserOnline }}>
-            <ChatContext.Provider value={{ chats, loadingChats, refreshChats, updateChatInList, removeChatFromList }}>
+            <ChatContext.Provider value={{ chats, loadingChats, refreshChats, updateChatInList, removeChatFromList, setActiveChatId }}>
             <NicknameContext.Provider value={{ nicknames, getDisplayName, saveNickname }}>
                 {children}
 
