@@ -3,7 +3,7 @@ import {
   Search, Phone, MoreVertical, Paperclip, Mic, Send, Video, Info,
   Sparkles, Archive, ArrowLeft, X, Check, CheckCheck, Edit2, Trash2,
   Copy, Pin, Play, Smile, BellOff, EyeOff, Forward, MoreHorizontal,
-  ChevronLeft, ChevronRight, Reply
+  ChevronLeft, ChevronRight, Reply, AtSign
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
@@ -514,12 +514,18 @@ export function ChatWindow({
       if (!afterAt.includes(' ')) {
         setMentionQuery(afterAt)
         const members = chat?.users || chat?.members || []
+        const q = afterAt.toLowerCase()
         const filtered = members.filter((m: any) => {
           const name = (m.full_name || m.username || '').toLowerCase()
           const uname = (m.username || '').toLowerCase()
-          return name.includes(afterAt.toLowerCase()) || uname.includes(afterAt.toLowerCase())
+          return name.includes(q) || uname.includes(q)
         }).filter((m: any) => (m._id || m.id) !== myId)
-        setMentionResults(filtered.slice(0, 6))
+        // "@all" pseudo-member — notifies every member of the group.
+        const showAll = 'all'.startsWith(q)
+        const results = showAll
+          ? [{ _id: 'all', username: 'all', full_name: 'All members', isMentionAll: true }, ...filtered]
+          : filtered
+        setMentionResults(results.slice(0, 6))
         setMentionIndex(0)
       } else {
         setMentionQuery(null)
@@ -1625,9 +1631,16 @@ export function ChatWindow({
                         idx === mentionIndex && 'bg-purple/5'
                       )}
                     >
-                      <ChatAvatar src={member.avatar} name={getDisplayName(member)} className="size-8 rounded-xl shrink-0" />
+                      {member.isMentionAll ? (
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-purple/10 text-purple">
+                          <AtSign className="size-4" />
+                        </div>
+                      ) : (
+                        <ChatAvatar src={member.avatar} name={getDisplayName(member)} className="size-8 rounded-xl shrink-0" />
+                      )}
                       <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-ink truncate">{getDisplayName(member)}</p>
+                        <p className="text-[13px] font-semibold text-ink truncate">{member.isMentionAll ? 'All members' : getDisplayName(member)}</p>
+                        {member.isMentionAll && <p className="text-[11px] text-ink-soft truncate">Notify everyone in this group</p>}
                       </div>
                     </button>
                   ))}
