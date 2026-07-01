@@ -22,9 +22,13 @@ export function ChatAvatar({ src, name, className, isGroup, organization }: Avat
         .toUpperCase()
         .slice(0, 2)
 
-    const isBlackIcon = src === 'black' || src === '#000000' || isGroup || !!organization
-    const resolvedSrc = isBlackIcon ? null : getSecureMediaUrl(src)
+    // A group (or org placeholder) should render a black initials tile ONLY when it
+    // has no real uploaded picture. Previously `isGroup` unconditionally forced the
+    // image to null, so group profile pictures never displayed.
+    const isPlaceholderSrc = src === 'black' || src === '#000000'
+    const resolvedSrc = isPlaceholderSrc ? null : getSecureMediaUrl(src)
     const hasImage = resolvedSrc && !imageError
+    const isBlackIcon = isPlaceholderSrc || ((isGroup || !!organization) && !hasImage)
 
     const isAida = (name || '').toLowerCase().includes('aida')
 
