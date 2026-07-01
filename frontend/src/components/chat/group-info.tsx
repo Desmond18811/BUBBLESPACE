@@ -518,7 +518,7 @@ function MembersCard({ conversation, onClose }: { conversation: Conversation; on
             <div key={m._id || m.id || m.name}
               onClick={() => onOpenProfile?.(m, true)}
               className="flex items-start gap-3 rounded-xl px-1.5 py-1.5 hover:bg-purple/5 cursor-pointer">
-              <ChatAvatar src={getSecureMediaUrl(m.avatar || m.profile_image)} name={getDisplayName(m)}
+              <ChatAvatar src={m.avatar || m.profile_image} name={getDisplayName(m)}
                 className="size-9 rounded-xl shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -597,7 +597,10 @@ function ContactCard({ conversation, onClose }: { conversation: any; onClose?: (
     || resolved.full_name || resolved.name || resolved.username || 'User'
   const savedNickname = contactId ? nicknames[contactId] : null
   const displayName = savedNickname || realName
-  const avatarSrc = getSecureMediaUrl(conversation.avatar || conversation.groupIcon || resolved.avatar || resolved.profile_image || null)
+  // Pass the raw URL to ChatAvatar — it resolves via getSecureMediaUrl internally.
+  // Wrapping it here too double-proxies Filebase URLs (the proxy URL still contains
+  // "filebase.com", so the second pass re-wraps it) and the image fails to load.
+  const avatarSrc = conversation.avatar || conversation.groupIcon || resolved.avatar || resolved.profile_image || null
   const status = resolved.status || (resolved.isOnline ? 'Online' : 'Offline')
   const organization = resolved.organization || resolved.company || other.organization || null
   const username = resolved.username || resolved.user_name || other.username || null
@@ -1040,7 +1043,7 @@ function GroupProfileCard({
       ) : (
         <>
           <div className="relative size-20 mb-3 group">
-            <ChatAvatar src={getSecureMediaUrl(avatar) || null} name={displayName} isGroup={true} className="size-20 rounded-2xl" />
+            <ChatAvatar src={avatar || null} name={displayName} isGroup={true} className="size-20 rounded-2xl" />
             
             {isGroupAdmin && (
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200">

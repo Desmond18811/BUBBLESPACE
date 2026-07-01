@@ -643,6 +643,11 @@ export function AppProvider({ children, user }: AppProviderProps) {
             // Clear the sidebar "active call" pulse immediately instead of waiting for
             // the next 10s poll to notice the meeting flipped to 'ended'.
             queryClient.invalidateQueries({ queryKey: ['activeMeetings'] })
+            // Also refresh the CallsView "Live Collaborative Spaces" list. This handler
+            // lives in AppContext (always mounted), so the active-rooms list stays fresh
+            // even when CallsView itself isn't mounted (e.g. user is mid-call or on
+            // another tab) — CallsView's own listener only fires while it's open.
+            queryClient.invalidateQueries({ queryKey: ['active-rooms'] })
             setCallState(prev => {
                 if (prev.status === 'in_call' && prev.roomId === data.roomId) {
                     toast.info('Meeting has been ended')
@@ -650,6 +655,14 @@ export function AppProvider({ children, user }: AppProviderProps) {
                 }
                 return prev
             })
+        })
+
+        // A meeting started/changed somewhere in the org. Refresh the active-rooms list
+        // globally so it appears under "Live Collaborative Spaces" the moment it starts,
+        // regardless of which view is currently mounted.
+        sock?.on('meeting_room_update', () => {
+            queryClient.invalidateQueries({ queryKey: ['active-rooms'] })
+            queryClient.invalidateQueries({ queryKey: ['activeMeetings'] })
         })
 
         // Action item is still pending past its follow-up window — nudge the assignee

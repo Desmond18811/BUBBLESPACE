@@ -781,6 +781,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
       return res?.rooms || []
     },
     refetchInterval: 30_000, // poll every 30 s as a safety net
+    refetchOnWindowFocus: true, // re-pull when returning to the tab / after a reload
     staleTime: 10_000,
   })
 
@@ -901,7 +902,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
                           {participants.slice(0, 4).map((p: any, i: number) => (
                             <ChatAvatar
                               key={i}
-                              src={getSecureMediaUrl(p?.avatar)}
+                              src={p?.avatar}
                               name={p?.full_name || p?.username || '?'}
                               className="size-9 rounded-full border-2 border-white shadow-sm"
                             />
