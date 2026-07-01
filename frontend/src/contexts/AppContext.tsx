@@ -29,6 +29,12 @@ interface SocketContextValue {
      * existing live room. Used by Events & Meets ("Start New Meeting" / join room).
      */
     startMeeting: (type?: 'voice' | 'video', roomId?: string) => void
+    /**
+     * Knock to join a LIVE room: instead of entering directly, ask the host to
+     * admit you. Emits `room_knock`; the caller enters only once a
+     * `room_knock_response` accept arrives.
+     */
+    knockToJoinRoom: (opts: { roomId: string; hostId?: string; type?: 'voice' | 'video' }) => void
     callState: CallState
     endCall: () => void
     /** Single source of truth for presence — set of userIds currently online. */
@@ -43,6 +49,7 @@ const SocketContext = createContext<SocketContextValue>({
     startCall: () => {},
     startGroupCall: () => {},
     startMeeting: () => {},
+    knockToJoinRoom: () => {},
     callState: { status: 'idle' },
     endCall: () => {},
     onlineUsers: new Set(),
@@ -310,6 +317,28 @@ export function AppProvider({ children, user }: AppProviderProps) {
         const id = roomId || `bubble-${Math.random().toString(36).slice(2, 11)}`
         setGroupMeeting({ roomId: id, type })
     }, [])
+
+    // Remembers each outstanding knock's modality so we join with voice/video
+    // correctly when the accept comes back (the response echoes type as a fallback).
+    const pendingKnockTypeRef = useRef<Record<string, 'voice' | 'video'>>({})
+
+    // Knock to join a live room. Emits `room_knock`; the room's host/participants
+    // get a prompt to admit, and we only enter on `room_knock_response` accept.
+    const knockToJoinRoom = useCallback((opts: { roomId: string; hostId?: string; type?: 'voice' | 'video' }) => {
+        const type = opts.type || 'video'
+        if (!socketRef.current) {
+            toast.error('Not connected — could not request access.')
+            return
+        }
+        pendingKnockTypeRef.current[opts.roomId] = type
+        socketRef.current.emit('room_knock', {
+            roomId: opts.roomId,
+            hostId: opts.hostId,
+            requesterAvatar: user?.avatar || null,
+            type,
+        })
+        toast.info('Request sent — waiting for the host to let you in…')
+    }, [user])
 
     // Allow isolated components (e.g. CalendarSection) to trigger meeting joins via
     // a custom window event rather than threading startMeeting through props.
@@ -695,6 +724,33 @@ export function AppProvider({ children, user }: AppProviderProps) {
             })
         })
 
+        // Someone knocks to join a live room we host / are in — prompt to admit.
+        sock?.on('room_knock', (data: { roomId: string; requesterId: string; requesterName?: string; type?: 'voice' | 'video' }) => {
+            const name = data.requesterName || 'A colleague'
+            toast(`${name} wants to join`, {
+                duration: 30000,
+                action: {
+                    label: 'Admit',
+                    onClick: () => sock.emit('room_knock_response', { roomId: data.roomId, requesterId: data.requesterId, accepted: true, type: data.type }),
+                },
+                cancel: {
+                    label: 'Deny',
+                    onClick: () => sock.emit('room_knock_response', { roomId: data.roomId, requesterId: data.requesterId, accepted: false, type: data.type }),
+                },
+            })
+        })
+
+        // Our knock was answered — enter the room on accept, notify on deny.
+        sock?.on('room_knock_response', (data: { roomId: string; accepted: boolean; type?: 'voice' | 'video' }) => {
+            const type = pendingKnockTypeRef.current[data.roomId] || data.type || 'video'
+            delete pendingKnockTypeRef.current[data.roomId]
+            if (data.accepted) {
+                setGroupMeeting({ roomId: data.roomId, type })
+            } else {
+                toast.error('The host declined your request to join.')
+            }
+        })
+
         return () => {
             document.removeEventListener('visibilitychange', onVisibilityChange)
             disconnectSocket()
@@ -716,6 +772,8 @@ export function AppProvider({ children, user }: AppProviderProps) {
             sock?.off('call_ended')
             sock?.off('task_followup')
             sock?.off('action_item_updated')
+            sock?.off('room_knock')
+            sock?.off('room_knock_response')
         }
     }, [user?.id, user?._id])
 
@@ -769,7 +827,7 @@ export function AppProvider({ children, user }: AppProviderProps) {
     }, [])
 
     return (
-        <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, startGroupCall, startMeeting, callState, endCall, onlineUsers, isUserOnline }}>
+        <SocketContext.Provider value={{ socket: socketRef.current, connected, startCall, startGroupCall, startMeeting, knockToJoinRoom, callState, endCall, onlineUsers, isUserOnline }}>
             <ChatContext.Provider value={{ chats, loadingChats, refreshChats, updateChatInList, removeChatFromList, setActiveChatId }}>
             <NicknameContext.Provider value={{ nicknames, getDisplayName, saveNickname }}>
                 {children}

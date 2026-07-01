@@ -743,7 +743,7 @@ export function FriendsView({ onMessage, isNarrow = false }: { onMessage?: (user
 /* ---------------- Calls ---------------- */
 
 export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
-  const { startCall, startMeeting, isUserOnline, socket } = useSocket()
+  const { startCall, startMeeting, knockToJoinRoom, isUserOnline, socket } = useSocket()
   const { getDisplayName } = useNicknames()
   const [selectionStep, setSelectionStep] = useState<'none' | 'source' | 'type'>('none')
   const { user: currentUser, bgType } = useDashboard()
@@ -772,6 +772,20 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
   }
 
   const myId = currentUser?._id || currentUser?.id
+
+  // Join a live room: the host (or an already-admitted attendee) re-enters directly;
+  // everyone else knocks and only enters once the host admits them.
+  const handleJoinRoom = (room: any) => {
+    const type = room.type === 'video' ? 'video' : 'voice'
+    const hostId = String(room?.host?._id || room?.host?.id || room?.host || '')
+    const attendeeIds = (room?.attendees || []).map((a: any) => String(a?._id || a?.id || a))
+    const me = String(myId || '')
+    if (me && (me === hostId || attendeeIds.includes(me))) {
+      startMeeting(type, room.roomId)
+    } else {
+      knockToJoinRoom({ roomId: room.roomId, hostId: hostId || undefined, type })
+    }
+  }
 
   // Active (live) meeting rooms — dedicated endpoint, refreshed on socket events.
   const { data: activeRooms = [], isLoading: roomsLoading } = useQuery({
@@ -914,7 +928,7 @@ export function CallsView({ onStartMeeting }: { onStartMeeting: () => void }) {
                           )}
                         </div>
                         <button
-                          onClick={() => startMeeting(room.type === 'video' ? 'video' : 'voice', room.roomId)}
+                          onClick={() => handleJoinRoom(room)}
                           className="flex items-center gap-1.5 rounded-2xl bg-purple px-4 py-2.5 text-white shadow-lg shadow-purple/30 transition-transform hover:scale-105 active:scale-95 text-sm font-bold"
                         >
                           <Video className="size-4" />
