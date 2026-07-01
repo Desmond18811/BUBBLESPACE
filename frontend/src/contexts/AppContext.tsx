@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
-import { fetchAllUserChats, fetchTasks, getContactNicknames, setContactNickname } from '@/lib/api'
+import { fetchAllUserChats, fetchTasks, getContactNicknames, setContactNickname, markMessagesRead } from '@/lib/api'
 import { readCache, writeCache, CACHE_KEYS } from '@/lib/webCache'
 import { isFullMemberList } from '@/lib/utils'
 import { Phone } from 'lucide-react'
@@ -577,6 +577,13 @@ export function AppProvider({ children, user }: AppProviderProps) {
         // and whenever a new message bumps it). Keeps the chat-list badge in sync without
         // waiting for a full chat-list refetch.
         sock?.on('unread_count_updated', ({ chatId, unreadCount }: { chatId: string, unreadCount: number }) => {
+            // Messages arriving while the chat is open (this fires on every send) must
+            // not leave a stuck badge: mark them read immediately and show 0. The
+            // server re-emits this event with 0 after mark-read, so no loop.
+            if (unreadCount > 0 && String(chatId) === String(activeChatIdRef.current)) {
+                markMessagesRead(chatId).catch(err => console.warn('[unread] mark-read for active chat failed:', err))
+                unreadCount = 0
+            }
             setChats(prev => prev.map(c => {
                 const cid = c._id || c.id
                 return String(cid) === String(chatId) ? { ...c, unreadCount } : c

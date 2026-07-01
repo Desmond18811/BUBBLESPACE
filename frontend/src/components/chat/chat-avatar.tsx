@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { getSecureMediaUrl } from '@/lib/utils'
 import { Bot } from 'lucide-react'
@@ -13,6 +13,9 @@ interface AvatarProps {
 
 export function ChatAvatar({ src, name, className, isGroup, organization }: AvatarProps) {
     const [imageError, setImageError] = useState(false)
+    // Presigned Filebase URLs expire and get re-signed on refetch; a sticky error
+    // state would keep showing initials even after a fresh, valid URL arrives.
+    useEffect(() => { setImageError(false) }, [src])
     const textForInitials = isGroup ? name : organization ? organization : name || '?'
     const initials = textForInitials
         .split(' ')

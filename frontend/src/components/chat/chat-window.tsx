@@ -25,6 +25,7 @@ import {
   deleteChat,
   getAidaWritingSuggestions,
   aidaDraft,
+  fetchAidaConversationSummary,
 } from '@/lib/api'
 import EmojiPicker, { Theme as EmojiTheme } from 'emoji-picker-react'
 import {
@@ -302,7 +303,13 @@ export function ChatWindow({
       .catch(() => toast.error('Could not load messages'))
       .finally(() => setLoading(false))
 
-    markMessagesRead(chatId).catch(() => { })
+    // One retry covers transient failures — a silently failed mark-read here is
+    // what leaves the group badge stuck after opening the chat.
+    markMessagesRead(chatId).catch(() => {
+      setTimeout(() => {
+        markMessagesRead(chatId).catch(err => console.warn('[unread] markMessagesRead retry failed:', err))
+      }, 1500)
+    })
     // Optimistic zero-out so the chat-list badge clears immediately; the server's
     // 'unread_count_updated' event (handled in AppContext) confirms it shortly after.
     updateChatInList(chatId, { unreadCount: 0 })
@@ -923,16 +930,16 @@ export function ChatWindow({
     setIsAiThinking(true)
     setAiSummary(null)
 
-    // Mock AI logic: generate a summary based on last few messages
-    setTimeout(() => {
-      const lastMsgs = messages.slice(-10).map(m => m.content).filter(Boolean)
-      const summary = lastMsgs.length > 0
-        ? `This conversation focuses on ${lastMsgs[0].split(' ').slice(0, 5).join(' ')}... and covers key points about the latest project updates and collaboration steps discussed between ${getChatTitle()} and the team.`
-        : "The conversation is primarily introductory or lacks substantial text for a detailed summary."
-
+    try {
+      const res = await fetchAidaConversationSummary(chatId)
+      const summary = res?.summary || res?.data?.summary
+      if (!summary) throw new Error('Empty summary')
       setAiSummary(summary)
+    } catch (err: any) {
+      toast.error(err?.status === 503 ? 'AI assistant is not configured yet' : 'Could not generate summary')
+    } finally {
       setIsAiThinking(false)
-    }, 2000)
+    }
   }
 
   const isOwn = (msg: any) => String(msg.sender?._id || msg.sender?.id || msg.sender) === String(myId)
